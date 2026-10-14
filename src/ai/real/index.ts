@@ -6,6 +6,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ApplyResult } from "@/contracts/apply-result";
 import type { InterpretRequest, InterpretResult, Interpreter } from "../interpreter";
+import { BUDGET_EXHAUSTED_REPLY, budgetExhaustedReason, type BudgetReason } from "./budget";
 import { modelOutputFormat, ModelOutput } from "./model-output";
 import { PROMPT_VERSION, SYSTEM_PROMPT, renderTurn } from "./prompt";
 import { estimateCostUsd, taskSettings, type TaskSettings } from "./settings";
@@ -33,10 +34,21 @@ export interface UsageLog {
   ms: number;
 }
 
+/** One event when a call is refused because the spend limit or credit is used up (0020 N1). No secrets. */
+export interface BudgetLog {
+  event: "ai.budget_exhausted";
+  task: "interpret" | "reword";
+  reason: BudgetReason;
+  status: number | undefined;
+  requestId: string | null;
+}
+
+export { BUDGET_EXHAUSTED_REPLY };
+
 export interface RealInterpreterOptions {
   messages?: MessagesApi;
   now?: () => Date;
-  log?: (entry: UsageLog | { event: "ai.error"; task: string; reason: string }) => void;
+  log?: (entry: UsageLog | BudgetLog | { event: "ai.error"; task: string; reason: string }) => void;
   env?: Record<string, string | undefined>;
 }
 
@@ -107,6 +119,15 @@ export function createRealInterpreter(options: RealInterpreterOptions = {}): Int
     return { kind: "answer", proposal: null, reply };
   }
 
+  /** If the error means the AI budget is used up, logs it once and returns true. */
+  function budgetExhausted(task: "interpret" | "reword", error: unknown): boolean {
+    const reason = budgetExhaustedReason(error);
+    if (!reason) return false;
+    const api = error as { status?: number; requestID?: string | null };
+    log({ event: "ai.budget_exhausted", task, reason, status: api.status, requestId: api.requestID ?? null });
+    return true;
+  }
+
   return {
     async interpret(req: InterpretRequest): Promise<InterpretResult> {
       const settings = taskSettings("interpret", env);
@@ -131,6 +152,7 @@ export function createRealInterpreter(options: RealInterpreterOptions = {}): Int
         const outcome = toInterpretResult(parsed.data, req);
         return outcome.ok ? outcome.result : fail("interpret", outcome.reason);
       } catch (error) {
+        if (budgetExhausted("interpret", error)) return { kind: "answer", proposal: null, reply: BUDGET_EXHAUSTED_REPLY };
         return fail("interpret", error instanceof Error ? `${error.name}: ${error.message}` : String(error));
       }
     },
@@ -159,6 +181,8 @@ export function createRealInterpreter(options: RealInterpreterOptions = {}): Int
         const text = textOf(message).trim();
         return message.stop_reason === "end_turn" && text ? text : fallback;
       } catch (error) {
+        // The changes are already saved, so keep the code-built receipt and add the budget note.
+        if (budgetExhausted("reword", error)) return `${fallback} ${BUDGET_EXHAUSTED_REPLY}`;
         log({ event: "ai.error", task: "reword", reason: error instanceof Error ? error.message : String(error) });
         return fallback;
       }

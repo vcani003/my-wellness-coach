@@ -1,10 +1,10 @@
 /** The real interpreter with a mocked SDK client: request shape, parsing, guards and fallbacks. */
 import { describe, expect, it, vi } from "vitest";
-import type Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "@anthropic-ai/sdk";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { ApplyResult } from "@/contracts/apply-result";
 import { getInterpreter, NOT_CONFIGURED_REPLY, notConfiguredInterpreter, selectInterpreterKind } from "@/ai";
-import { createRealInterpreter, FAILURE_REPLY, REFUSAL_REPLY, type MessagesApi } from "@/ai/real";
+import { BUDGET_EXHAUSTED_REPLY, createRealInterpreter, FAILURE_REPLY, REFUSAL_REPLY, type MessagesApi } from "@/ai/real";
 import type { ModelOp, ModelOutput } from "@/ai/real/model-output";
 import { NOTHING_TO_CHANGE_REPLY, storeName } from "@/ai/real/to-proposal";
 import { PROMPT_VERSION } from "@/ai/real/prompt";
@@ -379,6 +379,82 @@ describe("failures never throw (0018)", () => {
     const { interpreter } = respond(output({ operations: [op({ action: "add", evidence: "x", name: said(tooLong) })] }));
     const result = await interpreter.interpret(request("x"));
     expect(result).toEqual({ kind: "answer", proposal: null, reply: FAILURE_REPLY });
+  });
+});
+
+describe("AI budget used up (0020 N1)", () => {
+  /** A real SDK error, built the way the SDK builds one from an HTTP response. */
+  const apiError = (status: number, error: Record<string, unknown>, headers: Record<string, string> = {}) =>
+    Anthropic.APIError.generate(status, { type: "error", error, request_id: "req_test" }, undefined, new Headers({ "request-id": "req_test", ...headers }));
+
+  const tierCap = apiError(429, {
+    type: "rate_limit_error",
+    message: "You have reached your API usage limits: your organization has crossed its monthly API usage threshold.",
+    details: { error_code: "enforced_spend_limit_reached" },
+  });
+  const ownLimit = apiError(400, {
+    type: "invalid_request_error",
+    message: "You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.",
+  });
+  const workspaceLimit = apiError(400, {
+    type: "invalid_request_error",
+    message: "You have reached your specified workspace API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.",
+  });
+  const billing = apiError(402, { type: "billing_error", message: "There's an issue with your billing." });
+  const rateLimit = apiError(429, { type: "rate_limit_error", message: "Number of request tokens has exceeded your per-minute rate limit" }, { "retry-after": "20" });
+  const overloaded = apiError(529, { type: "overloaded_error", message: "Overloaded" });
+  const badRequest = apiError(400, { type: "invalid_request_error", message: "messages: roles must alternate" });
+
+  it.each([
+    ["the tier spend cap (429 enforced_spend_limit_reached)", tierCap, "tier_spend_cap"],
+    ["our own spend limit (400)", ownLimit, "own_spend_limit"],
+    ["a workspace spend limit (400)", workspaceLimit, "own_spend_limit"],
+    ["billing / credit (402)", billing, "billing"],
+  ])("%s → the calm budget message, no proposal, one ai.budget_exhausted log", async (_name, error, reason) => {
+    const { interpreter, logs } = setup(error);
+    const result = await interpreter.interpret(request("I bought eggs"));
+    expect(result).toEqual({ kind: "answer", proposal: null, reply: BUDGET_EXHAUSTED_REPLY });
+    expect(BUDGET_EXHAUSTED_REPLY).toBe(
+      "Kitchen's AI budget for this month is used up. It resets on the 1st. Your kitchen and list still work.",
+    );
+    expect(logs).toEqual([{ event: "ai.budget_exhausted", task: "interpret", reason, status: error.status, requestId: "req_test" }]);
+  });
+
+  it.each([
+    ["a temporary rate limit (429)", rateLimit],
+    ["an overload (529)", overloaded],
+    ["an ordinary bad request (400)", badRequest],
+  ])("%s keeps the existing try-again fallback", async (_name, error) => {
+    const { interpreter, logs } = setup(error);
+    const result = await interpreter.interpret(request("I bought eggs"));
+    expect(result).toEqual({ kind: "answer", proposal: null, reply: FAILURE_REPLY });
+    expect(logs.some((l) => (l as { event: string }).event === "ai.budget_exhausted")).toBe(false);
+  });
+
+  const applied = {
+    changeSetId: "cs1",
+    newVersion: 4,
+    undoable: true,
+    applied: [{ opId: "a", summary: { code: "ITEM_ADDED", params: {}, text: "Added limes" }, refs: [] }],
+    rejected: [{ opId: "b", reason: { code: "ALREADY_OUT", params: {}, text: "Eggs were already out" } }],
+    state: request("x").state,
+  } satisfies ApplyResult;
+  const draft = { kind: "change" as const, proposal: null, reply: "Added limes and marked eggs out." };
+
+  it("reword keeps the code-built receipt of what saved and adds the budget message", async () => {
+    const { interpreter, logs } = setup(tierCap);
+    const text = await interpreter.reword!(request("bought limes, out of eggs"), draft, applied);
+    expect(text).toBe(`Done: Added limes. Not saved: Eggs were already out. ${BUDGET_EXHAUSTED_REPLY}`);
+    expect(logs).toEqual([{ event: "ai.budget_exhausted", task: "reword", reason: "tier_spend_cap", status: 429, requestId: "req_test" }]);
+  });
+
+  it.each([
+    ["a temporary rate limit", rateLimit],
+    ["an overload", overloaded],
+  ])("reword on %s keeps the plain receipt", async (_name, error) => {
+    const { interpreter } = setup(error);
+    const text = await interpreter.reword!(request("bought limes, out of eggs"), draft, applied);
+    expect(text).toBe("Done: Added limes. Not saved: Eggs were already out.");
   });
 });
 

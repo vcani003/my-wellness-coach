@@ -95,7 +95,7 @@ Short labels (`i7`) keep the prompt small and stop the model inventing IDs. Code
   - **Refusal:** the server-side fallback retries on another Claude model automatically. If that also refuses, a neutral reply is sent and nothing changes.
   - **Bad output:** one retry with the same `proposalId`, so nothing applies twice.
   - **Timeout (25 s), outage or rate limit:** "I couldn't save that, so nothing changed. [Try again]".
-  - **Spend limit:** "Kitchen's AI is paused until [date]".
+  - **Spend limit or credit used up (0020 N1):** "Kitchen's AI budget for this month is used up. It resets on the 1st. Your kitchen and list still work." No proposal; one `ai.budget_exhausted` log. See the build note below for which API errors count.
   - In every failure case, the buttons keep working, because they don't use AI.
 
 ## 7. Cost and latency
@@ -207,3 +207,14 @@ eval/            cases · runner · matchers
   - Stores: "MD Oriental Market" is filed as "MD Oriental" (a one-line alias table); every other store is kept as said.
   - A list add for something the user didn't name needs Kitchen's last turn to have offered to add it ("Want me to add these to your list?"); it's then tagged `staples` or `stock-offer`. Without the offer it's dropped.
   - A list add next to an Out/Low of the same item is dropped unless the message asks for the list or buying (SL3: the reply only offers).
+
+## Build notes: AI budget used up (2026-10-14, 0020 N1)
+- **Where:** `src/ai/real/budget.ts` (`BUDGET_EXHAUSTED_REPLY`, `budgetExhaustedReason`), used by `interpret` and `reword` in `src/ai/real/index.ts`.
+- **Which errors count** (Claude API errors and rate-limits docs, via the claude-api skill):
+  - the tier's monthly spend cap: 429 `rate_limit_error` with `error.details.error_code: "enforced_spend_limit_reached"` (no retry-after);
+  - a spend limit we set on the org or workspace: 400 `invalid_request_error` whose message starts "You have reached your specified (workspace) API usage limits" (the docs give no code, so we match that documented prefix);
+  - billing or credit: 402 `billing_error`.
+- **Everything else keeps the normal fallback**, including a temporary 429 (rate limit) and a 529 (overload).
+- **interpret** replies with the message and `proposal: null`. **reword** runs after changes have already saved, so it keeps the code-built receipt and adds the message after it.
+- **Log:** `{ event: "ai.budget_exhausted", task, reason, status, requestId }`, with no key or message text.
+- **Known cost:** the SDK still retries the spend-cap 429 once before we see it (a few seconds' delay, no charge).
