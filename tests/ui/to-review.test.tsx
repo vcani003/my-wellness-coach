@@ -110,7 +110,10 @@ describe("To review in the Kitchen widget", () => {
     expect(actions.tickShopping).toHaveBeenCalledExactlyOnceWith("shallot", true);
     expect(actions.resolveReview).toHaveBeenCalledWith("r1", "done", ["garlic", "shallot"]);
     expect(actions.showOwn).toHaveBeenLastCalledWith(expect.objectContaining({ state: after }), { highlight: true });
-    expect(screen.getByText("Added 2 to your kitchen. 1 thing is still on your list.")).toBeInTheDocument();
+    // The same words also reach the live region 50 ms later; check the visible notice only.
+    expect(
+      screen.getByText("Added 2 to your kitchen. 1 thing is still on your list.", { ignore: '[data-testid="announcer"], script, style' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Undo: added garlic and shallot to your kitchen" })).toBeInTheDocument();
   });
 

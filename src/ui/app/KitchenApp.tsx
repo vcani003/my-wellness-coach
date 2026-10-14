@@ -20,6 +20,7 @@ import {
   untickShoppingListItem,
 } from "@/app/actions";
 import type { ApplyResult } from "@/contracts/apply-result";
+import type { ChatHistoryPage } from "@/contracts/chat-history";
 import type { KitchenState } from "@/contracts/kitchen-state";
 import { AnnouncerProvider, useAnnounce } from "@/ui/a11y/Announcer";
 import { Composer, type ComposerHandle } from "@/ui/chat/Composer";
@@ -44,6 +45,8 @@ export interface KitchenAppProps {
   members: { userId: string; displayName: string }[];
   devActingAs: boolean;
   initialState: KitchenState | null;
+  /** Your latest saved chat (P2 a), read on the server; null if that failed (the chat retries). */
+  initialHistory?: ChatHistoryPage | null;
 }
 
 export type DockState = "peek" | "full" | "minimized";
@@ -85,7 +88,7 @@ export function KitchenApp(props: KitchenAppProps) {
   );
 }
 
-function KitchenScreen({ kitchenId, me, members, devActingAs, initialState }: KitchenAppProps) {
+function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, initialHistory = null }: KitchenAppProps) {
   const t = useTranslations();
   const locale = useLocale();
   const announce = useAnnounce();
@@ -122,6 +125,7 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState }: Ki
 
   const chat = useChat({
     kitchenId,
+    initialHistory,
     getVersion: () => sync.getSnapshot().state?.version ?? 0,
     callbacks: {
       onApplied(result) {
@@ -215,13 +219,14 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState }: Ki
     [sync, announce, t, locale],
   );
 
-  // Keep the newest message in view.
+  // Keep the newest message in view. Keyed on the LAST message, so loading older messages at the
+  // top doesn't jump you to the bottom (MessageList keeps your place instead).
   const lastMessage = chat.state.messages.at(-1);
   const lastLength = lastMessage?.kind === "assistant" ? lastMessage.text.length : 0;
   useEffect(() => {
     const log = logRef.current;
     if (log) log.scrollTop = log.scrollHeight;
-  }, [chat.state.messages.length, lastLength, chat.state.busy, dock]);
+  }, [lastMessage?.id, lastLength, chat.state.busy, dock]);
 
   // Publish the header and dock heights so content is never hidden behind them (WCAG 2.4.11).
   useEffect(() => {
@@ -372,6 +377,9 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState }: Ki
                 changeDock("peek");
                 requestAnimationFrame(() => showWidget(registry[0].id));
               }}
+              onLoadOlder={chat.loadOlder}
+              onRetryHistory={() => void chat.loadLatest()}
+              scrollRef={logRef}
               welcome={welcome}
             />
           </div>

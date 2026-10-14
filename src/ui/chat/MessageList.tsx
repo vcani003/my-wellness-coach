@@ -4,8 +4,15 @@
  * It's a `log` with announcing OFF, so streamed chunks aren't read piecemeal; the one polite
  * live region (Announcer) speaks once per turn instead (frontend.md §6).
  * `data-peek` marks what the phone's Peek state shows: the latest reply (or a pending message).
+ *
+ * Saved chat (P2 a): a loading line or an error with "Try again" while the latest page is out;
+ * "Show earlier messages" at the top loads older pages. It's a button, not infinite scroll: what
+ * you're reading stays where it is, and focus stays on the button (or, once there's nothing older,
+ * moves to the oldest message so reading carries on from there).
  */
 import { useTranslations } from "next-intl";
+import { useLayoutEffect, useRef, type RefObject } from "react";
+import { useAnnounce } from "@/ui/a11y/Announcer";
 import type { AssistantMessage, ChatState, UserMessage } from "./chat-reducer";
 import { useFormatMsg } from "./format-msg";
 import { Receipt } from "./Receipt";
@@ -15,24 +22,91 @@ export function MessageList({
   onRetry,
   onUndo,
   onView,
+  onLoadOlder,
+  onRetryHistory,
+  scrollRef,
   welcome,
 }: {
   chat: ChatState;
   onRetry: (id: string) => void;
   onUndo: (changeSetId: string) => void;
   onView: () => void;
+  /** Loads the next older page; resolves to how many messages it added and whether more remain. */
+  onLoadOlder: () => Promise<{ added: number; more: boolean }>;
+  onRetryHistory: () => void;
+  /** The scrolling container, so loading older messages can keep your place. */
+  scrollRef: RefObject<HTMLElement | null>;
   welcome: React.ReactNode;
 }) {
   const t = useTranslations("chat");
-  const { messages, busy } = chat;
+  const announce = useAnnounce();
+  const { messages, busy, history } = chat;
+  const listRef = useRef<HTMLDivElement>(null);
+  const earlierRef = useRef<HTMLButtonElement>(null);
+  /** Set while an older page loads: distance from the bottom, and whether the button had focus. */
+  const restore = useRef<{ fromBottom: number; hadFocus: boolean } | null>(null);
+
+  const showEarlier = async () => {
+    if (history.older === "loading") return;
+    const scroller = scrollRef.current;
+    restore.current = {
+      fromBottom: scroller ? scroller.scrollHeight - scroller.scrollTop : 0,
+      hadFocus: document.activeElement === earlierRef.current,
+    };
+    const { added, more } = await onLoadOlder();
+    if (added > 0) announce(more ? t("earlierShown", { count: added }) : `${t("earlierShown", { count: added })} ${t("startOfChat")}`);
+  };
+
+  // After an older page renders: put back what you were reading, and keep focus somewhere sensible.
+  useLayoutEffect(() => {
+    const r = restore.current;
+    if (!r || history.older === "loading") return;
+    restore.current = null;
+    const scroller = scrollRef.current;
+    if (scroller) scroller.scrollTop = scroller.scrollHeight - r.fromBottom;
+    if (r.hadFocus && !earlierRef.current) {
+      listRef.current?.querySelector<HTMLElement>("[data-message]")?.focus({ preventScroll: true });
+    }
+  }, [history.older, messages, scrollRef]);
+
   const last = messages.at(-1);
   // Peek shows the latest reply; while a message is on its way (or failed), that message.
   const peekId = last?.kind === "assistant" ? last.id : last?.id;
   const pendingReply = busy && (last?.kind === "user" || (last?.kind === "assistant" && last.status === "pending" && !last.text));
 
+  const empty = messages.length === 0;
+  const loadingOlder = history.older === "loading";
+
   return (
-    <div role="log" aria-live="off" aria-label={t("messagesLabel")} className="flex flex-col gap-3">
-      {messages.length === 0 && <div data-peek="true">{welcome}</div>}
+    <div ref={listRef} role="log" aria-live="off" aria-label={t("messagesLabel")} className="flex flex-col gap-3">
+      {history.status === "ready" && history.nextCursor && (
+        <div data-peek="false" className="flex flex-col items-center gap-1">
+          <button
+            ref={earlierRef}
+            type="button"
+            onClick={() => void showEarlier()}
+            aria-disabled={loadingOlder || undefined}
+            className="min-h-tap rounded-button border border-border-strong bg-surface-raised px-4 text-small font-strong text-accent-text aria-disabled:opacity-60"
+          >
+            {loadingOlder ? t("loadingEarlier") : t("showEarlier")}
+          </button>
+          {history.older === "error" && <p className="text-small text-error-text">{t("earlierError")}</p>}
+        </div>
+      )}
+      {history.status === "loading" && (
+        <p data-peek={empty} className="text-small text-text-muted">
+          {t("historyLoading")}
+        </p>
+      )}
+      {history.status === "error" && (
+        <p data-peek={empty} className="flex flex-wrap items-center gap-2 rounded-md bg-error-bg px-3 py-2 text-small text-error-text">
+          {t("historyError")}
+          <button type="button" onClick={onRetryHistory} className="min-h-tap rounded-button px-2 font-strong text-accent-text">
+            {t("tryAgain")}
+          </button>
+        </p>
+      )}
+      {empty && history.status === "ready" && <div data-peek="true">{welcome}</div>}
       {messages.map((m) =>
         m.kind === "user" ? (
           <UserBubble key={m.id} message={m} peek={m.id === peekId} onRetry={onRetry} />
@@ -64,7 +138,7 @@ export function MessageList({
 function UserBubble({ message, peek, onRetry }: { message: UserMessage; peek: boolean; onRetry: (id: string) => void }) {
   const t = useTranslations("chat");
   return (
-    <div data-peek={peek || message.status === "failed"} data-message={message.id} className="flex flex-col items-end gap-1">
+    <div data-peek={peek || message.status === "failed"} data-message={message.id} tabIndex={-1} className="flex flex-col items-end gap-1">
       <p className="max-w-[85%] rounded-lg rounded-br-sm bg-accent-soft px-4 py-2 text-body whitespace-pre-wrap">
         <span className="sr-only">{t("you")}: </span>
         {message.text}
@@ -102,7 +176,7 @@ function AssistantBubble({
   const formatMsg = useFormatMsg();
   if (message.status === "pending" && !message.text && !message.receipt) return null;
   return (
-    <div data-peek={peek} data-message={message.id} className="flex flex-col items-start">
+    <div data-peek={peek} data-message={message.id} tabIndex={-1} className="flex flex-col items-start">
       {message.text && (
         <p className="max-w-[90%] rounded-lg rounded-bl-sm bg-surface-default px-4 py-2 text-body whitespace-pre-wrap">
           <span className="sr-only">{t("assistant")}: </span>

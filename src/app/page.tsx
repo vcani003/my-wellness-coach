@@ -1,10 +1,13 @@
 /**
- * Main screen (frontend.md §1): loads who you are and the kitchen on the server, then hands
- * over to the client app. The kitchen read is defensive: if it fails, the Kitchen widget shows
- * its own error state with Retry instead of the page failing (0018).
+ * Main screen (frontend.md §1): loads who you are, the kitchen and your latest saved chat on the
+ * server, then hands over to the client app. Both reads are defensive: if the kitchen fails, the
+ * Kitchen widget shows its own error state with Retry; if the chat fails, the chat loads it
+ * itself (with "Try again") instead of the page failing (0018).
  */
 import { Suspense } from "react";
+import type { ChatHistoryPage } from "@/contracts/chat-history";
 import type { KitchenState } from "@/contracts/kitchen-state";
+import { listChatHistory } from "@/domains/chat/queries";
 import { getKitchenState } from "@/domains/kitchen/queries";
 import { getScope, getSession } from "@/server/session";
 import { KitchenApp } from "@/ui/app/KitchenApp";
@@ -22,9 +25,19 @@ async function Main() {
   const session = await getSession();
   if (!session) return <NoSession />;
   let state: KitchenState | null = null;
+  let history: ChatHistoryPage | null = null;
   try {
     const ctx = await getScope(session.kitchenId);
-    if (ctx) state = await getKitchenState(ctx.db, ctx.scope);
+    if (ctx) {
+      const [kitchen, chat] = await Promise.allSettled([
+        getKitchenState(ctx.db, ctx.scope),
+        listChatHistory(ctx.db, ctx.scope),
+      ]);
+      if (kitchen.status === "fulfilled") state = kitchen.value;
+      else console.error("page: couldn't load the kitchen; the widget will retry", { error: kitchen.reason });
+      if (chat.status === "fulfilled") history = chat.value;
+      else console.error("page: couldn't load the chat; the dock will retry", { error: chat.reason });
+    }
   } catch (error) {
     console.error("page: couldn't load the kitchen; the widget will retry", { error });
   }
@@ -35,6 +48,7 @@ async function Main() {
       members={session.members}
       devActingAs={session.devActingAs}
       initialState={state}
+      initialHistory={history}
     />
   );
 }

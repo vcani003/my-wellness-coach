@@ -92,7 +92,14 @@
     "errorNothingChanged": "I couldn't save that, so nothing changed.",
     "interrupted": "Reply interrupted. Your changes were saved.",
     "announceKitchenUpdated": "Kitchen updated.",
-    "announceRemote": "{name} updated the kitchen."
+    "announceRemote": "{name} updated the kitchen.",
+    "historyLoading": "Loading your messages…",
+    "historyError": "I couldn't load your earlier messages.",
+    "showEarlier": "Show earlier messages",
+    "loadingEarlier": "Loading earlier messages…",
+    "earlierError": "Couldn't load earlier messages. Try again.",
+    "earlierShown": "{count, plural, one {# earlier message shown.} other {# earlier messages shown.}}",
+    "startOfChat": "That's the start of your chat."
   },
   "receipt": {
     "title": "What changed",

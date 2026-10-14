@@ -1,9 +1,11 @@
 /**
  * Conversation state for the chat dock: a pure reducer (old state + action → new state), so
  * every chat behaviour is unit-testable without a browser (frontend.md §3).
- * Chats are private (H2, 0017) and, in this milestone, live only in memory.
+ * Chats are private (H2, 0017) and saved on the server (P2 a): the latest page loads on open,
+ * older pages on "Show earlier messages", and live turns append as before.
  */
 import type { AppliedOp, ApplyResult, RejectedOp } from "@/contracts/apply-result";
+import type { ChatHistoryMessage, ChatReceipt } from "@/contracts/chat-history";
 import type { Msg } from "@/contracts/common";
 
 export interface UserMessage {
@@ -37,13 +39,26 @@ export interface AssistantMessage {
 
 export type ChatMessage = UserMessage | AssistantMessage;
 
+/** Saved chat: whether the latest page has loaded, and the cursor for older pages. */
+export interface ChatHistoryState {
+  status: "loading" | "ready" | "error";
+  /** Pass as `before` for the next older page; null when there's nothing older. */
+  nextCursor: string | null;
+  older: "idle" | "loading" | "error";
+}
+
 export interface ChatState {
   messages: ChatMessage[];
   /** A turn is in flight: Send waits so turns stay in order. */
   busy: boolean;
+  history: ChatHistoryState;
 }
 
-export const initialChatState: ChatState = { messages: [], busy: false };
+export const initialChatState: ChatState = {
+  messages: [],
+  busy: false,
+  history: { status: "ready", nextCursor: null, older: "idle" },
+};
 
 export type ChatAction =
   | { type: "send"; id: string; text: string }
@@ -57,11 +72,15 @@ export type ChatAction =
   | { type: "streamCut"; id: string }
   | { type: "undoStart"; changeSetId: string }
   | { type: "undoDone"; changeSetId: string }
-  | { type: "undoRefused"; changeSetId: string; reason: Msg };
+  | { type: "undoRefused"; changeSetId: string; reason: Msg }
+  | { type: "historyLoading"; which: "latest" | "older" }
+  | { type: "historyLoaded"; which: "latest" | "older"; messages: ChatHistoryMessage[]; nextCursor: string | null }
+  | { type: "historyFailed"; which: "latest" | "older" };
 
 export const replyId = (userMessageId: string) => `${userMessageId}:reply`;
 
-export function toReceipt(result: ApplyResult): Receipt {
+/** A live ApplyResult or a saved receipt (the same minus `state`) as the receipt card's model. */
+export function toReceipt(result: ApplyResult | ChatReceipt): Receipt {
   return {
     changeSetId: result.changeSetId,
     newVersion: result.newVersion,
@@ -71,6 +90,34 @@ export function toReceipt(result: ApplyResult): Receipt {
     rejected: result.rejected,
     undo: "idle",
   };
+}
+
+/**
+ * A saved message as a conversation message. IDs follow the live ones (the user's message is its
+ * `clientMessageId`, the reply `replyId(clientMessageId)`), so a turn is never shown twice.
+ */
+export function fromSaved(m: ChatHistoryMessage): ChatMessage {
+  if (m.role === "user") return { kind: "user", id: m.clientMessageId, text: m.text, status: "sent" };
+  return {
+    kind: "assistant",
+    id: replyId(m.clientMessageId),
+    replyTo: m.clientMessageId,
+    text: m.text,
+    status: "done",
+    ...(m.receipt ? { receipt: toReceipt(m.receipt) } : {}),
+  };
+}
+
+/** Saved messages go before everything already shown (they're older); ones already shown are skipped. */
+function prependSaved(messages: ChatMessage[], saved: ChatHistoryMessage[]): ChatMessage[] {
+  const shown = new Set(messages.map((m) => m.id));
+  const older: ChatMessage[] = [];
+  for (const m of saved.map(fromSaved)) {
+    if (shown.has(m.id)) continue;
+    shown.add(m.id);
+    older.push(m);
+  }
+  return [...older, ...messages];
 }
 
 function setUser(state: ChatState, id: string, status: UserMessage["status"]): ChatMessage[] {
@@ -96,11 +143,11 @@ function withReceipt(state: ChatState, changeSetId: string, update: (r: Receipt)
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case "send":
-      return { busy: true, messages: [...state.messages, { kind: "user", id: action.id, text: action.text, status: "sending" }] };
+      return { ...state, busy: true, messages: [...state.messages, { kind: "user", id: action.id, text: action.text, status: "sending" }] };
     case "retry": {
       // Same ID again, so the server can't apply it twice; the old reply (if any) is replaced.
       const rid = replyId(action.id);
-      return { busy: true, messages: setUser({ ...state, messages: state.messages.filter((m) => m.id !== rid) }, action.id, "sending") };
+      return { ...state, busy: true, messages: setUser({ ...state, messages: state.messages.filter((m) => m.id !== rid) }, action.id, "sending") };
     }
     case "ack":
       return { ...state, messages: withReply({ ...state, messages: setUser(state, action.id, "sent") }, action.id, (m) => m) };
@@ -109,9 +156,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "text":
       return { ...state, messages: withReply(state, action.id, (m) => ({ ...m, text: m.text + action.delta })) };
     case "done":
-      return { busy: false, messages: withReply(state, action.id, (m) => ({ ...m, status: "done" })) };
+      return { ...state, busy: false, messages: withReply(state, action.id, (m) => ({ ...m, status: "done" })) };
     case "error":
       return {
+        ...state,
         busy: false,
         messages: withReply({ ...state, messages: setUser(state, action.id, "sent") }, action.id, (m) => ({
           ...m,
@@ -121,9 +169,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         })),
       };
     case "notSent":
-      return { busy: false, messages: setUser(state, action.id, "failed") };
+      return { ...state, busy: false, messages: setUser(state, action.id, "failed") };
     case "streamCut":
       return {
+        ...state,
         busy: false,
         messages: withReply(state, action.id, (m) =>
           m.receipt ? { ...m, status: "interrupted" } : { ...m, status: "error", error: { reason: { code: "SAVE_FAILED", params: {}, text: "" }, retryable: true } },
@@ -137,6 +186,28 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         messages: withReceipt(state, action.changeSetId, (r) => ({ ...r, undo: "refused", undoReason: action.reason })),
+      };
+    case "historyLoading":
+      return {
+        ...state,
+        history:
+          action.which === "latest"
+            ? { ...state.history, status: "loading" }
+            : { ...state.history, older: "loading" },
+      };
+    case "historyLoaded":
+      return {
+        ...state,
+        messages: prependSaved(state.messages, action.messages),
+        history: { status: "ready", nextCursor: action.nextCursor, older: "idle" },
+      };
+    case "historyFailed":
+      return {
+        ...state,
+        history:
+          action.which === "latest"
+            ? { ...state.history, status: "error" }
+            : { ...state.history, older: "error" },
       };
   }
 }
