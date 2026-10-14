@@ -37,6 +37,13 @@ It's **private** for now: [github.com/vcani003/my-wellness-coach](https://github
 
 > Answer:
 
+### SL6. 🟡 Shopping "Do later": two small details
+"Do later" on the Done-shopping sheet now saves the chosen items to the Kitchen's To review, as "3 items to add · Shopping list". Tapping that row reopens the sheet, with **Add** and **Skip** (ux.md §5, §10). The spec doesn't cover two details. Both are built on the Rec and easy to change:
+- **Tapping Do later twice** before adding the first batch. **Rec:** keep one card and add the second batch to it, so nothing you saved earlier is lost. The alternative is a separate card for each tap.
+- **An item leaving the list some other way** ("I bought garlic", ⋯ Remove, or adding it with Done shopping). **Rec:** it drops off the card, and the card disappears once it's empty, so To review never asks about something that's already sorted. An Undo brings it back.
+
+> Answer:
+
 ## Setup tasks (S1–S3 done 2026-10-14; S4 later for email sign-in)
 These need **your** accounts. Keep every key and code private: you paste them yourself, and I'll never ask you to send them in chat.
 - **S1. Anthropic (about 5 min):** at console.anthropic.com, create a workspace (for example "wellness-coach"), set its **monthly spend limit to $10** (see C12), and create an **API key**. Keep it somewhere safe for S3.

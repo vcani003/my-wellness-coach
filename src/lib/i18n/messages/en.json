@@ -60,7 +60,8 @@
       "shoppingList": "Shopping list",
       "addItems": "{count, plural, one {# item to add} other {# items to add}} · {from}",
       "update": "Update your kitchen · {from}",
-      "skipped": "Skipped. Your list is as it was."
+      "skipped": "Skipped. Your list is as it was.",
+      "summary": "{count} to review"
     }
   },
   "chat": {

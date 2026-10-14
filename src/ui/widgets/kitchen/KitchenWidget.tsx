@@ -18,7 +18,14 @@ export function KitchenSummary() {
   const t = useTranslations("kitchen");
   const { snapshot } = useKitchenData();
   if (!snapshot.state) return null;
-  return <>{t("count", { count: snapshot.state.items.length })}</>;
+  const toReview = snapshot.state.toReview.length;
+  // Collapsed on a phone, the bar is the only hint that something waits in To review.
+  return (
+    <>
+      {t("count", { count: snapshot.state.items.length })}
+      {toReview > 0 && ` · ${t("review.summary", { count: toReview })}`}
+    </>
+  );
 }
 
 export function KitchenWidget({ onRetry }: WidgetProps) {

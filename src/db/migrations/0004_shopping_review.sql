@@ -1,0 +1,1 @@
+ALTER TABLE "reviews" ADD COLUMN "origin" text DEFAULT 'meal' NOT NULL;

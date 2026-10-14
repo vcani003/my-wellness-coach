@@ -151,12 +151,16 @@ test("Do later: Done shopping → Do later → To review in the Kitchen → Add 
   await expect(box(page, "Shallot")).not.toBeChecked();
   await expectAccessible(page, "after do later");
 
-  // To review in the Kitchen shows them, and it's saved (survives a reload).
+  // To review in the Kitchen shows them, and it's saved (survives a reload). On a phone the
+  // collapsed Kitchen bar says so; expanding is retried until the page has hydrated.
   await page.reload();
-  await expandIfCollapsed(page, kitchen(page));
+  await expect(kitchen(page).getByRole("heading", { level: 2 })).toContainText("1 to review");
   const review = kitchen(page).getByRole("region", { name: "To review" });
   const card = review.getByRole("button", { name: "2 items to add · Shopping list" });
-  await expect(card).toBeVisible();
+  await expect(async () => {
+    await expandIfCollapsed(page, kitchen(page));
+    await expect(card).toBeVisible({ timeout: 500 });
+  }).toPass();
   await expect(review.getByRole("heading")).toContainText("To review · 1");
   await expectAccessible(page, "to review");
 
