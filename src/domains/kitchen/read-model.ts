@@ -21,6 +21,7 @@ import { computeAllergenFlags } from "@/shared/profile/allergens";
 import type { Restriction } from "@/shared/profile/state";
 import { resolveItem } from "./validate";
 import { ACTIVE_STATUSES } from "./lifecycle";
+import { openBatches } from "./batches";
 import type { KitchenEntities, Meal, Recipe, Review } from "./state";
 
 export interface ReadContext {
@@ -87,7 +88,8 @@ export function buildKitchenState(kitchen: KitchenEntities, ctx: ReadContext): K
     ItemRow,
     safeMap(
       Object.values(kitchen.items).filter((i) => i.stock?.value !== "out"),
-      (i) => ({ ...i, ...audit(i, names) }),
+      // Open batches only, oldest first (0025); closed ones stay in history.
+      (i) => ({ ...i, batches: openBatches(i).map((b) => ({ ...b, ...audit(b, names) })), ...audit(i, names) }),
       "item",
     ),
     "item",

@@ -85,7 +85,8 @@ describe("after cooking (0013)", () => {
       [chicken.id, spinach.id].sort(),
     );
     // amount unknown: no stock and no quantity on those events
-    for (const e of usedInMeal) expect(e.payload).toEqual({ itemId: expect.any(String), mealId });
+    // (the oldest batch, 0025)
+    for (const e of usedInMeal) expect(e.payload).toEqual({ itemId: expect.any(String), batchId: expect.any(String), mealId });
   });
 
   it("Running low keeps the item, labelled; Out takes it off the list; the note is saved", () => {

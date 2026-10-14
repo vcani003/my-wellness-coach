@@ -6,11 +6,13 @@
  * The valid ones become one change set; the rejected ones come back with reasons, so one bad
  * guess doesn't sink "I bought 4 things."
  */
-import type { AppliedOp, ChangeRef, RefKind, RejectedOp } from "@/contracts/apply-result";
-import type { Fact, Quantity, StockLevel } from "@/contracts/common";
+import type { AppliedOp, BatchOffer, ChangeRef, RefKind, RejectedOp } from "@/contracts/apply-result";
+import { MAX_OPEN_BATCHES, type BatchWhich, type Fact, type Msg, type Quantity, type StockLevel } from "@/contracts/common";
 import {
   PASTE_ALLOWED_OPERATION_TYPES,
   PROFILE_OPERATION_TYPES,
+  type BatchTarget,
+  type ItemBatchTarget,
   type ItemTarget,
   type ReviewEntry,
   type ShoppingTarget,
@@ -34,12 +36,17 @@ import {
 import { applyProfileEvent, profileTouchedKeys, type ProfileState } from "@/shared/profile/state";
 import { validateProfileOperation } from "@/shared/profile/validate";
 import { canTransition } from "./lifecycle";
+import { openBatches, type Batch } from "./batches";
 import {
   KITCHEN_EVENT,
   apply,
   getKitchenEntity,
   kitchenTouchedKeys,
   tickId,
+  type BatchAddedPayload,
+  type BatchClosedPayload,
+  type BatchDefrostedPayload,
+  type BatchKeptPayload,
   type ChecklistTickedPayload,
   type Item,
   type ItemAddedPayload,
@@ -231,28 +238,91 @@ function nextPlanPosition(kitchen: KitchenEntities): number {
 
 type KitchenFacts = Partial<Pick<ItemAddedPayload, "quantity" | "location" | "frozen" | "opened" | "occurredAt">>;
 
+interface Added {
+  events: EventEnvelope[];
+  itemId: string;
+  batchId: string;
+  /** The Out item it brought back (no open batches before). */
+  restocked: Item | null;
+  /** The item it joined as a new batch, next to open ones (0025). */
+  merged: Item | null;
+  offer?: BatchOffer;
+}
+
+const byUpdatedDesc = (a: Item, b: Item) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id);
+
 /**
- * `item.add`'s rules, shared with "Done shopping": adding the same item again clears `stock`
- * (backend-data.md §6) if exactly one item with that name is low or out; otherwise a new item.
+ * `item.add`'s rules, shared with "Done shopping" (0025): buying something already in the kitchen
+ * (same standard name) adds a **batch** to it; a 4th open batch closes the oldest, as its own
+ * event. An Out item of that name comes back with the new batch. Otherwise it's a new item.
+ * With several matches (duplicates saved before batches), the most recently changed one wins.
  */
-function addToKitchen(
-  name: Fact<string>,
-  facts: KitchenFacts,
-  kitchen: KitchenEntities,
-  env: OpEnv,
-): { event: EventEnvelope; itemId: string; restocked: Item | null } {
+function addToKitchen(name: Fact<string>, facts: KitchenFacts, kitchen: KitchenEntities, env: OpEnv): Added {
   const k = kitchenStream(env.ctx.kitchenId);
   const std = standardName(name.value);
   const extra = { occurredAt: facts.occurredAt?.value ?? null };
-  const restock = Object.values(kitchen.items).filter((i) => i.standardName === std && i.stock);
-  if (restock.length === 1) {
-    const item = restock[0];
-    const payload: ItemUpdatedPayload = { itemId: item.id, set: facts, clear: ["stock"] };
-    return { event: env.make(k, KITCHEN_EVENT.itemUpdated, payload, extra), itemId: item.id, restocked: item };
+  const same = Object.values(kitchen.items).filter((i) => i.standardName === std);
+  const target =
+    same.filter((i) => openBatches(i).length > 0).sort(byUpdatedDesc)[0] ?? same.sort(byUpdatedDesc)[0];
+  if (!target) {
+    const payload: ItemAddedPayload = { itemId: env.ctx.newId(), name, standardName: std, batchId: env.ctx.newId(), ...facts };
+    return {
+      events: [env.make(k, KITCHEN_EVENT.itemAdded, payload, extra)],
+      itemId: payload.itemId,
+      batchId: payload.batchId!,
+      restocked: null,
+      merged: null,
+    };
   }
-  const payload: ItemAddedPayload = { itemId: env.ctx.newId(), name, standardName: std, ...facts };
-  return { event: env.make(k, KITCHEN_EVENT.itemAdded, payload, extra), itemId: payload.itemId, restocked: null };
+  const open = openBatches(target);
+  const events: EventEnvelope[] = [];
+  let autoClosed: Batch | undefined;
+  if (open.length >= MAX_OPEN_BATCHES) {
+    autoClosed = open[0];
+    const closed: BatchClosedPayload = { itemId: target.id, batchId: autoClosed.id, reason: "replaced" };
+    events.push(emit(env, k, KITCHEN_EVENT.batchClosed, closed));
+  }
+  const batchId = env.ctx.newId();
+  const added: BatchAddedPayload = { itemId: target.id, batchId, ...facts };
+  events.push(env.make(k, KITCHEN_EVENT.batchAdded, added, extra));
+  const older = open.filter((b) => b !== autoClosed);
+  const offer: BatchOffer | undefined = older.length
+    ? {
+        itemId: target.id,
+        name: target.name.value,
+        newBatchId: batchId,
+        older: older.map((b) => ({ batchId: b.id, addedAt: b.addedAt, ...(b.quantity ? { quantity: b.quantity } : {}) })),
+        ...(autoClosed ? { autoClosed: { batchId: autoClosed.id, addedAt: autoClosed.addedAt } } : {}),
+      }
+    : undefined;
+  return {
+    events,
+    itemId: target.id,
+    batchId,
+    restocked: open.length === 0 ? target : null,
+    merged: open.length > 0 ? target : null,
+    ...(offer ? { offer } : {}),
+  };
 }
+
+/** "Added eggs (2 batches)", optionally "; closed the oldest batch" and "and took it off the shopping list". */
+function batchAddedMsg(name: string, batches: number, closedOldest: boolean, fromList: boolean): Msg {
+  let text = `Added ${name} (${batches} batches)`;
+  if (closedOldest) text += "; the oldest batch is closed";
+  if (fromList) text += " and took it off the shopping list";
+  return { code: "ITEM_BATCH_ADDED", params: { name, batches, closedOldest, fromList }, text };
+}
+
+function addedSummary(added: Added, name: string, fromList: boolean, kitchenAfter: KitchenEntities): Msg {
+  if (added.merged) {
+    const after = kitchenAfter.items[added.itemId];
+    return batchAddedMsg(name, after ? openBatches(after).length : 2, !!added.offer?.autoClosed, fromList);
+  }
+  if (added.restocked) return msg(fromList ? "ITEM_RESTOCKED_FROM_LIST" : "ITEM_RESTOCKED", { name });
+  return msg(fromList ? "ITEM_ADDED_FROM_LIST" : "ITEM_ADDED", { name });
+}
+
+const applyAll = (kitchen: KitchenEntities, events: EventEnvelope[]) => events.reduce(apply, kitchen);
 
 function itemAdd(op: OperationOf<"item.add">, env: OpEnv): OpOutcome {
   const f = op.fields;
@@ -263,18 +333,16 @@ function itemAdd(op: OperationOf<"item.add">, env: OpEnv): OpOutcome {
     opened: nn(f.opened),
     occurredAt: nn(f.occurredAt),
   });
-  const { event, itemId, restocked } = addToKitchen(f.name, facts, env.kitchen, env);
-  const itemRef: ChangeRef = { kind: "item", id: itemId, change: restocked ? "updated" : "added" };
-  const name = restocked ? restocked.name.value : f.name.value;
-  const fromList = boughtClearsListItems(f.name, itemId, env);
-  if (fromList.events.length > 0) {
-    return ok(
-      [event, ...fromList.events],
-      msg(restocked ? "ITEM_RESTOCKED_FROM_LIST" : "ITEM_ADDED_FROM_LIST", { name }),
-      [itemRef, ...fromList.refs],
-    );
-  }
-  return ok([event], msg(restocked ? "ITEM_RESTOCKED" : "ITEM_ADDED", { name }), [itemRef]);
+  const added = addToKitchen(f.name, facts, env.kitchen, env);
+  const existing = added.restocked ?? added.merged;
+  const itemRef: ChangeRef = { kind: "item", id: added.itemId, change: existing ? "updated" : "added", batchId: added.batchId };
+  const name = existing ? existing.name.value : f.name.value;
+  const fromList = boughtClearsListItems(f.name, added.itemId, env);
+  const summary = addedSummary(added, name, fromList.events.length > 0, applyAll(env.kitchen, added.events));
+  return {
+    ...ok([...added.events, ...fromList.events], summary, [itemRef, ...fromList.refs]),
+    ...(added.offer ? { batchOffers: [added.offer] } : {}),
+  };
 }
 
 /**
@@ -303,11 +371,53 @@ function recordUnknownItem(name: Fact<string>, env: OpEnv, extra: Partial<ItemAd
     itemId: env.ctx.newId(),
     name,
     standardName: standardName(name.value),
+    batchId: env.ctx.newId(),
     ...compact(extra),
   };
   return env.make(kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.itemAdded, payload);
 }
 
+// ─── Batches (0025) ───────────────────────────────────────────────────────────────────
+
+type BatchSpec = { batchId: string } | { which: BatchWhich } | null;
+
+/** The item part of a batch target. */
+function itemPart(target: ItemBatchTarget | BatchTarget): ItemTarget {
+  return "itemId" in target ? { itemId: target.itemId } : { name: target.name };
+}
+
+function batchSpec(target: ItemBatchTarget | BatchTarget): BatchSpec {
+  if ("batchId" in target) return { batchId: target.batchId };
+  if ("which" in target) return { which: target.which };
+  return null;
+}
+
+const targetName = (target: ItemBatchTarget | BatchTarget) => ("name" in target ? target.name : "");
+
+/** Exactly one batch: by ID (unknown → UNKNOWN_TARGET), or the oldest / newest open one. Closed → ALREADY_OUT. */
+function pickBatch(item: Item, spec: NonNullable<BatchSpec>): { ok: true; batch: Batch } | { ok: false; outcome: OpOutcome } {
+  if ("batchId" in spec) {
+    const batch = item.batches.find((b) => b.id === spec.batchId);
+    if (!batch) return { ok: false, outcome: reject("UNKNOWN_TARGET") };
+    if (batch.closedAt) return { ok: false, outcome: reject("ALREADY_OUT", { name: item.name.value }) };
+    return { ok: true, batch };
+  }
+  const open = openBatches(item);
+  const batch = spec.which === "oldest" ? open[0] : open.at(-1);
+  return batch ? { ok: true, batch } : { ok: false, outcome: reject("ALREADY_OUT", { name: item.name.value }) };
+}
+
+function resolveTargetItem(target: ItemBatchTarget | BatchTarget, kitchen: KitchenEntities): ItemMatch | { kind: "rejected"; outcome: OpOutcome } {
+  const match = resolveItem(itemPart(target), kitchen);
+  if (match.kind === "unknown-id") return { kind: "rejected", outcome: reject("UNKNOWN_ITEM") };
+  if (match.kind === "ambiguous") return { kind: "rejected", outcome: reject("AMBIGUOUS_ITEM", { name: targetName(target) }) };
+  return match;
+}
+
+/**
+ * Name changes apply to the item; every other field to one batch: the one named, else the oldest
+ * open one (the batch used next), else (Out) the last one.
+ */
 function itemUpdate(op: OperationOf<"item.update">, env: OpEnv): OpOutcome {
   const k = kitchenStream(env.ctx.kitchenId);
   const f = op.fields;
@@ -323,11 +433,11 @@ function itemUpdate(op: OperationOf<"item.update">, env: OpEnv): OpOutcome {
   });
   if (clear.some((field) => field in set)) return reject("INVALID_OPERATION");
 
-  const match = resolveItem(op.target, env.kitchen);
-  if (match.kind === "unknown-id") return reject("UNKNOWN_ITEM");
-  if (match.kind === "ambiguous") return reject("AMBIGUOUS_ITEM", { name: "name" in op.target ? op.target.name : "" });
+  const match = resolveTargetItem(op.target, env.kitchen);
+  if (match.kind === "rejected") return match.outcome;
+  if (match.kind === "unknown-id" || match.kind === "ambiguous") return reject("UNKNOWN_ITEM");
   if (match.kind === "none") {
-    const name = f.name ?? nameFact("name" in op.target ? op.target.name : "");
+    const name = f.name ?? nameFact(targetName(op.target));
     const rest = compact({ ...set, name: undefined, standardName: undefined });
     const event = recordUnknownItem(name, env, rest);
     const itemId = (event.payload as ItemAddedPayload).itemId;
@@ -336,16 +446,28 @@ function itemUpdate(op: OperationOf<"item.update">, env: OpEnv): OpOutcome {
 
   const item = match.item;
   if (Object.keys(set).length === 0 && clear.length === 0) return noChange();
-  const payload: ItemUpdatedPayload = { itemId: item.id, set, clear };
+  const hasBatchFields = clear.length > 0 || Object.keys(set).some((key) => key !== "name" && key !== "standardName");
+  let batch: Batch | undefined;
+  if (hasBatchFields) {
+    const spec = batchSpec(op.target);
+    if (spec) {
+      const picked = pickBatch(item, spec);
+      if (!picked.ok) return picked.outcome;
+      batch = picked.batch;
+    } else {
+      batch = openBatches(item)[0] ?? item.batches.at(-1);
+    }
+  }
+  const payload: ItemUpdatedPayload = compact({ itemId: item.id, batchId: batch?.id, set, clear });
   const displayName = set.name?.value ?? item.name.value;
   const summary =
-    set.location && set.location.value !== item.location?.value
+    set.location && set.location.value !== (batch ?? item).location?.value
       ? msg("ITEM_MOVED", { name: displayName, location: set.location.value })
       : msg("ITEM_UPDATED", { name: displayName });
   return ok(
     [emit(env, k, KITCHEN_EVENT.itemUpdated, payload, set.occurredAt?.value)],
     summary,
-    [{ kind: "item", id: item.id, change: "updated" }],
+    [compact({ kind: "item" as const, id: item.id, change: "updated" as const, batchId: batch?.id })],
   );
 }
 
@@ -353,49 +475,204 @@ function emit(env: OpEnv, stream: string, type: string, payload: unknown, occurr
   return env.make(stream, type, payload, { occurredAt: occurredAt ?? null });
 }
 
+const OUT_INFERRED: Fact<StockLevel> = { value: "out", basis: "inferred", confidence: "high" };
+
+/**
+ * Using an item (0025): without a batch, an amount comes off the **oldest** batch first and spills
+ * into the next when the units match; `stock` applies to the whole item (Out closes every open
+ * batch, 0011). With a batch, only that batch. A batch whose same-unit remainder reaches 0 closes
+ * (auto-Out, 0011); the item is Out once its last batch closes.
+ */
 function itemUse(op: OperationOf<"item.use">, env: OpEnv): OpOutcome {
   const k = kitchenStream(env.ctx.kitchenId);
   const stock = nn(op.fields.stock);
   const amountUsed = nn(op.fields.amountUsed);
-  const match = resolveItem(op.target, env.kitchen);
-  if (match.kind === "unknown-id") return reject("UNKNOWN_ITEM");
-  if (match.kind === "ambiguous") return reject("AMBIGUOUS_ITEM", { name: "name" in op.target ? op.target.name : "" });
+  const match = resolveTargetItem(op.target, env.kitchen);
+  if (match.kind === "rejected") return match.outcome;
+  if (match.kind === "unknown-id" || match.kind === "ambiguous") return reject("UNKNOWN_ITEM");
 
   const events: EventEnvelope[] = [];
-  let item: Item | undefined;
+  let item: Item;
   let recorded = false;
   if (match.kind === "none") {
     // Used something the kitchen never heard about: record it without asking (0011).
-    const event = recordUnknownItem(nameFact("name" in op.target ? op.target.name : ""), env);
+    const event = recordUnknownItem(nameFact(targetName(op.target)), env);
     events.push(event);
     recorded = true;
     item = apply(env.kitchen, event).items[(event.payload as ItemAddedPayload).itemId];
   } else {
     item = match.item;
-    if (item.stock?.value === "out") return reject("ALREADY_OUT", { name: item.name.value });
+    if (openBatches(item).length === 0) return reject("ALREADY_OUT", { name: item.name.value });
   }
 
-  let quantityAfter: Fact<Quantity> | null | undefined;
-  let finalStock: Fact<StockLevel> | undefined = stock;
+  const spec = recorded ? null : batchSpec(op.target);
+  let targets: Batch[];
+  if (spec) {
+    const picked = pickBatch(item, spec);
+    if (!picked.ok) return picked.outcome;
+    targets = [picked.batch];
+  } else {
+    targets = openBatches(item);
+  }
+
+  // Per batch, oldest first: what this use does to it.
+  const plan = new Map<string, { quantityAfter?: Fact<Quantity> | null; stock?: Fact<StockLevel> }>();
   if (amountUsed) {
-    quantityAfter = item.quantity ? remainder(item.quantity, amountUsed) : undefined;
-    if (quantityAfter?.value.amount === 0 && !finalStock) {
-      finalStock = { value: "out", basis: "inferred", confidence: "high" };
+    let left = amountUsed.value.amount;
+    for (const b of targets) {
+      if (!b.quantity) {
+        if (plan.size === 0) plan.set(b.id, {});
+        break;
+      }
+      const used: Fact<Quantity> = left === undefined ? amountUsed : { ...amountUsed, value: { ...amountUsed.value, amount: left } };
+      const rest = remainder(b.quantity, used);
+      if (rest === null) {
+        if (plan.size === 0) plan.set(b.id, { quantityAfter: null });
+        break;
+      }
+      plan.set(b.id, { quantityAfter: rest, ...(rest.value.amount === 0 ? { stock: OUT_INFERRED } : {}) });
+      left = Math.round(((left ?? 0) - ((b.quantity.value.amount ?? 0) - (rest.value.amount ?? 0))) * 1000) / 1000;
+      if (left <= 0) break;
     }
+  } else if (!stock) {
+    plan.set(targets[0].id, {});
   }
-  const payload: ItemUsedPayload = compact({ itemId: item.id, stock: finalStock, amountUsed, quantityAfter });
-  events.push(emit(env, k, KITCHEN_EVENT.itemUsed, payload));
+  if (stock) for (const b of targets) plan.set(b.id, { ...plan.get(b.id), stock });
 
+  let first = true;
+  for (const b of targets) {
+    const step = plan.get(b.id);
+    if (!step) continue;
+    const payload: ItemUsedPayload = compact({
+      itemId: item.id,
+      batchId: b.id,
+      stock: step.stock,
+      amountUsed: first ? amountUsed : undefined,
+      quantityAfter: step.quantityAfter,
+    });
+    first = false;
+    events.push(emit(env, k, KITCHEN_EVENT.itemUsed, payload));
+  }
+
+  const after = applyAll(env.kitchen, events).items[item.id];
+  const openAfter = after ? openBatches(after).length : 0;
+  const closedNow = targets.filter((b) => {
+    const now = after?.batches.find((x) => x.id === b.id);
+    return now?.closedAt && !b.closedAt;
+  }).length;
   const name = item.name.value;
   const summary = recorded
     ? msg("ITEM_USED_RECORDED", { name })
-    : finalStock?.value === "out"
+    : openAfter === 0
       ? msg("ITEM_OUT", { name })
-      : finalStock?.value === "low"
-        ? msg("ITEM_LOW", { name })
-        : msg("ITEM_USED", { name });
-  return ok(events, summary, [{ kind: "item", id: item.id, change: recorded ? "added" : "updated" }]);
+      : closedNow > 0
+        ? msg("ITEM_BATCH_USED_UP", { name, left: openAfter })
+        : plan.size > 0 && [...plan.values()].some((p) => p.stock?.value === "low")
+          ? msg("ITEM_LOW", { name })
+          : msg("ITEM_USED", { name });
+  const touched = targets.filter((b) => plan.has(b.id));
+  const ref: ChangeRef = compact({
+    kind: "item" as const,
+    id: item.id,
+    change: recorded ? ("added" as const) : ("updated" as const),
+    batchId: touched.length === 1 ? touched[0].id : undefined,
+  });
+  return ok(events, summary, [ref]);
 }
+
+/** "Those are gone" (0025): one batch closes. Already closed → no change (a double tap is harmless). */
+function batchClose(op: OperationOf<"item.batch.close">, env: OpEnv): OpOutcome {
+  const match = resolveTargetItem(op.target, env.kitchen);
+  if (match.kind === "rejected") return match.outcome;
+  if (match.kind !== "found") return ok([], msg("ITEM_REMOVE_NOT_FOUND", { name: targetName(op.target) }), []);
+  const item = match.item;
+  const spec = batchSpec(op.target)!;
+  if ("batchId" in spec) {
+    const b = item.batches.find((x) => x.id === spec.batchId);
+    if (!b) return reject("UNKNOWN_TARGET");
+    if (b.closedAt) return noChange();
+  }
+  const picked = pickBatch(item, spec);
+  if (!picked.ok) return picked.outcome;
+  const payload: BatchClosedPayload = { itemId: item.id, batchId: picked.batch.id, reason: "gone" };
+  const left = openBatches(item).length - 1;
+  const name = item.name.value;
+  return ok(
+    [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.batchClosed, payload)],
+    left === 0 ? msg("ITEM_OUT", { name }) : msg("ITEM_BATCH_GONE", { name, left }),
+    [{ kind: "item", id: item.id, change: "updated", batchId: picked.batch.id }],
+  );
+}
+
+/**
+ * "Still have them" (0025): records that the older batch is still there, which dismisses the
+ * receipt's choice. A soft change: no refs (it stays out of "Since your last visit"), it can't be
+ * undone, and it never blocks undoing the purchase (see `SOFT_SUMMARY_CODES`).
+ */
+function batchKeep(op: OperationOf<"item.batch.keep">, env: OpEnv): OpOutcome {
+  const item = env.kitchen.items[op.target.itemId];
+  if (!item) return reject("UNKNOWN_ITEM");
+  const b = item.batches.find((x) => x.id === op.target.batchId);
+  if (!b) return reject("UNKNOWN_TARGET");
+  if (b.closedAt) return reject("ALREADY_OUT", { name: item.name.value });
+  if (b.keptAt) return noChange();
+  const payload: BatchKeptPayload = { itemId: item.id, batchId: b.id };
+  return ok([emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.batchKept, payload)], msg("ITEM_BATCH_KEPT", { name: item.name.value }), []);
+}
+
+/**
+ * "I defrosted the chicken" (0025, AI8): the batch's "defrosted on" date (said, else now) and
+ * `frozen: false`. Without a batch: the oldest frozen open batch, else the oldest open one. An
+ * item the kitchen never heard about is recorded first (0011).
+ */
+function itemDefrost(op: OperationOf<"item.defrost">, env: OpEnv): OpOutcome {
+  const k = kitchenStream(env.ctx.kitchenId);
+  const match = resolveTargetItem(op.target, env.kitchen);
+  if (match.kind === "rejected") return match.outcome;
+  if (match.kind === "unknown-id" || match.kind === "ambiguous") return reject("UNKNOWN_ITEM");
+  const events: EventEnvelope[] = [];
+  let item: Item;
+  let recorded = false;
+  if (match.kind === "none") {
+    const event = recordUnknownItem(nameFact(targetName(op.target)), env);
+    events.push(event);
+    recorded = true;
+    item = apply(env.kitchen, event).items[(event.payload as ItemAddedPayload).itemId];
+  } else {
+    item = match.item;
+    if (openBatches(item).length === 0) return reject("ALREADY_OUT", { name: item.name.value });
+  }
+  const spec = recorded ? null : batchSpec(op.target);
+  let batch: Batch;
+  if (spec) {
+    const picked = pickBatch(item, spec);
+    if (!picked.ok) return picked.outcome;
+    batch = picked.batch;
+  } else {
+    const open = openBatches(item);
+    batch = open.find((b) => b.frozen?.value === true || b.location?.value === "freezer") ?? open[0];
+  }
+  const said = nn(op.fields?.defrostedOn);
+  const defrostedOn: Fact<string> = said
+    ? { ...said, value: new Date(said.value).toISOString() }
+    : { value: env.ctx.now, basis: "inferred", confidence: "high" };
+  const payload: BatchDefrostedPayload = {
+    itemId: item.id,
+    batchId: batch.id,
+    defrostedOn,
+    frozen: { value: false, basis: "inferred", confidence: "high" },
+  };
+  events.push(emit(env, k, KITCHEN_EVENT.batchDefrosted, payload, said?.value));
+  return ok(events, msg("ITEM_DEFROSTED", { name: item.name.value }), [
+    { kind: "item", id: item.id, change: recorded ? "added" : "updated", batchId: batch.id },
+  ]);
+}
+
+/**
+ * Summary codes of "soft" changes: they never block an Undo of an earlier change (prepareRevert)
+ * and are not undoable themselves. Only "Still have them" (0025).
+ */
+export const SOFT_SUMMARY_CODES: ReadonlySet<string> = new Set(["ITEM_BATCH_KEPT"]);
 
 function itemRemove(op: OperationOf<"item.remove">, env: OpEnv): OpOutcome {
   const match = resolveItem(op.target, env.kitchen);
@@ -447,7 +724,7 @@ function inKitchenIngredientItems(meal: Meal, kitchen: KitchenEntities): Item[] 
       const m = resolveItem({ name: ing.name }, kitchen);
       item = m.kind === "found" ? m.item : undefined;
     }
-    if (item && item.stock?.value !== "out") found.set(item.id, item);
+    if (item && openBatches(item).length > 0) found.set(item.id, item);
   }
   return [...found.values()];
 }
@@ -476,7 +753,8 @@ function mealTransition(
   // Cancelling never changes the kitchen.
   if (to === "done") {
     for (const item of inKitchenIngredientItems(meal, env.kitchen)) {
-      const used: ItemUsedPayload = { itemId: item.id, mealId: meal.id };
+      // Used in this meal, amount unknown (0013): the oldest batch, the one used first (0025).
+      const used: ItemUsedPayload = compact({ itemId: item.id, batchId: openBatches(item)[0]?.id, mealId: meal.id });
       events.push(emit(env, k, KITCHEN_EVENT.itemUsed, used));
       refs.push({ kind: "item", id: item.id, change: "updated" });
     }
@@ -663,7 +941,10 @@ function reviewResolve(op: OperationOf<"review.resolve">, env: OpEnv): OpOutcome
   const checked = checkDoneItems(op.items, env.kitchen);
   if (!checked.ok) return checked.outcome;
   const moved = moveToKitchen(checked.chosen, env);
-  return ok([...moved.events, emit(env, k, KITCHEN_EVENT.reviewResolved, payload)], moved.summary, [...moved.refs, ref]);
+  return {
+    ...ok([...moved.events, emit(env, k, KITCHEN_EVENT.reviewResolved, payload)], moved.summary, [...moved.refs, ref]),
+    ...(moved.batchOffers.length ? { batchOffers: moved.batchOffers } : {}),
+  };
 }
 
 // ─── Shopping list (0027, SL1–SL3) ───────────────────────────────────────────────────
@@ -847,15 +1128,19 @@ function shoppingDone(op: OperationOf<"shopping.done">, env: OpEnv): OpOutcome {
   const checked = checkDoneItems(op.items, env.kitchen);
   if (!checked.ok) return checked.outcome;
   const moved = moveToKitchen(checked.chosen, env);
-  return ok(moved.events, moved.summary, moved.refs);
+  return { ...ok(moved.events, moved.summary, moved.refs), ...(moved.batchOffers.length ? { batchOffers: moved.batchOffers } : {}) };
 }
 
 /** Each chosen item goes in with `item.add`'s rules and leaves the list as moved, linked to its kitchen item. */
-function moveToKitchen(chosen: ChosenItem[], env: OpEnv): { events: EventEnvelope[]; summary: ReturnType<typeof msg>; refs: ChangeRef[] } {
+function moveToKitchen(
+  chosen: ChosenItem[],
+  env: OpEnv,
+): { events: EventEnvelope[]; summary: ReturnType<typeof msg>; refs: ChangeRef[]; batchOffers: BatchOffer[] } {
   const k = kitchenStream(env.ctx.kitchenId);
   let working = env.kitchen;
   const events: EventEnvelope[] = [];
   const refs: ChangeRef[] = [];
+  const batchOffers: BatchOffer[] = [];
   for (const { entry, fields } of chosen) {
     const facts: KitchenFacts = compact({
       quantity: nn(fields?.quantity) ?? entry.quantity,
@@ -866,17 +1151,18 @@ function moveToKitchen(chosen: ChosenItem[], env: OpEnv): { events: EventEnvelop
     const added = addToKitchen(entry.name, facts, working, env);
     const moved: ShoppingMovedPayload = { shoppingItemId: entry.id, itemId: added.itemId };
     const movedEvent = emit(env, k, KITCHEN_EVENT.shoppingMoved, moved);
-    for (const e of [added.event, movedEvent]) {
+    for (const e of [...added.events, movedEvent]) {
       working = apply(working, e);
       events.push(e);
     }
+    if (added.offer) batchOffers.push(added.offer);
     refs.push(
-      { kind: "item", id: added.itemId, change: added.restocked ? "updated" : "added" },
+      { kind: "item", id: added.itemId, change: added.restocked || added.merged ? "updated" : "added", batchId: added.batchId },
       { kind: "shopping", id: entry.id, change: "removed" },
     );
   }
   const names = chosen.map((c) => c.entry.name.value);
-  return { events, summary: msg("SHOPPING_DONE", { count: names.length, names: names.join(", ") }), refs };
+  return { events, summary: msg("SHOPPING_DONE", { count: names.length, names: names.join(", ") }), refs, batchOffers };
 }
 
 const REF_KIND: Record<string, RefKind> = {
@@ -920,7 +1206,12 @@ function targetKeys(op: Operation): string[] {
     case "item.update":
     case "item.use":
     case "item.remove":
+    case "item.defrost":
       return "itemId" in op.target ? [`item:${op.target.itemId}`] : [];
+    case "item.batch.close":
+      // An exact batch ID can't point at the wrong batch, so "Those are gone" from an older
+      // receipt still works after other changes to the item.
+      return "itemId" in op.target && !("batchId" in op.target) ? [`item:${op.target.itemId}`] : [];
     case "meal.choose":
       return "mealId" in op.target ? [`meal:${op.target.mealId}`] : [];
     case "meal.plan":
@@ -957,6 +1248,12 @@ function validateOperation(op: Operation, env: OpEnv): OpOutcome {
       return itemUse(op, env);
     case "item.remove":
       return itemRemove(op, env);
+    case "item.batch.close":
+      return batchClose(op, env);
+    case "item.batch.keep":
+      return batchKeep(op, env);
+    case "item.defrost":
+      return itemDefrost(op, env);
     case "meal.choose":
       return mealChoose(op, env);
     case "meal.plan":
@@ -1058,7 +1355,12 @@ export function planProposal(proposal: ProposedChange, ctx: PlanContext): Plan {
       events.push(event);
     }
     if (op.type === "changeset.revert" && outcome.events.length > 0) reverted.push(op.target.changeSetId);
-    applied.push({ opId: op.opId, summary: outcome.summary, refs: outcome.refs });
+    applied.push({
+      opId: op.opId,
+      summary: outcome.summary,
+      refs: outcome.refs,
+      ...(outcome.batchOffers?.length ? { batchOffers: outcome.batchOffers } : {}),
+    });
   }
 
   return { applied, rejected, events, kitchen: world.kitchen, profiles: world.profiles, touched: [...touched], reverted };

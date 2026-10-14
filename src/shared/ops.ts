@@ -1,11 +1,11 @@
 /** Shapes shared by every domain's operation validators. */
-import type { ChangeRef } from "@/contracts/apply-result";
+import type { BatchOffer, ChangeRef } from "@/contracts/apply-result";
 import type { Msg } from "@/contracts/common";
 import { msg } from "./messages";
 import type { EventEnvelope } from "./events/types";
 
 export type OpOutcome =
-  | { ok: true; events: EventEnvelope[]; summary: Msg; refs: ChangeRef[] }
+  | { ok: true; events: EventEnvelope[]; summary: Msg; refs: ChangeRef[]; batchOffers?: BatchOffer[] }
   | { ok: false; reason: Msg };
 
 export const reject = (code: string, params: Msg["params"] = {}): OpOutcome => ({

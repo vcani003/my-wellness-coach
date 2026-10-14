@@ -23,6 +23,35 @@ import { ReviewEntry } from "./operations";
 
 const isoDate = z.iso.datetime({ offset: true });
 
+/**
+ * One open batch of an item (0025): older and newer eggs. Oldest first in `ItemRow.batches`.
+ * Closed batches stay in history only. `createdBy` is who added it.
+ */
+export const BatchRow = z.object({
+  id: Id,
+  /** When the user said they got it, else when it was recorded. */
+  addedAt: isoDate,
+  quantity: fact(Quantity).optional(),
+  location: fact(Location).optional(),
+  frozen: fact(z.boolean()).optional(),
+  opened: fact(z.boolean()).optional(),
+  /** Only `low`: an Out batch is closed. */
+  stock: fact(StockLevel).optional(),
+  /** "Defrosted on" (0025): when the user said, else when it was recorded. ISO 8601. */
+  defrostedOn: fact(isoDate).optional(),
+  /** When someone tapped "Still have them" for it. */
+  keptAt: isoDate.optional(),
+  lastUsedAt: isoDate.optional(),
+  ...Audit,
+});
+export type BatchRow = z.infer<typeof BatchRow>;
+
+/**
+ * One row per item on the Kitchen list. With batches (0025), its fields describe them together:
+ * `addedAt`, location, frozen and opened come from the **oldest** open batch (the one used next);
+ * `quantity` is the one batch's, or a sum when they share a unit (else unknown); `stock` is `low`
+ * only when every open batch is low. "2 batches · oldest 12 days" = `batches.length` + `addedAt`.
+ */
 export const ItemRow = z.object({
   id: Id,
   name: fact(z.string()),
@@ -38,6 +67,13 @@ export const ItemRow = z.object({
   /** For "added X days ago": when the user said it happened, else when it was recorded. */
   addedAt: isoDate,
   lastUsedAt: isoDate.optional(),
+  /** The most recent "defrosted on" among its open batches. */
+  defrostedOn: fact(isoDate).optional(),
+  /**
+   * Open batches, oldest first (0025). Always sent by this build; optional so a state saved by an
+   * older build (offline cache) still parses (0018). Absent = one batch, described by the row.
+   */
+  batches: z.array(BatchRow).optional(),
   ...Audit,
 });
 export type ItemRow = z.infer<typeof ItemRow>;

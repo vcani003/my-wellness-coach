@@ -190,7 +190,7 @@ describe("shopping.done (SL2)", () => {
     k.tap([{ type: "shopping.tick", target: { name: "ginger" }, ticked: true }]);
     const kitchenGinger = k.item("ginger")!.id;
     const done = k.tap([{ type: "shopping.done", items: [{ shoppingItemId: entry(k, "ginger").id }] }]);
-    expect(done.applied[0].refs[0]).toEqual({ kind: "item", id: kitchenGinger, change: "updated" });
+    expect(done.applied[0].refs[0]).toEqual({ kind: "item", id: kitchenGinger, change: "updated", batchId: expect.any(String) });
     expect(Object.values(k.kitchen.items).filter((i) => i.standardName === "ginger")).toHaveLength(1);
     expect(k.item("ginger")!.stock).toBeUndefined();
   });
@@ -239,7 +239,7 @@ describe("SL5 Rec: buying in chat takes the item off the list", () => {
     const itemId = k.item("garlic")!.id;
     expect(bought.applied[0].summary.code).toBe("ITEM_ADDED_FROM_LIST");
     expect(bought.applied[0].refs).toEqual([
-      { kind: "item", id: itemId, change: "added" },
+      { kind: "item", id: itemId, change: "added", batchId: expect.any(String) },
       { kind: "shopping", id: garlic, change: "removed" },
     ]);
     expect(k.kitchen.shopping[garlic]).toMatchObject({ status: "moved", movedToItemId: itemId });

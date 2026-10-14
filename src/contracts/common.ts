@@ -50,6 +50,16 @@ export type Location = z.infer<typeof Location>;
 export const StockLevel = z.enum(["low", "out"]);
 export type StockLevel = z.infer<typeof StockLevel>;
 
+/**
+ * Which of an item's open batches (0025): the oldest (used first by default) or the newest
+ * ("the new eggs"). An exact `batchId` can be given instead.
+ */
+export const BatchWhich = z.enum(["oldest", "newest"]);
+export type BatchWhich = z.infer<typeof BatchWhich>;
+
+/** Most open batches an item holds; adding one more closes the oldest (0025). */
+export const MAX_OPEN_BATCHES = 3;
+
 /** Meal lifecycle statuses (0013). Allowed moves live in one transitions table in the kitchen domain. */
 export const MealStatus = z.enum(["chosen", "planned", "cooking", "done", "cancelled"]);
 export type MealStatus = z.infer<typeof MealStatus>;

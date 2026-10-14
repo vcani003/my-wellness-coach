@@ -3,12 +3,13 @@
  * same transaction as their events (backend-data.md §3).
  */
 import { and, eq } from "drizzle-orm";
-import { checklistTicks, items, meals, recipes, reviews, shoppingItems } from "@/db/schema";
+import { checklistTicks, itemBatches, items, meals, recipes, reviews, shoppingItems } from "@/db/schema";
 import type { Queryable } from "@/db/client";
 import type { MealStatus, ReviewKind, ReviewOrigin, ShoppingSource } from "@/contracts/common";
 import { compact, splitEntityKey } from "@/shared/events/types";
 import type { Item, KitchenEntities, Meal, Recipe, Review, ShoppingItem, ShoppingStatus, Tick } from "./state";
 import { tickId } from "./state";
+import { deriveItem, ensureBatches, type Batch, type BatchCloseReason } from "./batches";
 
 const iso = (d: Date) => d.toISOString();
 const isoOpt = (d: Date | null) => (d ? d.toISOString() : undefined);
@@ -29,8 +30,31 @@ const auditTo = (e: { createdAt: string; createdBy: string; updatedAt: string; u
   updatedBy: e.updatedBy,
 });
 
-export function itemFromRow(r: typeof items.$inferSelect): Item {
+export function batchFromRow(r: typeof itemBatches.$inferSelect): Batch {
   return compact({
+    id: r.id,
+    addedAt: iso(r.addedAt),
+    occurredAt: r.occurredAt ?? undefined,
+    quantity: r.quantity ?? undefined,
+    location: r.location ?? undefined,
+    frozen: r.frozen ?? undefined,
+    opened: r.opened ?? undefined,
+    stock: r.stock ?? undefined,
+    defrostedOn: r.defrostedOn ?? undefined,
+    lastUsedAt: isoOpt(r.lastUsedAt),
+    keptAt: isoOpt(r.keptAt),
+    closedAt: isoOpt(r.closedAt),
+    closedReason: (r.closedReason ?? undefined) as BatchCloseReason | undefined,
+    ...auditFrom(r),
+  });
+}
+
+/**
+ * An item and its batches. With no batch rows (written by a build from before batches), it gets
+ * its one legacy batch, exactly as migration 0008 backfills it (0018, 0028).
+ */
+export function itemFromRow(r: typeof items.$inferSelect, batchRows: (typeof itemBatches.$inferSelect)[] = []): Item {
+  const base = compact({
     id: r.id,
     name: r.name,
     standardName: r.standardName,
@@ -44,6 +68,9 @@ export function itemFromRow(r: typeof items.$inferSelect): Item {
     lastUsedAt: isoOpt(r.lastUsedAt),
     ...auditFrom(r),
   });
+  if (batchRows.length === 0) return ensureBatches(base);
+  const batches = [...batchRows].sort((a, b) => a.position - b.position).map(batchFromRow);
+  return deriveItem({ ...base, batches });
 }
 
 export function mealFromRow(r: typeof meals.$inferSelect): Meal {
@@ -111,16 +138,19 @@ export function shoppingFromRow(r: typeof shoppingItems.$inferSelect): ShoppingI
 
 /** The whole kitchen as the pure state (all rows, including done meals and `out` items). */
 export async function loadKitchenEntities(db: Queryable, kitchenId: string): Promise<KitchenEntities> {
-  const [itemRows, mealRows, recipeRows, tickRows, reviewRows, shoppingRows] = await Promise.all([
+  const [itemRows, batchRows, mealRows, recipeRows, tickRows, reviewRows, shoppingRows] = await Promise.all([
     db.select().from(items).where(eq(items.kitchenId, kitchenId)),
+    db.select().from(itemBatches).where(eq(itemBatches.kitchenId, kitchenId)),
     db.select().from(meals).where(eq(meals.kitchenId, kitchenId)),
     db.select().from(recipes).where(eq(recipes.kitchenId, kitchenId)),
     db.select().from(checklistTicks).where(eq(checklistTicks.kitchenId, kitchenId)),
     db.select().from(reviews).where(eq(reviews.kitchenId, kitchenId)),
     db.select().from(shoppingItems).where(eq(shoppingItems.kitchenId, kitchenId)),
   ]);
+  const batchesByItem = new Map<string, (typeof itemBatches.$inferSelect)[]>();
+  for (const b of batchRows) batchesByItem.set(b.itemId, [...(batchesByItem.get(b.itemId) ?? []), b]);
   return {
-    items: Object.fromEntries(itemRows.map((r) => [r.id, itemFromRow(r)])),
+    items: Object.fromEntries(itemRows.map((r) => [r.id, itemFromRow(r, batchesByItem.get(r.id))])),
     meals: Object.fromEntries(mealRows.map((r) => [r.id, mealFromRow(r)])),
     recipes: Object.fromEntries(recipeRows.map((r) => [r.id, recipeFromRow(r)])),
     ticks: Object.fromEntries(tickRows.map((r) => [tickId(r.mealId, r.ingredientKey), tickFromRow(r)])),
@@ -141,6 +171,7 @@ export async function persistKitchenEntities(
     switch (kind) {
       case "item": {
         await db.delete(items).where(and(eq(items.kitchenId, kitchenId), eq(items.id, id)));
+        await db.delete(itemBatches).where(and(eq(itemBatches.kitchenId, kitchenId), eq(itemBatches.itemId, id)));
         const e = state.items[id];
         if (e) {
           await db.insert(items).values({
@@ -158,6 +189,30 @@ export async function persistKitchenEntities(
             lastUsedAt: dateOpt(e.lastUsedAt),
             ...auditTo(e),
           });
+          const batches = e.batches ?? [];
+          if (batches.length) {
+            await db.insert(itemBatches).values(
+              batches.map((b, position) => ({
+                id: b.id,
+                kitchenId,
+                itemId: e.id,
+                position,
+                addedAt: date(b.addedAt),
+                occurredAt: b.occurredAt ?? null,
+                quantity: b.quantity ?? null,
+                location: b.location ?? null,
+                frozen: b.frozen ?? null,
+                opened: b.opened ?? null,
+                stock: b.stock ?? null,
+                defrostedOn: b.defrostedOn ?? null,
+                lastUsedAt: dateOpt(b.lastUsedAt),
+                keptAt: dateOpt(b.keptAt),
+                closedAt: dateOpt(b.closedAt),
+                closedReason: b.closedReason ?? null,
+                ...auditTo(b),
+              })),
+            );
+          }
         }
         break;
       }
@@ -272,6 +327,7 @@ export async function persistKitchenEntities(
 /** Replace every projection row of a kitchen (rebuild-projections). */
 export async function replaceKitchenProjections(db: Queryable, kitchenId: string, state: KitchenEntities): Promise<void> {
   await db.delete(items).where(eq(items.kitchenId, kitchenId));
+  await db.delete(itemBatches).where(eq(itemBatches.kitchenId, kitchenId));
   await db.delete(meals).where(eq(meals.kitchenId, kitchenId));
   await db.delete(recipes).where(eq(recipes.kitchenId, kitchenId));
   await db.delete(checklistTicks).where(eq(checklistTicks.kitchenId, kitchenId));

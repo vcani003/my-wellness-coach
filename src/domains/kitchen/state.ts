@@ -13,13 +13,35 @@ import {
   type ChangesetRevertedPayload,
   type EventEnvelope,
 } from "@/shared/events/types";
+import {
+  addBatch,
+  compactBatch,
+  deriveItem,
+  ensureBatches,
+  openBatches,
+  withBatch,
+  type Batch,
+  type BatchCloseReason,
+  type BatchFacts,
+} from "./batches";
+
+export type { Batch } from "./batches";
 
 // ─── Entities ─────────────────────────────────────────────────────────────────────────
 
+/**
+ * A kitchen item: one row on the Kitchen list. Its batches (0025) are the source of truth for
+ * quantity, location, frozen, opened, stock and age; the item's own copies of those fields are
+ * derived from them (`deriveItem`) and kept for older readers (0028).
+ */
 export interface Item extends AuditFields {
   id: string;
   name: Fact<string>;
   standardName: string;
+  /** Every batch, open and closed, in the order added. */
+  batches: Batch[];
+  /** Derived: the most recent "defrosted on" among the open batches. */
+  defrostedOn?: Fact<string>;
   quantity?: Fact<Quantity>;
   location?: Fact<Location>;
   frozen?: Fact<boolean>;
@@ -131,6 +153,10 @@ export const KITCHEN_EVENT = {
   shoppingTicked: "shopping.ticked",
   shoppingRemoved: "shopping.removed",
   shoppingMoved: "shopping.moved",
+  batchAdded: "item.batch.added",
+  batchClosed: "item.batch.closed",
+  batchKept: "item.batch.kept",
+  batchDefrosted: "item.batch.defrosted",
 } as const;
 
 type ItemFactFields = Pick<Item, "quantity" | "location" | "frozen" | "opened" | "occurredAt">;
@@ -139,21 +165,52 @@ export interface ItemAddedPayload extends ItemFactFields {
   itemId: string;
   name: Fact<string>;
   standardName: string;
+  /** Its first batch. Absent (events from before batches) = the item's own ID. */
+  batchId?: string;
 }
 export interface ItemUpdatedPayload {
   itemId: string;
+  /** The batch the facts apply to. Absent (older events): the oldest open batch. */
+  batchId?: string;
   set: Partial<ItemFactFields & { name: Fact<string>; standardName: string }>;
   /** Fields set back to unknown. `stock` is cleared when an item is added again. */
   clear: (keyof ItemFactFields | "stock")[];
 }
 export interface ItemUsedPayload {
   itemId: string;
+  /**
+   * The batch used. Absent (older events): `stock` applies to every open batch and the
+   * quantity to the oldest.
+   */
+  batchId?: string;
   stock?: Fact<StockLevel>;
   amountUsed?: Fact<Quantity>;
   /** undefined = quantity unchanged; null = now unknown; else the computed remainder. */
   quantityAfter?: Fact<Quantity> | null;
   /** Set when recorded by finishing a meal (0013): used in this meal, amount unknown. */
   mealId?: string;
+}
+/** Buying something already in the kitchen adds a batch (0025). */
+export interface BatchAddedPayload extends BatchFacts {
+  itemId: string;
+  batchId: string;
+}
+export interface BatchClosedPayload {
+  itemId: string;
+  batchId: string;
+  /** `gone` = "Those are gone"; `replaced` = a 4th batch closed the oldest (0025). */
+  reason: Exclude<BatchCloseReason, "used-up">;
+}
+/** "Still have them" (0025). */
+export interface BatchKeptPayload {
+  itemId: string;
+  batchId: string;
+}
+export interface BatchDefrostedPayload {
+  itemId: string;
+  batchId: string;
+  defrostedOn: Fact<string>;
+  frozen: Fact<boolean>;
 }
 export interface ItemRemovedPayload {
   itemId: string;
@@ -249,6 +306,10 @@ export function kitchenTouchedKeys(event: EventEnvelope): string[] {
     case KITCHEN_EVENT.itemUpdated:
     case KITCHEN_EVENT.itemUsed:
     case KITCHEN_EVENT.itemRemoved:
+    case KITCHEN_EVENT.batchAdded:
+    case KITCHEN_EVENT.batchClosed:
+    case KITCHEN_EVENT.batchKept:
+    case KITCHEN_EVENT.batchDefrosted:
       return [`item:${p.itemId as string}`];
     case KITCHEN_EVENT.mealChosen:
     case KITCHEN_EVENT.mealTransitioned:
@@ -323,38 +384,117 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
   switch (event.type) {
     case KITCHEN_EVENT.itemAdded: {
       const p = event.payload as ItemAddedPayload;
-      const item: Item = {
-        id: p.itemId,
-        name: p.name,
-        standardName: p.standardName,
+      const addedAt = p.occurredAt ? toIso(p.occurredAt.value) : event.recordedAt;
+      const batch: Batch = compactBatch({
+        id: p.batchId ?? p.itemId,
+        addedAt,
+        occurredAt: p.occurredAt,
         quantity: p.quantity,
         location: p.location,
         frozen: p.frozen,
         opened: p.opened,
-        occurredAt: p.occurredAt,
-        addedAt: p.occurredAt ? toIso(p.occurredAt.value) : event.recordedAt,
         ...created(event),
-      };
+      });
+      const item = deriveItem({
+        id: p.itemId,
+        name: p.name,
+        standardName: p.standardName,
+        addedAt,
+        batches: [batch],
+        ...created(event),
+      });
       return put(state, "items", item.id, item);
     }
     case KITCHEN_EVENT.itemUpdated: {
       const p = event.payload as ItemUpdatedPayload;
-      const prev = state.items[p.itemId];
-      if (!prev) return state;
-      const next: Item = { ...prev, ...compact(p.set), ...stamp(event) };
-      for (const field of p.clear) delete next[field];
-      if (p.set.occurredAt) next.addedAt = toIso(p.set.occurredAt.value);
-      return put(state, "items", next.id, next);
+      const found = state.items[p.itemId];
+      if (!found) return state;
+      const { name, standardName, ...facts } = p.set;
+      let next: Item = { ...ensureBatches(found), ...(name ? { name } : {}), ...(standardName ? { standardName } : {}), ...stamp(event) };
+      const clear = p.clear.filter((f) => f !== "stock");
+      // Older events: "added again" cleared `stock`, reopening an Out item (before batches).
+      if (p.clear.includes("stock")) {
+        const open = openBatches(next);
+        const reopen = open.length ? open : [...next.batches].sort((a, b) => (a.closedAt ?? "").localeCompare(b.closedAt ?? "")).slice(-1);
+        for (const b of reopen) {
+          const { stock: _s, closedAt: _c, closedReason: _r, ...rest } = b;
+          void [_s, _c, _r];
+          next = withBatch(next, { ...rest, ...stamp(event) });
+        }
+      }
+      if (Object.keys(compact(facts)).length > 0 || clear.length > 0) {
+        const target = (p.batchId ? next.batches.find((b) => b.id === p.batchId) : undefined) ?? openBatches(next)[0] ?? next.batches.at(-1);
+        if (target) {
+          const b: Batch = { ...target, ...compact(facts), ...stamp(event) };
+          for (const field of clear) delete b[field];
+          if (facts.occurredAt) b.addedAt = toIso(facts.occurredAt.value);
+          next = withBatch(next, b);
+        }
+      }
+      return put(state, "items", next.id, deriveItem(next));
     }
     case KITCHEN_EVENT.itemUsed: {
       const p = event.payload as ItemUsedPayload;
-      const prev = state.items[p.itemId];
+      const found = state.items[p.itemId];
+      if (!found) return state;
+      let next: Item = { ...ensureBatches(found), ...stamp(event) };
+      const open = openBatches(next);
+      const one = p.batchId ? next.batches.find((b) => b.id === p.batchId) : open[0];
+      const stockTargets = p.batchId ? (one ? [one] : []) : open;
+      if (one) {
+        const b: Batch = { ...one, lastUsedAt: event.recordedAt, ...stamp(event) };
+        if (p.quantityAfter === null) delete b.quantity;
+        else if (p.quantityAfter) b.quantity = p.quantityAfter;
+        next = withBatch(next, b);
+      }
+      if (p.stock) {
+        for (const t of stockTargets) {
+          const b: Batch = { ...next.batches.find((x) => x.id === t.id)!, stock: p.stock, ...stamp(event) };
+          if (p.stock.value === "out") {
+            b.closedAt = event.recordedAt;
+            b.closedReason = "used-up";
+          }
+          next = withBatch(next, b);
+        }
+      }
+      return put(state, "items", next.id, deriveItem(next));
+    }
+    case KITCHEN_EVENT.batchAdded: {
+      const p = event.payload as BatchAddedPayload;
+      const found = state.items[p.itemId];
+      if (!found) return state;
+      const batch: Batch = compactBatch({
+        id: p.batchId,
+        addedAt: p.occurredAt ? toIso(p.occurredAt.value) : event.recordedAt,
+        occurredAt: p.occurredAt,
+        quantity: p.quantity,
+        location: p.location,
+        frozen: p.frozen,
+        opened: p.opened,
+        ...created(event),
+      });
+      return put(state, "items", p.itemId, addBatch({ ...ensureBatches(found), ...stamp(event) }, batch));
+    }
+    case KITCHEN_EVENT.batchClosed:
+    case KITCHEN_EVENT.batchKept:
+    case KITCHEN_EVENT.batchDefrosted: {
+      const p = event.payload as BatchClosedPayload & Partial<BatchDefrostedPayload>;
+      const found = state.items[p.itemId];
+      if (!found) return state;
+      const item = { ...ensureBatches(found), ...stamp(event) };
+      const prev = item.batches.find((b) => b.id === p.batchId);
       if (!prev) return state;
-      const next: Item = { ...prev, lastUsedAt: event.recordedAt, ...stamp(event) };
-      if (p.stock) next.stock = p.stock;
-      if (p.quantityAfter === null) delete next.quantity;
-      else if (p.quantityAfter) next.quantity = p.quantityAfter;
-      return put(state, "items", next.id, next);
+      const b: Batch = { ...prev, ...stamp(event) };
+      if (event.type === KITCHEN_EVENT.batchClosed) {
+        b.closedAt = event.recordedAt;
+        b.closedReason = p.reason;
+      } else if (event.type === KITCHEN_EVENT.batchKept) {
+        b.keptAt = event.recordedAt;
+      } else {
+        b.defrostedOn = p.defrostedOn;
+        if (p.frozen) b.frozen = p.frozen;
+      }
+      return put(state, "items", item.id, withBatch(item, b));
     }
     case KITCHEN_EVENT.itemRemoved: {
       const p = event.payload as ItemRemovedPayload;
@@ -503,8 +643,10 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
         const { kind, id } = splitEntityKey(key);
         const coll = COLLECTION[kind as keyof typeof COLLECTION];
         if (!coll) continue;
-        // Restored rows read "updated by <whoever undid it>, just now".
-        next = put(next, coll, id, value ? ({ ...value, ...stamp(event) } as never) : null);
+        // Restored rows read "updated by <whoever undid it>, just now". An item saved before
+        // batches gets its one legacy batch (0025).
+        const restored = value && coll === "items" ? ensureBatches(value as Item) : value;
+        next = put(next, coll, id, restored ? ({ ...restored, ...stamp(event) } as never) : null);
       }
       return next;
     }

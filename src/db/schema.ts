@@ -206,6 +206,41 @@ export const items = pgTable(
   (t) => [index("items_kitchen_idx").on(t.kitchenId, t.standardName)],
 );
 
+/**
+ * Item batches (0025): older and newer eggs. One row per batch, open or closed (closed ones stay
+ * for history). The `items` row stays the one thing on the Kitchen list; its quantity, location,
+ * stock and age columns are derived from these rows and still written, so code that predates
+ * batches keeps reading it (0028). Migration 0008 backfilled one batch per existing item, with the
+ * item's own ID.
+ */
+export const itemBatches = pgTable(
+  "item_batches",
+  {
+    id: text("id").notNull(),
+    kitchenId: text("kitchen_id")
+      .notNull()
+      .references(() => kitchens.id, { onDelete: "cascade" }),
+    itemId: text("item_id").notNull(),
+    /** Order added within the item (0, 1, 2…). */
+    position: integer("position").notNull(),
+    addedAt: ts("added_at").notNull(),
+    occurredAt: jsonb("occurred_at").$type<Fact<string>>(),
+    quantity: jsonb("quantity").$type<Fact<Quantity>>(),
+    location: jsonb("location").$type<Fact<Location>>(),
+    frozen: jsonb("frozen").$type<Fact<boolean>>(),
+    opened: jsonb("opened").$type<Fact<boolean>>(),
+    stock: jsonb("stock").$type<Fact<StockLevel>>(),
+    defrostedOn: jsonb("defrosted_on").$type<Fact<string>>(),
+    lastUsedAt: ts("last_used_at"),
+    keptAt: ts("kept_at"),
+    /** Set once closed: used up, "Those are gone", or replaced by a 4th batch. */
+    closedAt: ts("closed_at"),
+    closedReason: text("closed_reason"),
+    ...audit,
+  },
+  (t) => [primaryKey({ columns: [t.kitchenId, t.id] }), index("item_batches_item_idx").on(t.kitchenId, t.itemId)],
+);
+
 export const meals = pgTable(
   "meals",
   {

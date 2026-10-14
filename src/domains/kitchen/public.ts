@@ -5,7 +5,7 @@
  */
 import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { Queryable } from "@/db/client";
-import { changeSets } from "@/db/schema";
+import { changeSets, itemBatches } from "@/db/schema";
 import type { KitchenScope } from "@/shared/membership";
 import { readKitchenState } from "./queries";
 
@@ -47,6 +47,26 @@ export async function getStillUndoable(db: Queryable, scope: KitchenScope, chang
         isNotNull(changeSets.version),
         isNull(changeSets.revertsChangeSetId),
         isNull(changeSets.revertedByChangeSetId),
+      ),
+    );
+  return new Set(rows.map((r) => r.id));
+}
+
+/**
+ * Of these batch IDs, the ones still open that nobody has answered "Still have them" for (0025).
+ * Used to redraw a saved chat receipt's batch choice only while it still needs asking.
+ */
+export async function getUnansweredBatchIds(db: Queryable, scope: KitchenScope, batchIds: string[]): Promise<Set<string>> {
+  if (batchIds.length === 0) return new Set();
+  const rows = await db
+    .select({ id: itemBatches.id })
+    .from(itemBatches)
+    .where(
+      and(
+        eq(itemBatches.kitchenId, scope.kitchenId),
+        inArray(itemBatches.id, batchIds),
+        isNull(itemBatches.closedAt),
+        isNull(itemBatches.keptAt),
       ),
     );
   return new Set(rows.map((r) => r.id));

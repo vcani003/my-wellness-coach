@@ -21,6 +21,12 @@ const TEMPLATES: Record<string, string> = {
   ITEM_USED_RECORDED: "{name} wasn't in your kitchen; noted it as used",
   ITEM_REMOVED: "Removed {name}",
   ITEM_REMOVE_NOT_FOUND: "{name} wasn't in your kitchen",
+  // batches (0025). ITEM_BATCH_ADDED's text is built in validate.ts ({name, batches, closedOldest, fromList}).
+  ITEM_BATCH_ADDED: "Added {name} ({batches} batches)",
+  ITEM_BATCH_USED_UP: "{name}: finished a batch ({left} left)",
+  ITEM_BATCH_GONE: "{name}: those are gone ({left} left)",
+  ITEM_BATCH_KEPT: "Kept the older {name}",
+  ITEM_DEFROSTED: "{name}: defrosted",
   MEAL_CHOSEN: "Chose {title}",
   MEAL_PLANNED: "Added {title} to the meal plan",
   MEAL_STATUS: "{title}: {status}",

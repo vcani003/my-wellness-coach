@@ -7,7 +7,7 @@ import { and, asc, desc, eq, gt, inArray, isNotNull } from "drizzle-orm";
 import { changeSets, items, kitchens, mealIdeas } from "@/db/schema";
 import type { Queryable } from "@/db/client";
 import { ChangeSetSummary, type ChangeSetSummary as ChangeSetSummaryT } from "@/contracts/apply-result";
-import type { KitchenState, RecipeView, ShoppingItemRow } from "@/contracts/kitchen-state";
+import type { BatchRow, KitchenState, RecipeView, ShoppingItemRow } from "@/contracts/kitchen-state";
 import { MealIdea, type MealIdea as MealIdeaT } from "@/contracts/stream";
 import type { Fact } from "@/contracts/common";
 import { computeAllergenFlags } from "@/shared/profile/allergens";
@@ -19,6 +19,9 @@ import type { Via } from "@/shared/events/types";
 import { actorRef, buildKitchenState, buildRecipeView } from "./read-model";
 import type { KitchenEntities } from "./state";
 import { loadKitchenEntities } from "./store";
+import { computeUseItUpSignals, type UseItUpSignal } from "./use-it-up";
+
+export { computeUseItUpSignals, signalFor, type UseItUpSignal } from "./use-it-up";
 
 export async function getKitchenVersion(db: Queryable, scope: KitchenScope): Promise<number> {
   const rows = await db.select({ version: kitchens.version }).from(kitchens).where(eq(kitchens.id, scope.kitchenId));
@@ -34,6 +37,12 @@ function actorIds(kitchen: KitchenEntities): string[] {
     }
   }
   for (const e of Object.values(kitchen.shopping)) if (e.tickedBy) ids.add(e.tickedBy);
+  for (const i of Object.values(kitchen.items)) {
+    for (const b of i.batches ?? []) {
+      ids.add(b.createdBy);
+      ids.add(b.updatedBy);
+    }
+  }
   return [...ids];
 }
 
@@ -246,4 +255,17 @@ export async function getIdea(
     .where(and(eq(mealIdeas.kitchenId, scope.kitchenId), eq(mealIdeas.id, ideaId)))
     .limit(1);
   return row ?? null;
+}
+
+// ─── Batches and "use it up" (0025) ───────────────────────────────────────────────────
+
+/** An item's open batches, oldest first (the view-only list behind the row). Null = no such current item. */
+export async function getItemBatches(db: Queryable, scope: KitchenScope, itemId: string): Promise<BatchRow[] | null> {
+  const state = await getKitchenState(db, scope);
+  return state.items.find((i) => i.id === itemId)?.batches ?? null;
+}
+
+/** What the meal AI ranks "use it up" on: oldest batch, defrosted, Low (0025, AI8). */
+export async function getUseItUpSignals(db: Queryable, scope: KitchenScope, now: Date = new Date()): Promise<UseItUpSignal[]> {
+  return computeUseItUpSignals(await getKitchenState(db, scope), now);
 }

@@ -57,6 +57,13 @@
       "when": 1791996883731,
       "tag": "0007_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791998150553,
+      "tag": "0008_item_batches",
+      "breakpoints": true
     }
   ]
 }

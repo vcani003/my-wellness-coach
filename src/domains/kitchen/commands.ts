@@ -28,7 +28,7 @@ import { loadProfiles, persistProfileEntities, replaceProfiles } from "@/shared/
 import { emptyProfileState, getProfileEntity, replayProfile } from "@/shared/profile/state";
 import { getKitchenEntity, replay } from "./state";
 import { loadKitchenEntities, persistKitchenEntities, replaceKitchenProjections } from "./store";
-import { planProposal, touchedKeys, type RevertPlan } from "./validate";
+import { SOFT_SUMMARY_CODES, planProposal, touchedKeys, type RevertPlan } from "./validate";
 import { getRecipe, ideaFlags, itemNames, readKitchenState } from "./queries";
 
 export type ApplyOutcome =
@@ -64,8 +64,14 @@ async function prepareRevert(tx: Queryable, scope: KitchenScope, changeSetId: st
     .where(and(eq(changeSets.kitchenId, scope.kitchenId), isNotNull(changeSets.version), gt(changeSets.version, cs.version)));
   const laterIds = new Set(later.map((l) => l.id));
   const mine = new Set(cs.touched);
+  // A soft change ("Still have them", 0025) never blocks undoing the purchase it answered.
+  const isSoft = (l: (typeof later)[number]) => {
+    const applied = (l.result as StoredResult | null)?.applied ?? [];
+    return applied.length > 0 && applied.every((a) => SOFT_SUMMARY_CODES.has(a.summary.code));
+  };
   const conflict = later
     .filter((l) => !l.revertedByChangeSetId && !(l.revertsChangeSetId && laterIds.has(l.revertsChangeSetId)))
+    .filter((l) => !isSoft(l))
     .some((l) => l.touched.some((key) => mine.has(key)));
   if (conflict) return { ok: false, code: "UNDO_CONFLICT" };
 
@@ -205,10 +211,11 @@ export async function applyProposedChange(
       }
 
       const isUndo = proposal.operations.some((op) => op.type === "changeset.revert") && plan.reverted.length > 0;
+      const softOnly = plan.applied.length > 0 && plan.applied.every((a) => SOFT_SUMMARY_CODES.has(a.summary.code));
       const stored: StoredResult = {
         changeSetId,
         newVersion,
-        undoable: saved && !isUndo,
+        undoable: saved && !isUndo && !softOnly,
         ...(saved && isUndo ? { undoBlockedReason: msg("UNDO_OF_UNDO") } : {}),
         applied: plan.applied,
         rejected: plan.rejected,
@@ -279,6 +286,38 @@ function tap(db: Db, scope: KitchenScope, args: TapArgs, action: string, operati
 }
 
 const said = <T>(value: T) => ({ value, basis: "said" as const, confidence: "high" as const });
+
+// ─── Batches (0025) ───────────────────────────────────────────────────────────────────
+
+/** "Those are gone" on a receipt's batch choice: these batches of one item close, one change set. */
+export function closeBatches(db: Db, scope: KitchenScope, args: TapArgs & { itemId: string; batchIds: string[] }) {
+  return tap(
+    db,
+    scope,
+    args,
+    "batch.close",
+    [...new Set(args.batchIds)].map((batchId, n) => ({
+      opId: `close-${n + 1}`,
+      type: "item.batch.close",
+      target: { itemId: args.itemId, batchId },
+    })),
+  );
+}
+
+/** "Still have them": the older batches stay, and the choice is dismissed (a soft change). */
+export function keepBatches(db: Db, scope: KitchenScope, args: TapArgs & { itemId: string; batchIds: string[] }) {
+  return tap(
+    db,
+    scope,
+    args,
+    "batch.keep",
+    [...new Set(args.batchIds)].map((batchId, n) => ({
+      opId: `keep-${n + 1}`,
+      type: "item.batch.keep",
+      target: { itemId: args.itemId, batchId },
+    })),
+  );
+}
 
 /** One-tap adds: a staples answer, a recipe's "Need" items, the Out/Low offer (SL3). Merges like chat. */
 export function addShoppingItems(

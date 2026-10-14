@@ -269,6 +269,8 @@ describe("defensive reads (0018)", () => {
     await db.delete(items).where(eq(items.id, chickenId)); // a missing item
     await db.execute(sql`update items set location = '{"value":"garage","basis":"said","confidence":"high"}'::jsonb
       where kitchen_id = ${t.kitchenId} and standard_name = 'egg'`); // a corrupt row
+    await db.execute(sql`update item_batches set location = '{"value":"garage","basis":"said","confidence":"high"}'::jsonb
+      where kitchen_id = ${t.kitchenId} and item_id in (select id from items where standard_name = 'egg')`); // …and its batch (0025)
 
     const state = await getKitchenState(db, vero);
     expect(state.items.map((i) => i.name.value).sort()).toEqual(["spinach", "yogurt"]); // eggs dropped, chicken gone

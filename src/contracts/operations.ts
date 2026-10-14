@@ -4,6 +4,7 @@
  */
 import { z } from "zod";
 import {
+  BatchWhich,
   Id,
   Location,
   MealStatus,
@@ -29,6 +30,31 @@ export const ItemTarget = z.union([
   z.strictObject({ name: z.string().min(1).max(200) }),
 ]);
 export type ItemTarget = z.infer<typeof ItemTarget>;
+
+const itemName = z.string().min(1).max(200);
+
+/**
+ * An item, optionally narrowed to one of its open batches (0025): `{itemId, batchId}` exactly, or
+ * `{itemId | name, which: "oldest" | "newest"}` ("the new eggs" → `{name: "eggs", which: "newest"}`).
+ * Without a batch, each operation has its default (see backend-data.md §6): use takes the
+ * oldest first.
+ */
+export const ItemBatchTarget = z.union([
+  z.strictObject({ itemId: Id }),
+  z.strictObject({ name: itemName }),
+  z.strictObject({ itemId: Id, batchId: Id }),
+  z.strictObject({ itemId: Id, which: BatchWhich }),
+  z.strictObject({ name: itemName, which: BatchWhich }),
+]);
+export type ItemBatchTarget = z.infer<typeof ItemBatchTarget>;
+
+/** Exactly one batch: by ID, or the oldest / newest open one. */
+export const BatchTarget = z.union([
+  z.strictObject({ itemId: Id, batchId: Id }),
+  z.strictObject({ itemId: Id, which: BatchWhich }),
+  z.strictObject({ name: itemName, which: BatchWhich }),
+]);
+export type BatchTarget = z.infer<typeof BatchTarget>;
 
 export const MealTarget = z.strictObject({ mealId: Id });
 
@@ -60,18 +86,24 @@ export const ItemAdd = z.object({
   fields: ItemFields,
 });
 
+/** Name changes apply to the item; every other field to one batch (default: the oldest open one). */
 export const ItemUpdate = z.object({
   ...common,
   type: z.literal("item.update"),
-  target: ItemTarget,
+  target: ItemBatchTarget,
   fields: ItemFields.partial(),
   clear: z.array(ClearableItemField).optional(),
 });
 
+/**
+ * Without a batch: an amount comes off the oldest batch first (spilling into the next when the
+ * units match), and `stock` applies to the whole item (Out closes every batch). With a batch:
+ * only that batch (Out closes it; the item is Out once its last batch closes, 0011).
+ */
 export const ItemUse = z.object({
   ...common,
   type: z.literal("item.use"),
-  target: ItemTarget,
+  target: ItemBatchTarget,
   fields: z.object({
     stock: optionalFact(StockLevel),
     amountUsed: optionalFact(Quantity),
@@ -83,6 +115,35 @@ export const ItemRemove = z.object({
   type: z.literal("item.remove"),
   target: ItemTarget,
   fields: z.object({ reason: optionalFact(z.string().max(500)) }).optional(),
+});
+
+/** "Those are gone" (0025): one batch closes. The item is Out once its last batch closes (0011). */
+export const ItemBatchClose = z.object({
+  ...common,
+  type: z.literal("item.batch.close"),
+  target: BatchTarget,
+});
+
+/**
+ * "Still have them" (0025): the receipt's one-tap choice for an older batch. Records that it's
+ * still there and dismisses the choice. Button only (not in the AI's schema).
+ */
+export const ItemBatchKeep = z.object({
+  ...common,
+  type: z.literal("item.batch.keep"),
+  target: z.strictObject({ itemId: Id, batchId: Id }),
+});
+
+/**
+ * "I defrosted the chicken" (0025, AI8). Sets the batch's "defrosted on" date (when the user said
+ * it happened, else now) and `frozen: false`. Without a batch: the oldest frozen open batch,
+ * else the oldest open one.
+ */
+export const ItemDefrost = z.object({
+  ...common,
+  type: z.literal("item.defrost"),
+  target: ItemBatchTarget,
+  fields: z.object({ defrostedOn: optionalFact(z.iso.datetime({ offset: true })) }).optional(),
 });
 
 export const MealChoose = z.object({
@@ -314,6 +375,9 @@ export const Operation = z.discriminatedUnion("type", [
   ItemUpdate,
   ItemUse,
   ItemRemove,
+  ItemBatchClose,
+  ItemBatchKeep,
+  ItemDefrost,
   MealChoose,
   MealPlan,
   MealTransition,
