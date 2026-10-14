@@ -4,7 +4,7 @@
  * summary) and at most once per sync for the other person's changes, without moving focus.
  * Everything else that updates (the chat log, widgets) stays silent.
  */
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 const AnnounceContext = createContext<(text: string) => void>(() => {});
 
@@ -21,6 +21,8 @@ export function AnnouncerProvider({ children }: { children: ReactNode }) {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setMessage(text), 50);
   }, []);
+  // A pending announcement must not fire after the provider is gone (navigation, tests).
+  useEffect(() => () => clearTimeout(timer.current), []);
   return (
     <AnnounceContext.Provider value={announce}>
       {children}
