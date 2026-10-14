@@ -1,0 +1,10 @@
+# Never upload local secrets, local databases or agent scratch to Vercel
+.env*
+!.env.example
+.data/
+.claude/
+.next/
+.next-e2e/
+node_modules/
+test-results/
+playwright-report/
