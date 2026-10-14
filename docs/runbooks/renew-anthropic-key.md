@@ -26,3 +26,4 @@ Keep keys private. Paste them only where these steps say, never into chat.
 5. **Delete the old key** at [platform.claude.com/settings/keys](https://platform.claude.com/settings/keys) (Delete or Revoke on the old one).
 
 **While you're there:** check spend under [Limits](https://platform.claude.com/settings/limits) and [Billing](https://platform.claude.com/settings/billing). The cap is $10/month, with a $20 target (decision 0020).
+6. **Set the next reminder:** ask Claude: "remind me to renew the Wellness Coach Anthropic key in 27 days" (it reuses this runbook).
