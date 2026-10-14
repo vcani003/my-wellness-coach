@@ -30,3 +30,4 @@ One line per decision. Read the full record only when it's relevant to your task
 | [0024](0024-visual-direction-clay-and-honey.md) | Visual direction C, Clay & Honey; plum reserved for allergy flags |
 | [0025](0025-batches-and-use-it-up.md) | Up to 3 batches per item (oldest closes); oldest used first; "use it up" ranking; shelf-life prediction later |
 | [0026](0026-success-criteria-and-first-real-test.md) | Success = testers pass + 2 weeks of real use; first real test is a grocery trip |
+| [0027](0027-shopping-list-in-mvp.md) | Shopping list widget in MVP 1: shared, filled from chat, staples and recipes; ticked items go into the kitchen |

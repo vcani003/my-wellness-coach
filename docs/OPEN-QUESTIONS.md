@@ -11,6 +11,21 @@
 
 ## Outstanding
 
+### SL1. 🟡 Group the shopping list by store?
+**Rec:** yes, lightly. An item can carry a store ("MD Oriental", "Publix"), either because you said so or because Kitchen suggested it and you kept it. The list groups by store, with an "Anywhere" group for the rest. You can also say "move hoisin to Publix".
+
+> Answer:
+
+### SL2. 🟡 What happens when you finish shopping?
+**Rec:** a **"Done shopping"** button opens the existing **"Add to your kitchen?"** sheet with the ticked items pre-selected (Add / Skip / Do later). Added items leave the list. Unticked items stay on the list for next time.
+
+> Answer:
+
+### SL3. 🟡 Should running out add things to the list automatically?
+**Rec:** offer it, don't do it silently. When something is marked **Out** (or Low), the receipt adds a one-tap **"Add to shopping list"**. Nothing gets added unless you say so.
+
+> Answer:
+
 ### T1. ⛔ Today: deploy a small version for your grocery trip (in progress)
 **Goal:** live in about 2 hours, for you only. Levi is added tonight.
 **Status: deployed 2026-10-14** at https://my-wellness-coach-mu.vercel.app, behind the access code (strangers are redirected to /unlock, and the API refuses without a code). Previously: ready to deploy. The screens, the real AI and the online hosting are merged. All tests pass: 217 unit and integration, 8 in a real browser, plus a production build.
@@ -105,5 +120,6 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | B15 | Success criteria | [0026](decisions/0026-success-criteria-and-first-real-test.md): testers + 2 weeks; grocery test today |
 | T2 | Staples and shopping list | [0026](decisions/0026-success-criteria-and-first-real-test.md): staples answered in chat + "remember as a staple?"; a Shopping list widget is decided after today |
 | C12 | Lower spend cap | [0020](decisions/0020-ai-cost-and-model.md): $10 limit to start, $20 target; 100 messages/day per person |
+| T2 (revisited) | Shopping list | [0027](decisions/0027-shopping-list-in-mvp.md): in MVP 1 after the first real test |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |
