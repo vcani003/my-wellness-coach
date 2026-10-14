@@ -1,6 +1,6 @@
 # UX architecture: Kitchen-Aware Assistant MVP 1
 
-**Status:** Proposed, pending Vero's review · 2026-10-13 · UI/UX specialist
+**Status:** Proposed, pending Vero's review · 2026-10-13 · UI/UX specialist · §10 Shopping list added 2026-10-14 (0027)
 
 What the user sees and does; no technology. Where an outstanding question matters, the design follows its Rec, cites the ID and notes the alternative. "Kitchen" is the assistant's name (0020); Levi is Vero's husband; all wording is placeholder copy.
 
@@ -68,13 +68,13 @@ DESKTOP
 
 | | Rule |
 |---|---|
-| **Appear** | When a message first gives it content: Kitchen on the first kitchen change, Meal ideas on "what can I make", Recipe on choosing a meal, Meal plan on the first add or start. |
+| **Appear** | When a message first gives it content: Kitchen on the first kitchen change, Meal ideas on "what can I make", Recipe on choosing a meal, Meal plan on the first add or start, Shopping list on its first item (§10). |
 | **Update** | In place, only after the save succeeds. |
 | **Reorder** | Only right after a message: the focused widget moves to the top. Nothing moves while you scroll, tick, or use a sheet. |
 | **Collapse** | **Phone:** only the focused widget is expanded; others are one-line bars ("Meal plan · 2 · 1 cooking") that expand on tap (accordion). **Desktop:** all expanded, each collapsible. |
-| **Leave** | Kitchen and Meal plan stay once they have content. Meal ideas aren't saved (0013): closable (×), replaced by the next request, gone next session. Recipe closes with Back or ×. |
+| **Leave** | Kitchen, Meal plan and Shopping list stay once they have content. Meal ideas aren't saved (0013): closable (×), replaced by the next request, gone next session. Recipe closes with Back or ×. |
 
-**Focus after a message** (visual only; keyboard focus stays in the composer): a kitchen change focuses Kitchen; asking for ideas focuses Meal ideas; choosing a meal opens the Recipe; planning, starting, finishing or cancelling focuses Meal plan. If several change, the first in the receipt is focused and the others get an "Updated" dot. Questions and chit-chat change nothing.
+**Focus after a message** (visual only; keyboard focus stays in the composer): a kitchen change focuses Kitchen; asking for ideas focuses Meal ideas; choosing a meal opens the Recipe; planning, starting, finishing or cancelling focuses Meal plan; adding to, moving on or removing from the list focuses Shopping list. If several change, the widget with the **most** changes is focused (ties go to the first in the receipt) and the others get an "Updated" dot. Questions and chit-chat change nothing.
 
 **On a phone,** Recipe and "See all" open as full pages with Back. The dock stays, so you can say "no oven" while reading.
 
@@ -89,6 +89,9 @@ DESKTOP
 - **Items,** grouped **Fridge / Freezer / Pantry / Not sure where**. A row shows the name, plus, when known: the amount as said, "added 3 days ago", Frozen/Opened, "Running low", and a "Levi" tag for their recent changes. The compact widget shows about 8 items, most recently changed first, then **See all (23)**.
 - **See all (K1, 0017):** a full page on phone, the whole workspace on desktop. Grouped by location, with "Added by Levi · 2 days ago" on each item. View-only except To review; changes happen in chat.
 - **Empty:** "Your kitchen is empty. Tell me what you've got."
+
+### Shopping list
+See §10.
 
 ### Meal ideas
 - A header echoing the request ("Ideas for tonight"), then about three cards (0009): name, short why, **Uses**, **Missing**.
@@ -125,7 +128,7 @@ DESKTOP
 | **Welcome back** | Once, only if something waits: "3 things are waiting in To review." |
 | **Error** | "I couldn't save that, so nothing changed. [Try again]". Unsent messages show "Not sent". |
 
-**Composer:** "Tell me what changed, or ask what to make" and Send (Enter on desktop). Keyboard dictation works; no extra mic button.
+**Composer:** "Tell me what changed…" (shortened to fit one line on phones) and Send (Enter on desktop). Keyboard dictation works; no extra mic button.
 
 ---
 
@@ -204,11 +207,23 @@ These are bottom sheets on phone and centred dialogs on desktop.
 9. *(Undo)* Undo step 4's receipt. *Check:* chicken back where it was; receipt says "Undone".
 10. *(Negative, fresh test kitchen)* "Add that to my meal plan" with nothing chosen. *Check:* "Which one?" with quick replies; nothing added.
 
+**Shopping list (§10, 0027).** Fresh single-person test kitchen, phone-sized.
+
+11. Send Vero's first-test message exactly: *"I've made a beef pho. I need to shop for some staple pantry items and other ingredients for other dishes ill be making this week. MD Oriental Market: garlic, ginger, green onion, shallot, culantro, lemongrass, sweet potato, ginger, coconut milk / Publix: oatmilk"*. *Check:* the receipt has the pho line, both store lines and the "ginger was in twice" note; Shopping list is on top with **MD Oriental Market (8)**, ginger once, and **Publix (1)**; Kitchen is a bar with the pho in it; no Anywhere group.
+12. Tick garlic and ginger. *Check:* struck through, "got" count 2, nothing moves; **Done shopping** appears.
+13. Send "add hoisin". *Check:* hoisin under **Anywhere**; a quick reply offers a store. Send "move hoisin to Publix". *Check:* hoisin under Publix. Send "take oat milk off the list". *Check:* oatmilk gone; Undo brings it back.
+14. On Green onion, ⋯ → **Remove**. *Check:* "Green onion removed · Undo" in its place; Undo restores it, unticked.
+15. Send "What staples do I still need?", then tap **Add these to my list**. *Check:* they appear under their stores, no duplicates; the button reads "On your list".
+16. Send "I'm out of fish sauce". *Check:* the receipt offers **Add fish sauce to my list**, and the list is unchanged until you tap it; after tapping, it's under Anywhere (or its usual store).
+17. Tap **Done shopping**. *Check:* the sheet pre-selects garlic and ginger, other items unselected; **Add 2 items** puts both in Kitchen and takes them off the list; unticked items stay.
+18. *(Offline)* Turn off the network. *Check:* "Offline · showing your list as of …"; ticks are disabled with that text; nothing crashes.
+
 **Household test kitchen: shared smoke test** (testers A and B; B has a seafood allergy with a note).
 1. A: "I bought shrimp and milk". *Check:* B sees both within about 15 s, tagged with A's name; B doesn't see A's chat.
 2. A chooses a meal and adds it to the plan; B opens it from Meal plan and ticks an ingredient. *Check:* A sees "ticked by B".
 3. *Check:* B has no Undo for A's change; B fixes it in chat ("the milk's in the fridge"), and it shows as B's.
 4. A: "What can I make?". *Check:* no seafood ideas. A: "Shrimp tacos?". *Check:* recipe flagged with B's allergy and note; no medical advice.
+5. A: "add eggs and limes to the list". B ticks limes. *Check:* within about 15 s A sees limes ticked with B's name; nothing reorders, and A's dock and any open sheet are undisturbed.
 
 ---
 
@@ -218,10 +233,87 @@ These are bottom sheets on phone and centred dialogs on desktop.
 |---|---|
 | **Screens** | Sign-in (email, check email, expired link, code) · Main (phone: workspace + dock; desktop: split) · Recipe · Kitchen See all · Settings · Delete-data confirmation |
 | **Shell** | Top bar with avatar · chat dock (Peek/Full/Minimized, handle badge) · floating chat button (new-reply dot) · offline banner |
-| **Chat** | Bubbles · typing indicator · receipt card (Undo, View, Undone, can't-undo) · quick replies · muted note · error with Retry · "Not sent" · composer · suggestion buttons |
+| **Chat** | Bubbles · typing indicator · receipt card (Undo, View, Undone, can't-undo, "Add to my list" offer) · "Add these to my list" button · quick replies · muted note · error with Retry · "Not sent" · composer · suggestion buttons |
 | **Workspace** | Widget frame (title, count, collapse, close, "Updated" dot, bar form) · change highlight + label · person tag · "since your last visit" line · empty/loading/error/stale blocks · fallback text |
-| **Widgets** | Kitchen (To review row, location group, item row, "Running low") · idea card · allergy flag · Recipe (labels, basics note, checklist, steps, action bar, ⋯ menu) · plan row |
+| **Widgets** | Kitchen (To review row, location group, item row, "Running low") · Shopping list (store group, list row with tick, quantity, person tag and ⋯ Remove, inline "removed · Undo", Done shopping) · idea card · allergy flag · Recipe (labels, basics note, checklist, steps, action bar, ⋯ menu) · plan row |
 | **Sheets** | Sheet/dialog frame · checkbox list with Select/Unselect all · per-ingredient three-choice row · note field · three-button footer |
+
+---
+
+## 10. Shopping list (0027)
+
+On the first real test a pasted list was lost. A list is **never dropped silently**: if that part fails, the reply says so ("I saved the pho, but couldn't save your list. [Try again]", 0018). Follows the **SL1–SL3** Recs; alternatives at the end.
+
+### The widget
+- **Shared** (0027). Grouped by **store** (SL1) in order of first use, **Anywhere** last; empty groups disappear. Header: "Shopping list · 9 · 2 got".
+- **A row:** a checkbox (tick = **"got it"**, not bought, 0027), the name as said, a quantity as said if given (muted), a person tag when someone else ticked it ("Levi"; your own ticks have no tag, §6), and a **⋯** button.
+- **Ticked rows** are muted and struck through and **stay put** (§2); next visit they sit at the bottom of their group. Anyone can untick. **Done shopping** appears once something is ticked.
+- **Appears** on its first item; **focused** by any list change (§2). **Order:** Kitchen, Shopping list, Meal plan, with Meal ideas or Recipe above when open; desktop the same, all expanded. A phone reopens with the last-focused widget on top, so the list is waiting at the store.
+- **States:** *Loading:* placeholders on first appearance. *Empty:* "Your list is clear. Tell me what you need." (only in the session it was emptied). *Error:* "Couldn't load your list · Retry". A failed tick puts the box back with "Couldn't save that · Retry". *Stale/offline:* "Offline · showing your list as of 6:42 pm. Ticking is paused until you're back online." (read-only offline, 0017).
+- **Visual:** existing tokens only (0024): `color.border.strong` box, `color.accent.default` fill, `color.text.muted` + strikethrough when ticked.
+
+### Getting items on
+| From | What happens |
+|---|---|
+| **Chat**, typed or pasted | Items go under the store named before them. Duplicates merge into one row (quantities join with "+"); items already on aren't re-added. No store → **Anywhere**, plus a quick reply "Put it under MD Oriental Market" when Kitchen can guess (SL1: kept only if tapped). |
+| **Staples answer** | **Add these to my list** under the reply, keeping stores; then "On your list" (disabled). |
+| **Out / Low receipt** (SL3) | **Add fish sauce to my list** in the receipt, including after "Update your kitchen" and auto-Out. Never added unless tapped; hidden if already on. |
+| **Recipe "Need"** (later) | When recipes exist: **Add to shopping list** on the Need group. |
+
+### Removing and editing
+- **Chat:** "take oat milk off the list", "move hoisin to Publix", "make it 2 limes". Receipts with Undo.
+- **On a row: ⋯ → Remove**, not swipe: swipe is hidden and needs a button alternative anyway (WCAG 2.5.7), and Meal plan already uses ⋯. The row becomes "Green onion removed · **Undo**" until your next message.
+
+### Done shopping (SL2)
+Opens **"Add to your kitchen?"** (§5), "From your shopping list": **Got it** items pre-selected, then **Not ticked** items unselected (in case you forgot to tick). **Add N items** adds them ("Not sure where" unless said) and takes them off the list; the rest stays, ticks included. **Do later** → To review "3 items to add · Shopping list". **Skip** changes nothing. "I'm done shopping" in chat offers the same sheet.
+
+### Receipts and copy (0020: warm, brief, no exclamation marks)
+| Case | Reply / receipt line |
+|---|---|
+| The first-test message | "Got it. Pho's saved, and your list is ready." · "Added beef pho" · "On your list, MD Oriental Market: garlic, ginger, green onion, shallot, culantro, lemongrass, sweet potato, coconut milk" · "On your list, Publix: oatmilk" · muted: "Ginger was in there twice, so it's on once." One Undo. |
+| No store | "Hoisin → your list (Anywhere)" |
+| Already on | "Garlic's already on your list." |
+| Remove / move | "Took oatmilk off your list." · "Hoisin → Publix" |
+| Not on the list | "Hoisin isn't on your list. Add it under Publix?" [Add it] [No thanks] |
+| Staples / offer tapped | "On your list: fish sauce, rice noodles" |
+| Done shopping | "Added 6 to your kitchen. 3 things are still on your list." |
+
+### Wireframe
+```
+PHONE · at the store (Levi ticked garlic)   Done shopping → sheet
+┌──────────────────────────────┐   ┌──────────────────────────────┐
+│ Kitchen                  (V) │   │ Add to your kitchen?         │
+├──────────────────────────────┤   │ From your shopping list      │
+│ ▾ SHOPPING LIST · 11 · 2 got │   │              [Unselect all]  │
+│   MD ORIENTAL MARKET · 8     │   │ GOT IT                       │
+│   ☑ Garlic (struck)  Levi  ⋯ │   │ ☑ Garlic                     │
+│   ☑ Ginger (struck)        ⋯ │   │ ☑ Ginger                     │
+│   ☐ Green onion            ⋯ │   │ NOT TICKED                   │
+│   ☐ Shallot                ⋯ │   │ ☐ Green onion                │
+│   ☐ Culantro               ⋯ │   │ ☐ Shallot                    │
+│   ☐ Lemongrass             ⋯ │   │ ☐ …                          │
+│   ☐ Sweet potato           ⋯ │   │                              │
+│   ☐ Coconut milk           ⋯ │   │ [       Add 2 items        ] │
+│   PUBLIX · 2                 │   │ [ Do later ]       [ Skip ]  │
+│   ☐ Oatmilk                ⋯ │   └──────────────────────────────┘
+│   ☐ Hoisin                 ⋯ │
+│   ANYWHERE · 1               │
+│   ☐ Fish sauce  1 bottle   ⋯ │
+│   [ Done shopping ]          │
+│ ▸ KITCHEN · 5 items          │
+├════════════ ═══ ═════════════┤
+│ (dock: latest reply, receipt)│
+│ [ Message Kitchen…     ] (➤) │
+└──────────────────────────────┘
+```
+
+**For Frontend:** checkbox name "Garlic, got it, ticked by Levi"; ⋯ named "More for garlic". Levi's ticks arrive like other live changes (§6). Ticks aren't AI-interpreted, so they may show at once and revert on failure.
+
+### If Vero answers differently
+- **SL1 no stores:** one flat list, no headers or moves.
+- **SL2 "straight into the kitchen":** Done shopping adds without the sheet; Undo on the receipt.
+- **SL3 automatic:** the offer becomes a receipt line "Fish sauce → your list" with Undo.
+- **Pending (raised with the orchestrator):** does "I bought garlic" in chat take garlic off the list? Assumed yes, matching SL2.
 
 ---
 
@@ -229,7 +321,7 @@ These are bottom sheets on phone and centred dialogs on desktop.
 
 UX1 (no "What changed" widget), UX2 (link + code) and UX3 (docked chat, plus Minimized): answered → 0017.
 
-This design follows the Recs of the outstanding **M8** (after-cooking wording), **R2** (suggested recipe), **AI6** (allergen dishes left out of unprompted ideas), **UX4** (chat button) and **D1** (a former member's items stay), and notes the alternatives.
+This design follows the Recs of the outstanding **M8** (after-cooking wording), **R2** (suggested recipe), **AI6** (allergen dishes left out of unprompted ideas), **UX4** (chat button), **D1** (a former member's items stay) and **SL1–SL3** (shopping list, §10), and notes the alternatives.
 
 ## Notes for Frontend + Accessibility
 

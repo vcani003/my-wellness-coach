@@ -11,6 +11,17 @@
 
 ## Outstanding
 
+### SL4. 🟡 Ticking items at the store with bad signal
+Offline is read-only in MVP 1 (0017), but stores often have poor signal, and ticking is exactly what you'd do there.
+**Rec (UX):** a small exception just for ticks. They save on your phone and sync when the signal is back, and anything not yet synced is marked "Not synced yet". Everything else stays read-only offline.
+
+> Answer:
+
+### SL5. 🟡 "I bought garlic" in chat: does garlic leave the list?
+**Rec (UX):** yes. It goes into the kitchen and comes off the list in one step, with one Undo for both. That matches "Done shopping" (SL2).
+
+> Answer:
+
 ### SL1. 🟡 Group the shopping list by store?
 **Rec:** yes, lightly. An item can carry a store ("MD Oriental", "Publix"), either because you said so or because Kitchen suggested it and you kept it. The list groups by store, with an "Anywhere" group for the rest. You can also say "move hoisin to Publix".
 
