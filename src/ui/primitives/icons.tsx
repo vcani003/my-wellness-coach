@@ -17,3 +17,6 @@ export { Eye as ShowIcon } from "@phosphor-icons/react/dist/csr/Eye";
 export { EyeSlash as HideIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
 export { DotsThree as MoreIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 export { CloudSlash as NotSyncedIcon } from "@phosphor-icons/react/dist/csr/CloudSlash";
+export { X as CloseIcon } from "@phosphor-icons/react/dist/csr/X";
+export { Shield as AllergyIcon } from "@phosphor-icons/react/dist/csr/Shield";
+export { ArrowLeft as BackIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";

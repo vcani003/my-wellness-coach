@@ -5,8 +5,10 @@
 import type { WidgetDef } from "@/ui/workspace/types";
 import { KitchenSummary, KitchenWidget } from "./KitchenWidget";
 
+export const KITCHEN_WIDGET_ID = "kitchen.items";
+
 export const kitchenItemsWidget: WidgetDef = {
-  id: "kitchen.items",
+  id: KITCHEN_WIDGET_ID,
   domain: "kitchen",
   lifetime: "lasting",
   titleKey: "kitchen.title",

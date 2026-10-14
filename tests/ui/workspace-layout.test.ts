@@ -81,10 +81,28 @@ describe("workspace selection", () => {
   });
 
   it("the real registry: Kitchen is always present (empty state) and wants item changes", () => {
-    expect(registry.map((w) => w.id)).toEqual(["kitchen.items", "shopping.list"]);
+    expect(registry.map((w) => w.id)).toEqual(["kitchen.items", "shopping.list", "meals.ideas", "meals.plan"]);
     expect(registry[0].isPresent(null)).toBe(true);
     expect(focusFor(registry, [ref("item")])).toEqual(["kitchen.items"]);
     expect(focusFor(registry, [ref("profile")])).toEqual([]);
+  });
+
+  it("the real registry: Meal ideas live in the session (not KitchenState) and can be closed; the plan wants meal changes", () => {
+    const ideas = registry.find((w) => w.id === "meals.ideas")!;
+    const plan = registry.find((w) => w.id === "meals.plan")!;
+    expect(ideas.lifetime).toBe("session");
+    expect(ideas.isPresent(kitchen([]), {})).toBe(false);
+    expect(ideas.isPresent(kitchen([]), { "meals.ideas": { ideas: [] } })).toBe(true);
+    expect(plan.isPresent({ ...kitchen([]), kitchenId: "k-plan" })).toBe(false);
+    expect(plan.isPresent({ ...kitchen([]), kitchenId: "k-plan", plan: ["m1"] })).toBe(true);
+    expect(focusFor(registry, [ref("meal")])).toEqual(["meals.plan"]);
+    // A closed session widget stays closed until a turn focuses it again.
+    const data = kitchen([]);
+    const session = { "meals.ideas": { ideas: [] } };
+    const closed = workspaceReducer(initialWorkspace, { type: "userClosed", id: "meals.ideas" });
+    expect(selectWidgets(closed, { registry, data, layout: "phone", session }).map((w) => w.def.id)).not.toContain("meals.ideas");
+    const back = workspaceReducer(closed, { type: "turnApplied", focus: ["meals.ideas"] });
+    expect(selectWidgets(back, { registry, data, layout: "phone", session })[0].def.id).toBe("meals.ideas");
   });
 
   it("the real registry: the Shopping list appears on its first item, stays once emptied, and wants list changes", () => {

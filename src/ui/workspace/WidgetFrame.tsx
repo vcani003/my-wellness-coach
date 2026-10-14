@@ -5,17 +5,20 @@
  */
 import { useTranslations } from "next-intl";
 import { Collapsible } from "@/ui/primitives/Collapsible";
-import { CaretDownIcon } from "@/ui/primitives/icons";
+import { CaretDownIcon, CloseIcon } from "@/ui/primitives/icons";
 import type { VisibleWidget } from "./layout";
 import { WidgetErrorBoundary } from "./WidgetErrorBoundary";
 
 export function WidgetFrame({
   widget,
   onToggle,
+  onClose,
   onRetry,
 }: {
   widget: VisibleWidget;
   onToggle: (expanded: boolean) => void;
+  /** Session widgets (Meal ideas, 0013) can be closed with ×. */
+  onClose?: () => void;
   onRetry: () => void;
 }) {
   const t = useTranslations();
@@ -30,7 +33,8 @@ export function WidgetFrame({
       className="scroll-mt-4 rounded-lg border border-border-default bg-surface-raised shadow-card"
     >
       <Collapsible.Root open={expanded} onOpenChange={onToggle}>
-        <h2 className="text-title font-strong">
+        <div className="flex items-center">
+        <h2 className="min-w-0 flex-1 text-title font-strong">
           <Collapsible.Trigger className="flex min-h-tap w-full items-center gap-2 rounded-lg px-4 py-3 text-left">
             <span>{title}</span>
             {Summary && (
@@ -50,6 +54,17 @@ export function WidgetFrame({
             />
           </Collapsible.Trigger>
         </h2>
+        {onClose && (
+          <button
+            type="button"
+            aria-label={t("workspace.close", { title })}
+            onClick={onClose}
+            className="mr-2 flex size-tap shrink-0 items-center justify-center rounded-full text-text-muted"
+          >
+            <CloseIcon aria-hidden="true" className="size-icon" />
+          </button>
+        )}
+        </div>
         <Collapsible.Panel className="px-4 pb-4">
           <WidgetErrorBoundary
             widgetId={def.id}

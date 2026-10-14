@@ -8,7 +8,7 @@
  */
 import type { ChangeRef } from "@/contracts/apply-result";
 import type { KitchenState } from "@/contracts/kitchen-state";
-import type { Layout, WidgetDef } from "./types";
+import type { Layout, WidgetDef, WidgetSession } from "./types";
 
 export interface WorkspaceState {
   /** Widget IDs moved to the top by your turns, most recent first. */
@@ -79,10 +79,11 @@ export interface VisibleWidget {
 
 export function selectWidgets(
   state: WorkspaceState,
-  ctx: { registry: readonly WidgetDef[]; data: KitchenState | null; layout: Layout },
+  ctx: { registry: readonly WidgetDef[]; data: KitchenState | null; layout: Layout; session?: WidgetSession },
 ): VisibleWidget[] {
+  const session = ctx.session ?? {};
   const present = ctx.registry.filter(
-    (w) => !(w.lifetime === "session" && state.closed.includes(w.id)) && w.isPresent(ctx.data),
+    (w) => !(w.lifetime === "session" && state.closed.includes(w.id)) && w.isPresent(ctx.data, session),
   );
   const rank = (id: string) => {
     const i = state.order.indexOf(id);

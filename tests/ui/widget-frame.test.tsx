@@ -60,3 +60,16 @@ describe("per-widget error boundary", () => {
     expect(screen.getByRole("button", { name: /Kitchen/ })).toHaveAttribute("aria-expanded", "true");
   });
 });
+
+describe("closing a session widget (Meal ideas, 0013)", () => {
+  it("only session widgets get a named × that closes them; lasting ones don't", async () => {
+    const dispatch = vi.fn();
+    const session: WidgetDef = { ...def("ideas", "meals.ideas.title", Fine), lifetime: "session" };
+    renderWithIntl(
+      <Workspace registry={[def("k", "kitchen.title", Fine), session]} state={initialWorkspace} dispatch={dispatch} data={kitchen([])} layout="desktop" onRetry={() => {}} />,
+    );
+    expect(screen.queryByRole("button", { name: "Close Kitchen" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Close Meal ideas" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "userClosed", id: "ideas" });
+  });
+});

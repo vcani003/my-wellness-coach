@@ -130,19 +130,27 @@ describe("To review in the Kitchen widget", () => {
   it("Skip closes the card and says so; Do later just closes the sheet", async () => {
     const actions = fakeActions({ resolveReview: vi.fn(async () => saved(stateWith({ shoppingList: QUEUED.shoppingList }), "REVIEW_RESOLVED")) });
     show(QUEUED, actions);
-    const open = () => userEvent.click(screen.getByRole("button", { name: "2 items to add · Shopping list" }));
+    // Each step waits for the state it needs (no fixed sleeps), so it holds under full-suite load.
+    const open = async () => {
+      await userEvent.click(await screen.findByRole("button", { name: "2 items to add · Shopping list" }));
+      return screen.findByRole("dialog", { name: "Add to your kitchen?" });
+    };
 
-    await open();
-    await userEvent.click(screen.getByRole("button", { name: "Do later" }));
+    let sheet = await open();
+    await userEvent.click(within(sheet).getByRole("button", { name: "Do later" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(actions.resolveReview).not.toHaveBeenCalled();
     expect(actions.queueShoppingForLater).not.toHaveBeenCalled();
 
-    await open();
-    await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+    sheet = await open();
+    await userEvent.click(within(sheet).getByRole("button", { name: "Skip" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(actions.resolveReview).toHaveBeenCalledExactlyOnceWith("r1", "skipped");
-    expect(screen.getByText("Skipped. Your list is as it was.")).toBeInTheDocument();
+    // Scoped to the visible notice: the same words reach the live region 50 ms later, and under
+    // load that second copy used to make an unscoped getByText find two matches (the flake).
+    expect(
+      await screen.findByText("Skipped. Your list is as it was.", { ignore: '[data-testid="announcer"], script, style' }),
+    ).toBeInTheDocument();
   });
 });
 

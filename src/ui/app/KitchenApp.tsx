@@ -9,7 +9,7 @@
  * person's changes arrive through `useKitchenSync`.
  */
 import { useLocale, useNow, useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import {
   finishShopping,
   queueShoppingForLater,
@@ -38,6 +38,10 @@ import { useKitchenSync } from "@/ui/sync/useKitchenSync";
 import { focusFor, initialWorkspace, workspaceReducer } from "@/ui/workspace/layout";
 import { registry } from "@/ui/workspace/registry";
 import { Workspace } from "@/ui/workspace/Workspace";
+import { MealsProvider } from "@/ui/widgets/meals/MealsContext";
+import { MEAL_IDEAS_WIDGET_ID } from "@/ui/widgets/meals";
+import { UpdateKitchenSheet } from "@/ui/widgets/meals/UpdateKitchenSheet";
+import { useMealsController } from "@/ui/widgets/meals/useMealsController";
 
 export interface KitchenAppProps {
   kitchenId: string;
@@ -47,6 +51,8 @@ export interface KitchenAppProps {
   initialState: KitchenState | null;
   /** Your latest saved chat (P2 a), read on the server; null if that failed (the chat retries). */
   initialHistory?: ChatHistoryPage | null;
+  /** The route's page: null on `/`, the Recipe on `/recipe/[mealId]` (shown in the workspace). */
+  children?: ReactNode;
 }
 
 export type DockState = "peek" | "full" | "minimized";
@@ -56,7 +62,7 @@ export function marksFrom(result: ApplyResult): Record<string, ChangeMark> {
   const marks: Record<string, ChangeMark> = {};
   for (const op of result.applied) {
     for (const ref of op.refs) {
-      if ((ref.kind !== "item" && ref.kind !== "shopping") || ref.change === "removed") continue;
+      if ((ref.kind !== "item" && ref.kind !== "shopping" && ref.kind !== "meal") || ref.change === "removed") continue;
       if (marks[ref.id] !== "new") marks[ref.id] = ref.change === "added" ? "new" : "updated";
     }
   }
@@ -88,7 +94,7 @@ export function KitchenApp(props: KitchenAppProps) {
   );
 }
 
-function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, initialHistory = null }: KitchenAppProps) {
+function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, initialHistory = null, children }: KitchenAppProps) {
   const t = useTranslations();
   const locale = useLocale();
   const announce = useAnnounce();
@@ -123,6 +129,38 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, init
     el?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
   }, []);
 
+  /** Bring a widget forward as after your own message, and show it (unless you're reading Full chat). */
+  const focusWidget = useCallback(
+    (id: string) => {
+      dispatchWorkspace({ type: "turnApplied", focus: [id] });
+      rememberFocus(id);
+      if (dockNow.current !== "full") requestAnimationFrame(() => showWidget(id));
+      else setUpdatedWhileFull(true);
+    },
+    [showWidget],
+  );
+
+  const meals = useMealsController({
+    kitchenId,
+    sync,
+    members,
+    showSaved(result, opts) {
+      sync.applyOwn(result.state);
+      if (opts?.focus) {
+        setMarks(marksFrom(result));
+        const focus = typeof opts.focus === "string" ? [opts.focus] : focusFor(registry, result.applied.flatMap((a) => a.refs));
+        if (focus[0]) focusWidget(focus[0]);
+      }
+    },
+    focusWidget,
+    fillComposer(text) {
+      if (dockNow.current === "minimized") changeDock("peek");
+      composerRef.current?.fill(text);
+    },
+    ownRecipeText: (title) => t("meals.recipe.ownRecipePrefix", { title }),
+  });
+  const recipeOpen = meals.openMealId !== null;
+
   const chat = useChat({
     kitchenId,
     initialHistory,
@@ -141,7 +179,11 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, init
         if (focus[0] && dockNow.current !== "full") requestAnimationFrame(() => showWidget(focus[0]));
         if (dockNow.current === "full" && focus.length) setUpdatedWhileFull(true);
       },
-      onTurnEnd({ reply, result, error }) {
+      onEvent(event, id) {
+        meals.onEvent(event, id, "chat");
+      },
+      onTurnEnd({ id, reply, result, error }) {
+        if (id) meals.onStreamEnd(id);
         const parts = [reply];
         if (error) parts.push(t("chat.errorNothingChanged"));
         else if (result?.applied.some((a) => a.refs.length)) parts.push(t("chat.announceKitchenUpdated"));
@@ -288,6 +330,7 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, init
   return (
     <KitchenActionsProvider value={actions}>
     <KitchenDataProvider value={{ me, snapshot, marks, remoteIds, now, turn }}>
+    <MealsProvider value={meals.value}>
       <div className="app-shell min-h-dvh desk:grid desk:h-dvh desk:grid-cols-[1fr_2fr] desk:grid-rows-[auto_minmax(0,1fr)] desk:overflow-hidden">
         <a href="#workspace" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-sm focus:bg-surface-raised focus:p-2">
             {t("app.skipToWorkspace")}
@@ -319,15 +362,22 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, init
           inert={phoneFull}
           className="workspace px-4 pt-2 desk:col-start-2 desk:row-start-2 desk:overflow-y-auto desk:px-6 desk:pt-4"
         >
-          <Workspace
-            registry={registry}
-            state={workspace}
-            dispatch={dispatchWorkspace}
-            data={snapshot.state}
-            layout={isDesktop ? "desktop" : "phone"}
-            onRetry={() => void sync.refresh()}
-          />
+          {/* Kept mounted under the Recipe, so Back returns to the same place. */}
+          <div hidden={recipeOpen}>
+            <Workspace
+              registry={registry}
+              state={workspace}
+              dispatch={dispatchWorkspace}
+              data={snapshot.state}
+              session={{ [MEAL_IDEAS_WIDGET_ID]: meals.session.ideas }}
+              layout={isDesktop ? "desktop" : "phone"}
+              onRetry={() => void sync.refresh()}
+            />
+          </div>
+          {/* Always rendered (null on "/"), so Next can check every route segment for instant navigation. */}
+          {children}
         </main>
+        <UpdateKitchenSheet />
 
         <section
           id="chat"
@@ -407,6 +457,7 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, init
           </button>
         )}
       </div>
+    </MealsProvider>
     </KitchenDataProvider>
     </KitchenActionsProvider>
   );

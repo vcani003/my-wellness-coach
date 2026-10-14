@@ -3,7 +3,7 @@
 import type { Dispatch } from "react";
 import type { KitchenState } from "@/contracts/kitchen-state";
 import { selectWidgets, type WorkspaceEvent, type WorkspaceState } from "./layout";
-import type { Layout, WidgetDef } from "./types";
+import type { Layout, WidgetDef, WidgetSession } from "./types";
 import { WidgetFrame } from "./WidgetFrame";
 
 export function Workspace({
@@ -12,6 +12,7 @@ export function Workspace({
   dispatch,
   data,
   layout,
+  session,
   onRetry,
 }: {
   registry: readonly WidgetDef[];
@@ -19,9 +20,10 @@ export function Workspace({
   dispatch: Dispatch<WorkspaceEvent>;
   data: KitchenState | null;
   layout: Layout;
+  session?: WidgetSession;
   onRetry: () => void;
 }) {
-  const widgets = selectWidgets(state, { registry, data, layout });
+  const widgets = selectWidgets(state, { registry, data, layout, session });
   return (
     <div className="flex flex-col gap-5">
       {widgets.map((w) => (
@@ -29,6 +31,7 @@ export function Workspace({
           key={w.def.id}
           widget={w}
           onToggle={(expanded) => dispatch({ type: "userToggled", id: w.def.id, expanded })}
+          onClose={w.def.lifetime === "session" ? () => dispatch({ type: "userClosed", id: w.def.id }) : undefined}
           onRetry={onRetry}
         />
       ))}

@@ -75,7 +75,8 @@ test("journey steps 1–4: bought → Kitchen shows items → froze → Freezer 
 
 test("anything the stand-in doesn't understand gets a polite reply and changes nothing", async ({ page, baseURL }) => {
   await resetAndActAs(page, baseURL!, "demo-vero");
-  await say(page, "What can I make tonight?");
+  // ("What can I make tonight?" is understood now: meal ideas, P2 d.)
+  await say(page, "Tell me a joke");
   await expect(page.getByText(/I'm a simple stand-in for now/)).toBeVisible();
   await expect(page.getByRole("region", { name: "What changed" })).toHaveCount(0);
   await expect(kitchen(page)).toContainText("Your kitchen is empty.");

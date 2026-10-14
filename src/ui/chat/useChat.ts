@@ -16,6 +16,7 @@ import { z } from "zod";
 import type { ApplyResult } from "@/contracts/apply-result";
 import { ChatHistoryMessage, type ChatHistoryPage } from "@/contracts/chat-history";
 import type { Msg } from "@/contracts/common";
+import type { StreamEvent } from "@/contracts/stream";
 import { undoChange } from "@/app/actions";
 import { chatReducer, initialChatState, type ChatState } from "./chat-reducer";
 import { readTurnStream } from "./stream";
@@ -53,8 +54,10 @@ function startFrom(initial: ChatHistoryPage | null | undefined): ChatState {
 export interface TurnCallbacks {
   /** Your change saved: update the widgets before the reply arrives. */
   onApplied(result: ApplyResult): void;
-  /** The turn finished (or failed): announce it once. */
-  onTurnEnd(turn: { reply: string; result: ApplyResult | null; error: Msg | null; changed: boolean }): void;
+  /** The turn finished (or failed): announce it once. `id` is the message's client ID. */
+  onTurnEnd(turn: { id?: string; reply: string; result: ApplyResult | null; error: Msg | null; changed: boolean }): void;
+  /** Every stream event, for the widgets that follow it (meal ideas, recipes, "Update your kitchen"). */
+  onEvent?(event: StreamEvent, id: string): void;
   onUndone(result: ApplyResult): void;
   onUndoRefused(reason: Msg): void;
 }
@@ -91,7 +94,7 @@ export function useChat(opts: {
         if (!res.ok || !res.body) throw new Error(`chat: ${res.status}`);
       } catch {
         dispatch({ type: "notSent", id });
-        cb.current.onTurnEnd({ reply: "", result: null, error: null, changed: false });
+        cb.current.onTurnEnd({ id, reply: "", result: null, error: null, changed: false });
         return;
       }
 
@@ -101,6 +104,12 @@ export function useChat(opts: {
       let result: ApplyResult | null = null;
       try {
         for await (const event of readTurnStream(res.body)) {
+          try {
+            cb.current.onEvent?.(event, id);
+          } catch (error) {
+            // A widget's trouble with one event never stops the chat (0018).
+            console.error("chat: a widget couldn't handle a stream event", { type: event.type, error });
+          }
           switch (event.type) {
             case "ack":
               acked = true;
@@ -118,15 +127,15 @@ export function useChat(opts: {
             case "done":
               ended = true;
               dispatch({ type: "done", id });
-              cb.current.onTurnEnd({ reply, result, error: null, changed: Boolean(result) });
+              cb.current.onTurnEnd({ id, reply, result, error: null, changed: Boolean(result) });
               break;
             case "error":
               ended = true;
               dispatch({ type: "error", id, reason: event.reason, retryable: event.retryable, changed: event.changed });
-              cb.current.onTurnEnd({ reply, result, error: event.reason, changed: event.changed });
+              cb.current.onTurnEnd({ id, reply, result, error: event.reason, changed: event.changed });
               break;
             default:
-              break; // status, notes, ideas…: not used by this milestone's UI
+              break; // status, notes, ideas, recipes…: handled by `onEvent`
           }
         }
       } catch {
@@ -135,11 +144,11 @@ export function useChat(opts: {
       if (ended) return;
       if (!acked) {
         dispatch({ type: "notSent", id });
-        cb.current.onTurnEnd({ reply: "", result: null, error: null, changed: false });
+        cb.current.onTurnEnd({ id, reply: "", result: null, error: null, changed: false });
         return;
       }
       dispatch({ type: "streamCut", id });
-      cb.current.onTurnEnd({ reply, result, error: null, changed: Boolean(result) });
+      cb.current.onTurnEnd({ id, reply, result, error: null, changed: Boolean(result) });
     },
     [kitchenId],
   );

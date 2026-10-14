@@ -2,7 +2,8 @@
 /**
  * To review (ux.md §3, decision 0013): at the top of the Kitchen widget, with a count, one row
  * per postponed sheet. Tapping a shopping-list card ("3 items to add · Shopping list") reopens
- * "Add to your kitchen?". A meal's card is listed by name; its sheets come with the meal screens.
+ * "Add to your kitchen?"; tapping a meal's "Update your kitchen · Spinach omelette" reopens that
+ * sheet (when the meal screens are there).
  * The result of Add (with Undo) or Skip shows here until your next message, like the list's notes.
  */
 import { useTranslations } from "next-intl";
@@ -12,6 +13,7 @@ import { useAnnounce } from "@/ui/a11y/Announcer";
 import { UndoIcon } from "@/ui/primitives/icons";
 import { useKitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { useKitchenData } from "@/ui/sync/KitchenDataContext";
+import { useMealsOptional } from "@/ui/widgets/meals/MealsContext";
 import { ShoppingReviewSheet } from "@/ui/widgets/shopping/ShoppingReviewSheet";
 
 interface Notice {
@@ -25,6 +27,8 @@ export function ToReview({ reviews, finalFocus }: { reviews: ReviewRow[]; finalF
   const announce = useAnnounce();
   const actions = useKitchenActions();
   const { turn = 0 } = useKitchenData();
+  const meals = useMealsOptional();
+  const mealNotice = meals?.notice && meals.notice.turn === turn ? meals.notice : null;
   const [opened, setOpened] = useState<ReviewRow | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -61,8 +65,50 @@ export function ToReview({ reviews, finalFocus }: { reviews: ReviewRow[]; finalF
     say({ text: t("shopping.cantUndo"), turn });
   };
 
+  /** A meal's after-cooking card reopens "Update your kitchen" with its ingredients. */
+  const openAfterCooking = (r: ReviewRow) => {
+    if (!meals || !r.meal || "missing" in r.meal) return;
+    meals.openUpdateKitchen({
+      mealId: r.meal.id,
+      title: r.meal.title,
+      reviewId: r.id,
+      items: r.items.flatMap((i) => (i.itemId ? [{ itemId: i.itemId, name: i.name }] : [])),
+    });
+  };
+
   return (
     <>
+      {mealNotice && (
+        <p className="flex flex-wrap items-center gap-2 rounded-sm bg-success-bg px-3 py-2 text-small text-success-text">
+          <span>{mealNotice.text}</span>
+          {mealNotice.undo && (
+            <button
+              type="button"
+              aria-label={mealNotice.undo.label}
+              onClick={async () => {
+                const u = mealNotice.undo!;
+                try {
+                  const res = await actions.undo(u.changeSetId);
+                  if (res.ok && res.result.applied.length && !res.result.rejected.length) {
+                    actions.showOwn(res.result, { highlight: true });
+                    meals?.setNotice({ text: t("shopping.undone"), turn });
+                    announce(t("shopping.undone"));
+                    return;
+                  }
+                } catch {
+                  // fall through
+                }
+                meals?.setNotice({ text: t("shopping.cantUndo"), turn });
+                announce(t("shopping.cantUndo"));
+              }}
+              className="flex min-h-tap items-center gap-1 rounded-button px-3 font-strong text-accent-text"
+            >
+              <UndoIcon aria-hidden="true" className="size-icon-sm" />
+              {t("shopping.undo")}
+            </button>
+          )}
+        </p>
+      )}
       {currentNotice && (
         <p className="flex flex-wrap items-center gap-2 rounded-sm bg-success-bg px-3 py-2 text-small text-success-text">
           <span>{currentNotice.text}</span>
@@ -96,6 +142,15 @@ export function ToReview({ reviews, finalFocus }: { reviews: ReviewRow[]; finalF
                       setOpened(r);
                       setSheetOpen(true);
                     }}
+                    className="flex min-h-tap w-full items-center rounded-sm px-3 text-left text-body font-medium text-accent-text"
+                  >
+                    {label(r)}
+                  </button>
+                ) : meals && r.kind === "after-cooking" && r.meal && !("missing" in r.meal) ? (
+                  <button
+                    type="button"
+                    aria-haspopup="dialog"
+                    onClick={() => openAfterCooking(r)}
                     className="flex min-h-tap w-full items-center rounded-sm px-3 text-left text-body font-medium text-accent-text"
                   >
                     {label(r)}

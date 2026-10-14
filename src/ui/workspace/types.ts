@@ -8,6 +8,12 @@ import type { KitchenState } from "@/contracts/kitchen-state";
 
 export type Layout = "phone" | "desktop";
 
+/**
+ * Per-session data a widget owns that isn't in KitchenState (e.g. meal ideas, which aren't saved,
+ * 0013), keyed by widget ID. The workspace only passes it through; it never looks inside.
+ */
+export type WidgetSession = Readonly<Record<string, unknown>>;
+
 export interface WidgetProps {
   /** Ask the data layer to try again (used by the error state's Retry). */
   onRetry: () => void;
@@ -22,8 +28,8 @@ export interface WidgetDef {
   lifetime: "lasting" | "session";
   /** Translation key of the widget's title (also the region's accessible name). */
   titleKey: string;
-  /** Has content to show? */
-  isPresent(state: KitchenState | null): boolean;
+  /** Has content to show? `session` is the per-session data (see WidgetSession). */
+  isPresent(state: KitchenState | null, session?: WidgetSession): boolean;
   /** Does this saved change concern me? (item change → Kitchen) */
   wantsFocus(ref: ChangeRef): boolean;
   /** Short summary for the header / collapsed bar ("4 items"). */

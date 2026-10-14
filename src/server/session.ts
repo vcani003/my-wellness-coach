@@ -8,9 +8,9 @@
  */
 import "server-only";
 import { connection } from "next/server";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import type { Db } from "@/db/client";
-import { kitchens, memberships } from "@/db/schema";
+import { kitchens, memberships, rateLimits } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { listMembers, requireMember, type KitchenScope, type Member } from "@/shared/membership";
 import { scenarioKitchenId, seedScenario } from "../../scripts/scenarios";
@@ -42,12 +42,19 @@ async function ensureDemoKitchen(db: Db): Promise<void> {
   return g.__demoSeed;
 }
 
-/** Reset the local demo kitchen to its seed (dev only; used by the dev bar and e2e tests). */
+/**
+ * Reset the local demo kitchen to its seed (dev only; used by the dev bar and e2e tests). It also
+ * clears the demo members' chat rate-limit counters, so a full e2e run (or an afternoon of local
+ * testing) doesn't hit "60 messages an hour" (C12) on a kitchen that's meant to be thrown away.
+ */
 export async function resetDemoKitchen(): Promise<void> {
   if (!isDevActingAsOn()) throw new Error("Dev mode is off");
   const db = await getDb();
   await ensureDemoKitchen(db);
   await seedScenario(db, "demo");
+  const members = await listMembers(db, DEV_KITCHEN_ID);
+  const keys = members.flatMap((m) => [`chat:hour:${m.userId}`, `chat:day:${m.userId}`]);
+  if (keys.length) await db.delete(rateLimits).where(inArray(rateLimits.key, keys));
 }
 
 export async function getSession(): Promise<Session | null> {

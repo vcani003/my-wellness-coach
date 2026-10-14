@@ -1,10 +1,12 @@
 /**
- * Main screen (frontend.md §1): loads who you are, the kitchen and your latest saved chat on the
- * server, then hands over to the client app. Both reads are defensive: if the kitchen fails, the
+ * Main screen layout (frontend.md §1): loads who you are, the kitchen and your latest saved chat on
+ * the server, then hands over to the client app. It's a layout, so it stays mounted while you move
+ * between `/` and `/recipe/[mealId]`: the chat dock never reloads, and the page (null on `/`, the
+ * Recipe on `/recipe/…`) renders inside the workspace. Both reads are defensive: if the kitchen fails, the
  * Kitchen widget shows its own error state with Retry; if the chat fails, the chat loads it
  * itself (with "Try again") instead of the page failing (0018).
  */
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import type { ChatHistoryPage } from "@/contracts/chat-history";
 import type { KitchenState } from "@/contracts/kitchen-state";
 import { listChatHistory } from "@/domains/chat/queries";
@@ -13,15 +15,15 @@ import { getScope, getSession } from "@/server/session";
 import { KitchenApp } from "@/ui/app/KitchenApp";
 import { AppLoading, NoSession } from "@/ui/app/StatusScreens";
 
-export default function Home() {
+export default function MainLayout({ children }: { children: ReactNode }) {
   return (
     <Suspense fallback={<AppLoading />}>
-      <Main />
+      <Main>{children}</Main>
     </Suspense>
   );
 }
 
-async function Main() {
+async function Main({ children }: { children: ReactNode }) {
   const session = await getSession();
   if (!session) return <NoSession />;
   let state: KitchenState | null = null;
@@ -49,6 +51,8 @@ async function Main() {
       devActingAs={session.devActingAs}
       initialState={state}
       initialHistory={history}
-    />
+    >
+      {children}
+    </KitchenApp>
   );
 }
