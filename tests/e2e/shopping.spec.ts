@@ -130,7 +130,7 @@ test("shopping list: add in chat → tick → remove → Done shopping moves it 
   await expect(kitchen(page).getByRole("listitem").filter({ hasText: "Lemongrass" })).toHaveCount(0);
 });
 
-test("Do later: Done shopping → Do later → To review in the Kitchen → Add puts them in the kitchen and off the list", async ({ page, baseURL }) => {
+test("Do later: Done shopping → Do later → To review in the Kitchen → Add puts them in the kitchen and off the list", async ({ page, baseURL, isMobile }) => {
   await resetAndActAs(page, baseURL!);
   await say(page, "Add garlic, ginger and shallot to the list for MD Oriental Market");
   await expect(box(page, "Shallot")).toBeVisible();
@@ -152,15 +152,21 @@ test("Do later: Done shopping → Do later → To review in the Kitchen → Add 
   await expectAccessible(page, "after do later");
 
   // To review in the Kitchen shows them, and it's saved (survives a reload). On a phone the
-  // collapsed Kitchen bar says so; expanding is retried until the page has hydrated.
+  // collapsed Kitchen bar says so. Until it hydrates the page shows the default order, Kitchen
+  // first and open; then the phone puts the list you last used back on top and the Kitchen
+  // collapses (ux.md §10). Wait for that before expanding it, once, so nothing undoes the tap.
   await page.reload();
   await expect(kitchen(page).getByRole("heading", { level: 2 })).toContainText("1 to review");
+  const kitchenBar = kitchen(page).getByRole("heading", { level: 2 }).getByRole("button");
+  if (isMobile) {
+    await expect(list(page).getByRole("heading", { level: 2 }).getByRole("button")).toHaveAttribute("aria-expanded", "true");
+    await expect(kitchenBar).toHaveAttribute("aria-expanded", "false");
+    await kitchenBar.click();
+  }
+  await expect(kitchenBar).toHaveAttribute("aria-expanded", "true");
   const review = kitchen(page).getByRole("region", { name: "To review" });
   const card = review.getByRole("button", { name: "2 items to add · Shopping list" });
-  await expect(async () => {
-    await expandIfCollapsed(page, kitchen(page));
-    await expect(card).toBeVisible({ timeout: 500 });
-  }).toPass();
+  await expect(card).toBeVisible();
   await expect(review.getByRole("heading")).toContainText("To review · 1");
   await expectAccessible(page, "to review");
 
