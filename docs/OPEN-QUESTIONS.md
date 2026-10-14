@@ -11,6 +11,14 @@
 
 ## Outstanding
 
+### N1. 🟡 Being told when the AI budget runs out (you asked)
+**(a)** When the monthly spend limit is hit, Kitchen shows a clear, calm message instead of a generic error: *"Kitchen's AI budget for this month is used up. It resets on the 1st. Your kitchen and list still work."*
+**(b)** Optionally, a quiet in-app heads-up at about **80%** of the monthly budget, based on the cost Kitchen already logs for each message.
+(The Anthropic Console's own email alert works today with no build.)
+**Rec:** (a) now, since it's small. (b) later.
+
+> Answer:
+
 ### SL4. 🟡 Ticking items at the store with bad signal
 Offline is read-only in MVP 1 (0017), but stores often have poor signal, and ticking is exactly what you'd do there.
 **Rec (UX):** a small exception just for ticks. They save on your phone and sync when the signal is back, and anything not yet synced is marked "Not synced yet". Everything else stays read-only offline.
@@ -24,7 +32,7 @@ Offline is read-only in MVP 1 (0017), but stores often have poor signal, and tic
 
 ### T1. ⛔ Today: deploy a small version for your grocery trip (in progress)
 **Goal:** live in about 2 hours, for you only. Levi is added tonight.
-**Status: deployed 2026-10-14** at https://my-wellness-coach-mu.vercel.app, behind the access code (strangers are redirected to /unlock, and the API refuses without a code). Previously: ready to deploy. The screens, the real AI and the online hosting are merged. All tests pass: 217 unit and integration, 8 in a real browser, plus a production build.
+**Status: deployed 2026-10-14** (shopping list + new login page live the same afternoon) at https://my-wellness-coach-mu.vercel.app, behind the access code (strangers are redirected to /unlock, and the API refuses without a code). Previously: ready to deploy. The screens, the real AI and the online hosting are merged. All tests pass: 217 unit and integration, 8 in a real browser, plus a production build.
 **Plan accepted (2026-10-14).** The home Wi-Fi fallback applies if time runs out. **Still needed:** S1–S3 (Vero is setting them up), then a final **"go"** right before the deploy.
 
 **What today's version does:**
