@@ -11,6 +11,19 @@
 
 ## Outstanding
 
+### CAT1. 🟡 Organising and searching your kitchen (you asked)
+**Rec (being built on this):**
+- The full kitchen view (**See all**) gets a toggle: **By place** (Fridge / Freezer / Pantry / Not sure where, as now) | **By type**.
+- **Types:** Produce · Meat & seafood · Dairy & eggs · Rice, noodles & grains · Sauces & condiments · Spices & seasonings · Canned & jarred · Baking · Snacks & sweets · Drinks · Leftovers · Other.
+  - *Sauces & condiments* covers fish sauce, hoisin and sriracha. *Rice, noodles & grains* covers bánh phở and jasmine rice.
+- **Kitchen sorts items automatically** when they're added, marked as its guess. You can correct it in chat ("fish sauce goes under sauces"), and it remembers that for next time.
+- Your existing items get sorted once by simple name matching. Anything unclear goes to **Other**.
+- **Search box** at the top: type "fish" or "nước mắm" to find items by the name you used *or* the English name, wherever they are. Each result shows where it is and its batches.
+- The small Kitchen widget on the main screen stays as it is, with a "See all" link.
+- Want different types, or By type as the default? Tell me.
+
+> Answer:
+
 ### DF1. 🟡 Where does defrosted food go?
 *(Found by the tester agent)* "I defrosted the chicken" currently leaves it under **Freezer**.
 **Rec (being built on this):** defrosting moves it to **Fridge**, marked as *inferred* (since that's where people defrost), with "Defrosted" and the date. If you say otherwise ("defrosting on the counter"), it follows what you said.
