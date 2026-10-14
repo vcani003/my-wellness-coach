@@ -7,7 +7,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { ApplyResult } from "@/contracts/apply-result";
 import type { InterpretRequest, InterpretResult, Interpreter } from "../interpreter";
 import { BUDGET_EXHAUSTED_REPLY, budgetExhaustedReason, type BudgetReason } from "./budget";
-import { modelOutputFormat, ModelOutput } from "./model-output";
+import { modelOutputFormat, parseModelOutput } from "./model-output";
 import { PROMPT_VERSION, SYSTEM_PROMPT, renderTurn } from "./prompt";
 import { estimateCostUsd, taskSettings, type TaskSettings } from "./settings";
 import { toInterpretResult } from "./to-proposal";
@@ -146,7 +146,7 @@ export function createRealInterpreter(options: RealInterpreterOptions = {}): Int
         } catch {
           return fail("interpret", "output was not JSON");
         }
-        const parsed = ModelOutput.safeParse(json);
+        const parsed = parseModelOutput(json);
         if (!parsed.success) return fail("interpret", `output failed the schema: ${parsed.error.message}`);
 
         const outcome = toInterpretResult(parsed.data, req, now());

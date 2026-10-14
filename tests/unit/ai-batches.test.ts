@@ -8,7 +8,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { Operation } from "@/contracts/operations";
 import { createRealInterpreter, type MessagesApi } from "@/ai/real";
-import type { ModelOp, ModelOutput } from "@/ai/real/model-output";
+import { toWire, type ModelOp, type ModelOutput } from "@/ai/real/model-output";
 import { SYSTEM_PROMPT } from "@/ai/real/prompt";
 import { createFakeInterpreter } from "@/ai/fake";
 import type { InterpretRequest } from "@/ai/interpreter";
@@ -37,7 +37,7 @@ function respond(operations: ModelOp[]) {
         type: "message",
         role: "assistant",
         model: "claude-opus-5-5",
-        content: [{ type: "text", text: JSON.stringify(out), citations: null }],
+        content: [{ type: "text", text: JSON.stringify(toWire(out)), citations: null }],
         stop_reason: "end_turn",
         stop_sequence: null,
         usage: { input_tokens: 1000, output_tokens: 200, cache_read_input_tokens: 4000, cache_creation_input_tokens: 0 },

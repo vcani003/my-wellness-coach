@@ -1,7 +1,8 @@
 /**
- * The shape the model must answer in (structured outputs, ai.md §1). Deliberately flatter than
- * the contract: every key is present (null = unknown), items are referenced by short labels
- * (`i3`), and code turns this into a `ProposedChange` (to-proposal.ts). No length or number
+ * What the model's answer means, after decoding (structured outputs, ai.md §1). Deliberately
+ * flatter than the contract: every key is present (null = unknown), items are referenced by short
+ * labels (`i3`), and code turns this into a `ProposedChange` (to-proposal.ts). The API is asked
+ * for the `WireOutput` shape below (fewer union types) and `fromWire` maps it to this one. No length or number
  * limits here: structured outputs don't support them, and the contract checks them afterwards.
  */
 import { z } from "zod";
@@ -106,13 +107,148 @@ export const ModelOutput = z.object({
 });
 export type ModelOutput = z.infer<typeof ModelOutput>;
 
+/*
+ * ---------------------------------------------------------------------------------------------
+ * The wire shape: what the API is actually asked for (structured outputs, ai.md §1).
+ *
+ * The API allows at most 16 parameters with union types (`anyOf` or a type array, which is what
+ * `.nullable()` produces) per request, because each one makes the schema's compilation cost grow
+ * exponentially. `ModelOutput` above had 21, so every interpret call was rejected (2026-10-14).
+ * The wire shape keeps `null` only for the kitchen facts (a fact object, or a number nobody said)
+ * and uses plain sentinels everywhere else:
+ *  - text labels and notes (item, meal, unit, generate.meal, dish.notes): "" = none
+ *  - batch "unspecified", listOfferAccepted "none", generate.what "none"
+ *  - clarification / rememberPreference / dish: always present; an empty question, statement or
+ *    title means "none"
+ * `fromWire` maps it back to `ModelOutput`, so everything after it (to-proposal.ts, meal-ops.ts,
+ * the fake interpreter) is unchanged. tests/unit/ai-schema-limits.test.ts counts the unions.
+ * ---------------------------------------------------------------------------------------------
+ */
+
+const WireQuantity = z.object({
+  asSaid: z.string(),
+  amount: z.number().nullable(),
+  /** "" when there is no unit. */
+  unit: z.string(),
+  ...meta,
+});
+
+export const WireOp = z.object({
+  action: ModelAction,
+  evidence: z.string(),
+  /** "" when nothing matches. */
+  item: z.string(),
+  name: TextFact.nullable(),
+  quantity: WireQuantity.nullable(),
+  location: z.object({ value: Location, ...meta }).nullable(),
+  frozen: z.object({ value: z.boolean(), ...meta }).nullable(),
+  stock: z.object({ value: StockLevel, ...meta }).nullable(),
+  amountUsed: WireQuantity.nullable(),
+  /** "unspecified" when the user didn't name a batch. */
+  batch: z.enum([...BatchWhich.options, "unspecified"]),
+  store: TextFact.nullable(),
+  /** "" for every non-meal action. */
+  meal: z.string(),
+});
+export type WireOp = z.infer<typeof WireOp>;
+
+export const WireOutput = z.object({
+  kind: z.enum(["change", "answer", "clarify"]),
+  reply: z.string(),
+  operations: z.array(WireOp),
+  /** question "" (and no options) unless kind is "clarify". */
+  clarification: z.object({
+    question: z.string(),
+    options: z.array(z.object({ label: z.string(), reply: z.string() })),
+  }),
+  /** statement "" unless the user just accepted an offer to remember something. */
+  rememberPreference: z.object({ statement: z.string(), evidence: z.string() }),
+  listOfferAccepted: z.enum(["staples", "stock-offer", "none"]),
+  /** what "none" (meal "") unless routing to ideas or a recipe change. */
+  generate: z.object({ what: z.enum(["ideas", "recipe_change", "none"]), meal: z.string() }),
+  /** title "" unless the user named a dish themselves (MI1). notes "" when none. */
+  dish: z.object({ title: z.string(), notes: z.string(), evidence: z.string() }),
+});
+export type WireOutput = z.infer<typeof WireOutput>;
+
+const orNull = (s: string): string | null => (s === "" ? null : s);
+const orEmpty = (s: string | null): string => s ?? "";
+
+function quantityFromWire(q: z.infer<typeof WireQuantity> | null): ModelOp["quantity"] {
+  return q && { ...q, unit: orNull(q.unit) };
+}
+
+function quantityToWire(q: ModelOp["quantity"]): z.infer<typeof WireQuantity> | null {
+  return q && { ...q, unit: orEmpty(q.unit) };
+}
+
+/** Wire → the internal shape (sentinels back to null). */
+export function fromWire(w: WireOutput): ModelOutput {
+  return {
+    kind: w.kind,
+    reply: w.reply,
+    operations: w.operations.map((op) => ({
+      action: op.action,
+      evidence: op.evidence,
+      item: orNull(op.item),
+      name: op.name,
+      quantity: quantityFromWire(op.quantity),
+      location: op.location,
+      frozen: op.frozen,
+      stock: op.stock,
+      amountUsed: quantityFromWire(op.amountUsed),
+      batch: op.batch === "unspecified" ? null : op.batch,
+      store: op.store,
+      meal: orNull(op.meal),
+    })),
+    clarification: w.clarification.question === "" ? null : w.clarification,
+    rememberPreference: w.rememberPreference.statement === "" ? null : w.rememberPreference,
+    listOfferAccepted: w.listOfferAccepted === "none" ? null : w.listOfferAccepted,
+    generate: w.generate.what === "none" ? null : { what: w.generate.what, meal: orNull(w.generate.meal) },
+    dish: w.dish.title === "" ? null : { title: w.dish.title, notes: orNull(w.dish.notes), evidence: w.dish.evidence },
+  };
+}
+
+/** The internal shape → wire. Used by tests to build realistic mocked API answers. */
+export function toWire(o: ModelOutput): WireOutput {
+  return {
+    kind: o.kind,
+    reply: o.reply,
+    operations: o.operations.map((op) => ({
+      action: op.action,
+      evidence: op.evidence,
+      item: orEmpty(op.item),
+      name: op.name,
+      quantity: quantityToWire(op.quantity),
+      location: op.location,
+      frozen: op.frozen,
+      stock: op.stock,
+      amountUsed: quantityToWire(op.amountUsed),
+      batch: op.batch ?? "unspecified",
+      store: op.store,
+      meal: orEmpty(op.meal),
+    })),
+    clarification: o.clarification ?? { question: "", options: [] },
+    rememberPreference: o.rememberPreference ?? { statement: "", evidence: "" },
+    listOfferAccepted: o.listOfferAccepted ?? "none",
+    generate: o.generate ? { what: o.generate.what, meal: orEmpty(o.generate.meal) } : { what: "none", meal: "" },
+    dish: o.dish ? { title: o.dish.title, notes: orEmpty(o.dish.notes), evidence: o.dish.evidence } : { title: "", notes: "", evidence: "" },
+  };
+}
+
+/** Parses the API's answer: wire schema first, then mapped to `ModelOutput`. */
+export function parseModelOutput(json: unknown): { success: true; data: ModelOutput } | { success: false; error: z.ZodError } {
+  const parsed = WireOutput.safeParse(json);
+  return parsed.success ? { success: true, data: fromWire(parsed.data) } : { success: false, error: parsed.error };
+}
+
 /**
- * The JSON schema sent as `output_config.format`. Built with Zod's own converter rather than the
- * SDK's `betaZodOutputFormat`, which (SDK 0.133.0) moves `enum` into the description, so enum
- * values would not be enforced. We still validate the answer with `ModelOutput` afterwards.
+ * The JSON schema sent as `output_config.format`: the wire shape. Built with Zod's own converter
+ * rather than the SDK's `betaZodOutputFormat`, which (SDK 0.133.0) moves `enum` into the
+ * description, so enum values would not be enforced. We still validate the answer afterwards.
  */
 export function modelOutputFormat(): { type: "json_schema"; schema: Record<string, unknown> } {
-  const { $schema: _ignored, ...schema } = z.toJSONSchema(ModelOutput, { io: "output" }) as Record<string, unknown>;
+  const { $schema: _ignored, ...schema } = z.toJSONSchema(WireOutput, { io: "output" }) as Record<string, unknown>;
   void _ignored;
   return { type: "json_schema", schema };
 }

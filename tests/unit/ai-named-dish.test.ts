@@ -10,7 +10,7 @@ import { MealChoose } from "@/contracts/operations";
 import { ProposedChange } from "@/contracts/proposed-change";
 import { createRealInterpreter, type MessagesApi } from "@/ai/real";
 import { createRealMealAI, type StreamingMessagesApi } from "@/ai/real/meals";
-import type { ModelOp, ModelOutput } from "@/ai/real/model-output";
+import { toWire, type ModelOp, type ModelOutput } from "@/ai/real/model-output";
 import type { RecipeOutput } from "@/ai/meals/model-output";
 import type { MealContext } from "@/ai/meals/types";
 import { createFakeMealAI } from "@/ai/fake/meals";
@@ -39,7 +39,7 @@ function message(text: string): Message {
 }
 
 function interpreterFor(o: ModelOutput) {
-  const create = vi.fn(async () => message(JSON.stringify(o)));
+  const create = vi.fn(async () => message(JSON.stringify(toWire(o))));
   const messages = { create } as unknown as MessagesApi;
   return createRealInterpreter({ messages, now: () => AT, log: () => {}, env: {} });
 }

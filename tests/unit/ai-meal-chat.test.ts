@@ -8,7 +8,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ProposedChange } from "@/contracts/proposed-change";
 import { KitchenState } from "@/contracts/kitchen-state";
 import { createRealInterpreter, type MessagesApi } from "@/ai/real";
-import type { ModelOp, ModelOutput } from "@/ai/real/model-output";
+import { toWire, type ModelOp, type ModelOutput } from "@/ai/real/model-output";
 import { WHICH_MEAL, WHICH_RECIPE } from "@/ai/real/meal-ops";
 import { PROMPT_VERSION } from "@/ai/real/prompt";
 import { createFakeMealAI } from "@/ai/fake/meals";
@@ -41,7 +41,7 @@ function output(partial: Partial<ModelOutput>): ModelOutput {
 
 function interpreterFor(o: ModelOutput, now = NOW) {
   const create = vi.fn<(body: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming) => Promise<Message>>(async () =>
-    message(JSON.stringify(o)),
+    message(JSON.stringify(toWire(o))),
   );
   const messages: MessagesApi = { create };
   return { interpreter: createRealInterpreter({ messages, now: () => now, log: () => {}, env: {} }), create };
@@ -83,7 +83,7 @@ describe("what the model sees", () => {
     const user = body.messages[0].content as string;
     expect(user).toContain("<meal_ideas>\nd1: Spinach omelette\nd2: Shrimp fried rice\nd3: Lime rice\n</meal_ideas>");
     expect(user).toContain("m1: Lime rice · cooking · has recipe");
-    expect(PROMPT_VERSION).toBe("interpret-2026-10-14.5");
+    expect(PROMPT_VERSION).toBe("interpret-2026-10-14.6");
     const system = body.system as Anthropic.Beta.Messages.BetaTextBlockParam[];
     expect(system[0].text).toContain("# Meals (ideas, choosing, plan, cooking)");
     expect(system[0].text).not.toContain("Shrimp fried rice"); // nothing per-request in the cached prefix

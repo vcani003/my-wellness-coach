@@ -5,7 +5,7 @@ import { ProposedChange } from "@/contracts/proposed-change";
 import type { ApplyResult } from "@/contracts/apply-result";
 import { getInterpreter, NOT_CONFIGURED_REPLY, notConfiguredInterpreter, selectInterpreterKind } from "@/ai";
 import { BUDGET_EXHAUSTED_REPLY, createRealInterpreter, FAILURE_REPLY, REFUSAL_REPLY, type MessagesApi } from "@/ai/real";
-import type { ModelOp, ModelOutput } from "@/ai/real/model-output";
+import { toWire, type ModelOp, type ModelOutput } from "@/ai/real/model-output";
 import { NOTHING_TO_CHANGE_REPLY, storeName } from "@/ai/real/to-proposal";
 import { PROMPT_VERSION } from "@/ai/real/prompt";
 import { estimateCostUsd } from "@/ai/real/settings";
@@ -64,7 +64,8 @@ function setup(response: Message | Error) {
   return { interpreter, calls, logs };
 }
 
-const respond = (o: ModelOutput) => setup(message(JSON.stringify(o)));
+/** Mocked API answers are in the wire shape the API is asked for (model-output.ts). */
+const respond = (o: ModelOutput) => setup(message(JSON.stringify(toWire(o))));
 
 describe("request shape", () => {
   it("calls Opus 5.5 with structured output, caching, effort, a token cap and fallbacks", async () => {
@@ -105,7 +106,7 @@ describe("request shape", () => {
   });
 
   it("lets the effort be changed by env without a code change (0020)", async () => {
-    const messages: MessagesApi = { create: vi.fn(async () => message(JSON.stringify(output({ kind: "answer" })))) };
+    const messages: MessagesApi = { create: vi.fn(async () => message(JSON.stringify(toWire(output({ kind: "answer" }))))) };
     const interpreter = createRealInterpreter({ messages, log: () => {}, env: { AI_INTERPRET_EFFORT: "low" } });
     await interpreter.interpret(request("hi"));
     expect(vi.mocked(messages.create).mock.calls[0][0].output_config?.effort).toBe("low");
@@ -367,7 +368,7 @@ describe("failures never throw (0018)", () => {
     ["max_tokens", message('{"kind":"change","rep', "max_tokens"), FAILURE_REPLY],
     ["not JSON", message("Sure! Here you go"), FAILURE_REPLY],
     ["wrong shape", message(JSON.stringify({ kind: "dance", reply: "x" })), FAILURE_REPLY],
-    ["empty reply", message(JSON.stringify(output({ reply: "  " }))), FAILURE_REPLY],
+    ["empty reply", message(JSON.stringify(toWire(output({ reply: "  " })))), FAILURE_REPLY],
   ];
   it.each(cases)("%s → plain reply, no proposal", async (_name, response, reply) => {
     const { interpreter, logs } = setup(response);
@@ -715,8 +716,8 @@ describe("shopping list (0027)", () => {
     await b.interpreter.interpret(request("hi", VERO_PANTRY, [], VERO_LIST));
     const sys = (c: typeof a) => (c.calls[0].body.system as Anthropic.Beta.Messages.BetaTextBlockParam[])[0].text;
     expect(sys(a)).toBe(sys(b));
-    expect(PROMPT_VERSION).toBe("interpret-2026-10-14.5");
-    expect(a.logs[0]).toMatchObject({ promptVersion: "interpret-2026-10-14.5" });
+    expect(PROMPT_VERSION).toBe("interpret-2026-10-14.6");
+    expect(a.logs[0]).toMatchObject({ promptVersion: "interpret-2026-10-14.6" });
   });
 
   it("files 'MD Oriental Market' under 'MD Oriental' and keeps other stores as said", () => {
