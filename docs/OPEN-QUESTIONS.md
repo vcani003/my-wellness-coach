@@ -55,6 +55,18 @@ The open part is **unprompted** suggestions ("What can I make?"):
 
 > Answer:
 
+### AI7. 🟡 Can you save your husband's allergy for him?
+*(From the integration pass; follows from 0019)* Say you tell Kitchen "[Husband] is allergic to seafood."
+**Rec:** Kitchen asks you, "Save this to [Husband]'s profile?". If you say yes, it's saved and starts being considered right away. In his Settings it shows as **"Added by Vero"**, and **only he** can edit its note or remove it.
+
+> Answer:
+
+### K2. ⚪ What happens to an item marked "Out"?
+*(From the integration pass)*
+**Rec:** it drops off the Kitchen list, so the list shows only what you have. Its history is kept, so the assistant still knows "you ran out of eggs on Tuesday". A "running low" item stays on the list with a "Low" label.
+
+> Answer:
+
 ### UX4. ⚪ The floating chat button (from your UX3 answer)
 **Rec:** a round button in the bottom-right corner, with a dot when the assistant has replied since you minimized the chat. It's **not draggable in MVP 1**: dragging is more to build and harder to make accessible, and it could come next.
 

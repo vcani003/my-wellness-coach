@@ -1,7 +1,7 @@
 # Frontend and accessibility architecture
 
 **Status:** Proposed, pending Vero's review · 2026-10-13 · Frontend + Accessibility specialist
-**Builds on:** [ux.md](ux.md), [backend-data.md](backend-data.md) (§6, §9); decisions 0001, 0002, 0004, 0005, 0007, 0011, 0013, 0015, 0016. `ai.md` didn't exist yet, so the chat stream format in §3 is a proposal for AI and Backend to confirm. Where an outstanding question matters, the design works either way and cites its ID.
+**Builds on:** [ux.md](ux.md), [backend-data.md](backend-data.md) (§6, §9); decisions 0001, 0002, 0004, 0005, 0007, 0011, 0013, 0015–0021. `ai.md` didn't exist yet, so the chat stream format in §3 is a proposal for AI and Backend to confirm. Where an outstanding question matters, the design works either way and cites its ID.
 
 ---
 
@@ -13,10 +13,10 @@ Next.js 16 "App Router": each folder is a URL. A **layout** wraps pages and stay
 
 | URL | UX screen |
 |---|---|
-| `/sign-in` | Sign-in: email, check email, code (UX2), expired link |
+| `/sign-in` | Sign-in: email, check email, 6-digit code (UX2, 0017), expired link |
 | `/` | Main: workspace + dock (phone) or split (desktop) |
 | `/recipe/[mealId]` | Recipe: full page on phone, workspace column on desktop; dock stays |
-| `/kitchen` | Kitchen "See all" (works for either K1 answer) |
+| `/kitchen` | Kitchen "See all": view-only except To review (K1, 0017) |
 | `/settings`, `/settings/delete` | Settings, delete-data confirmation |
 | `/privacy`, `/terms`, `/offline` | Policies (0015); offline fallback page |
 
@@ -33,7 +33,7 @@ Real URLs make the phone's Back button just work. Next 16's `proxy.ts` (formerly
 | `isPresent(state)` | Has content? |
 | `wantsFocus(turn)` | Does this turn concern me? (item change → Kitchen) |
 | `barSummary(state)` | Collapsed bar text ("Meal plan · 2 · 1 cooking") |
-| `lifetime` | `lasting` (Kitchen, Meal plan) or `session` (Meal ideas, M5) |
+| `lifetime` | `lasting` (Kitchen, Meal plan) or `session` (Meal ideas, 0013) |
 
 `widgets/kitchen/index.ts` exports the Kitchen widgets, and `workspace/registry.ts` is `[...kitchenWidgets]`. A Fitness widget later is a new folder plus one line; no Kitchen file changes, and the workspace knows nothing about food. No plugin loading.
 
@@ -45,13 +45,13 @@ Real URLs make the phone's Back button just work. Next 16's `proxy.ts` (formerly
 |---|---|---|
 | **Server state** (database truth) | TanStack Query cache, behind `useKitchenSync` | Items, meals, plan, To review, version |
 | **Conversation** | Chat provider in the main layout | Messages, streaming reply, receipts |
-| **UI state** | Workspace reducer, components | Order, focus, highlights, sheet ticks, dock Peek/Full |
+| **UI state** | Workspace reducer, components | Order, focus, highlights, sheet choices, dock Peek/Full/Minimized |
 
 **Your own change:** the `ApplyResult` arrives → the client stores the embedded new `state` (backend §6) → notes `newVersion` so polling doesn't refetch it → the reducer focuses the right widget and marks rows "New"/"Updated" until your next message.
 
 **The other person's change:** `useKitchenSync` polls `/version` per backend §6 (15 s visible, 60 s after 5 idle minutes, immediately on return, paused when hidden). A higher version reloads state; rows with `updatedBy` ≠ you get the soft "[Husband] · just now" highlight.
 
-**Optimistic updates** (showing a change before the server confirms): **no** for anything the AI interprets (UX notes). **Yes for checklist ticks only**: unambiguous, and lag would feel broken. A failed tick reverts with "Couldn't save · Retry".
+**Optimistic updates** (showing a change before the server confirms): **no** for anything the AI interprets (UX notes). **Yes for checklist ticks only**: unambiguous, and lag would feel broken. A failed tick reverts with "Couldn't save · Retry". Ticks are shared (0013), so the other person's arrive through sync with "ticked by [Husband]".
 
 **Chat streaming:** plain `fetch` reading one JSON event per line (NDJSON), each checked by the shared Zod schema in `src/contracts/`. The **canonical event list is the turn stream table in backend §6** (`ack`, `status`, `applied`, `clarification`, `offer`, `notes`, `text`, `idea`, `recipe`, `recipe.saved`, `done`, `error {reason, changed, retryable}`). The same stream serves `/api/chat` and **Choose** (`POST /api/meals/choose`).
 Because the backend interprets, then applies, then replies, `applied` always arrives before any `text`, so widgets update *before* the reply streams. Each message has a client-made ID, so **Try again** can never apply twice.
@@ -63,6 +63,13 @@ Because the backend interprets, then applies, then replies, `applied` always arr
 - **Partly rejected:** the receipt lists applied lines with Undo, plus a muted line per rejection; the reply already reflects it.
 - Undo refused: "Can't undo this now. Tell me what to fix."
 
+**Never crash (0018):**
+- **Each widget has its own error boundary** inside `WidgetFrame`: a render or data failure shows "Couldn't load · Retry" in that widget only; chat and the other widgets keep working. A route-level `error.tsx` is the last resort, never the first.
+- **Safe fallbacks** come from one small display helper: a missing item → "Unknown item", a missing person → "Someone" (a deleted member → "a former member", D1 Rec), no location → "Not sure where". References with `missing: true` (backend §6) use it too; nothing renders blank.
+- A stream event or row that fails its Zod check is **dropped and logged**, not thrown.
+- **Failed actions** (Undo, Choose, a tick) explain themselves in place, in plain words, and leave the screen as it was.
+- Client errors are sent to the server log; every fixed bug gets a regression test.
+
 ## 4. Libraries
 
 Versions checked on the npm registry, 2026-10-13. Pin exact versions at build start.
@@ -71,7 +78,7 @@ Versions checked on the npm registry, 2026-10-13. Pin exact versions at build st
 |---|---|---|---|
 | Framework | **Next.js 16.4, React 19.3** | Preference; matches backend | — |
 | Accessible primitives | **Base UI 1.9** | Unstyled, accessible dialog, **drawer** (bottom sheet: swipe, focus trap, focus return), accordion, checkbox group, menu, OTP field; one maintained library | React Aria Components: heavier, more opinionated. Radix: no drawer. Vaul: **unmaintained** (its README) |
-| Styling | **Tailwind CSS 4.3** + CSS-variable tokens | No runtime; suits unstyled primitives; contrast checked in one token file | CSS Modules: slower to keep consistent |
+| Styling | **Tailwind CSS 4.3** + semantic CSS-variable tokens | No runtime; suits unstyled primitives; contrast checked in one token file | CSS Modules: slower to keep consistent |
 | Sheets/dialogs | Base UI Drawer (phone) / Dialog (desktop) | One wrapper switches at ~900 px | — |
 | Forms | **None**: native forms, server actions, Zod | A few tiny forms | React Hook Form: overkill |
 | Server state | **TanStack Query 5.104** | Polling, refetch on return, retries, cache writes from ApplyResult | SWR: weaker mutations |
@@ -84,11 +91,14 @@ Versions checked on the npm registry, 2026-10-13. Pin exact versions at build st
 
 **Unverified:** Base UI's docs don't label Drawer stable or preview; jsx-a11y last released October 2024, so confirm ESLint compatibility (axe covers most of it anyway).
 
+**Theming (FE3, 0017): semantic design tokens are mandatory.** No dark mode in MVP 1, but every colour, spacing and type value is a **semantic** token named for its role (`color.surface`, `color.text-muted`, `color.accent`, `color.danger`, `space.*`, `font.*`), defined once as CSS variables and mapped into Tailwind's theme. Components use only these tokens: no hex values and no raw palette classes like `bg-white` or `text-gray-700` (a lint rule enforces this). A second theme is then just a second set of values under `[data-theme]`, with **no component changes**.
+
 ## 5. PWA specifics (0001)
 
 - **Install:** manifest (standalone; 192/512 px and maskable icons) plus an Apple touch icon. iOS 26 opens home-screen sites as web apps by default. Android installs from the menu without a service worker; Chrome's automatic prompt still wants one (2023 source).
-- **Offline is read-only.** The service worker caches built files and `/offline`, and **never caches `/api` or sign-in**. The client keeps the last kitchen snapshot on the device ("Offline · showing your kitchen as of 6:42 pm") and disables Send (FE2). The snapshot is wiped on sign-out.
-- **iPhone sign-in (UX2):** a home-screen app keeps cookies separate from Safari, so an emailed link signs in *Safari*. Apple has said cookies are copied once when the app is added; unconfirmed for iOS 26. *If UX2 is yes:* a code field (`autocomplete="one-time-code"`, paste allowed, which meets WCAG 3.3.8). *If no:* home-screen users are told to sign in in Safari first, then add the app. Long sessions (FE1) make it rare either way.
+- **Offline is read-only** (FE2 Rec). The service worker caches built files and `/offline`, and **never caches `/api` or sign-in**. The client keeps the last kitchen snapshot on the device ("Offline · showing your kitchen as of 6:42 pm") and disables Send (FE2). The snapshot is wiped on sign-out.
+- **iPhone sign-in (UX2, 0017):** a home-screen app keeps cookies separate from Safari, so an emailed link signs in *Safari*. Apple has said cookies are copied once when the app is added; unconfirmed for iOS 26. So the email carries a link **and** a 6-digit code, and the app has a code field (`autocomplete="one-time-code"`, paste allowed, which meets WCAG 3.3.8). One email with both is tested first; the fallback is code-only. A rolling 1-year session (FE1 Rec) makes signing in rare; **Sign out everywhere** in Settings ends every session and wipes the offline snapshot.
+- **Dock states (UX3, 0017):** Peek, Full and **Minimized**. Minimized hides the dock and shows a fixed round chat button bottom-right, with a dot for a new reply since minimizing (UX4 Rec: not draggable).
 - **Keyboard and viewport:** `viewport-fit=cover`, `env(safe-area-inset-*)` padding, `100dvh`. Android supports `interactive-widget=resizes-content`, so the dock rides above the keyboard. **iOS Safari doesn't** (caniuse, through 26.5), so a small `visualViewport` listener sets `--keyboard-inset`. Riskiest piece: test on a real iPhone early.
 
 ## 6. Accessibility plan (WCAG 2.2 AA, proportionate)
@@ -102,10 +112,12 @@ Versions checked on the npm registry, 2026-10-13. Pin exact versions at build st
 - [ ] Desktop: Enter sends, Shift+Enter adds a line, Esc closes sheets.
 
 **Dock, sheets, widgets**
-- [ ] Show/Hide chat button with an expanded state; dragging optional (2.5.7).
+- [ ] Show/Hide chat button with an expanded state, plus a Minimize button; dragging optional (2.5.7).
+- [ ] **Floating chat button:** a real `button` named "Open chat" ("Open chat, new reply" when the dot shows; the dot isn't the only cue). Minimizing moves focus to it; opening returns focus to the composer. 44 px, inside `env(safe-area-inset-*)`, and the workspace gets bottom padding and `scroll-padding-bottom` so it never covers content or a focused control (2.4.11).
 - [ ] `scroll-padding-bottom` equals the dock height, so focus is never hidden behind it (2.4.11).
 - [ ] Sheets trap focus, Esc/swipe-down mean Do later, focus returns to the opener.
 - [ ] Accordion bars are buttons with an expanded state; the "Updated" dot has text.
+- [ ] **Allergy flags** are text (with an optional icon), part of the card's or ingredient's accessible description; the after-cooking choices are a radio group per ingredient.
 - [ ] **Reordering:** DOM order matches visual order, only after your own message; stable keys keep focus; the announcement names the widget.
 
 **Visual**
@@ -127,12 +139,14 @@ Versions checked on the npm registry, 2026-10-13. Pin exact versions at build st
 
 | Layer | Covers |
 |---|---|
-| Unit (Vitest) | Workspace reducer, stream parser, sync timing |
-| Component | Composer focus, sheet focus return, Undo names, error states |
-| End-to-end (Playwright) | UX §8 journey on iPhone-sized WebKit, Android-sized Chromium and desktop, with backend's **fake interpreter** and `/api/test/reset` |
+| Unit (Vitest) | Workspace reducer, stream parser, sync timing, fallback helper |
+| Component | Composer focus, sheet focus return, chat-button focus, Undo names, error states, a widget's error boundary not taking down the others |
+| End-to-end (Playwright) | UX §8 single-person journey on iPhone-sized WebKit, Android-sized Chromium and desktop, with backend's **fake interpreter** and `/api/test/reset` (`single`); the household smoke test with two browser contexts (`household`) |
 | Regression | Every bug gets a test that fails without the fix |
 
-**Selectors for the tester agent:** role plus name first (`button "Send"`, `region "Kitchen"`, `button "Choose Spinach omelette"`, `button "Undo: …"`, `checkbox "Feta"`). Otherwise `data-widget`, `data-entity-id`, `data-change="new|updated"`. Names live in `en.json` and change only on purpose.
+**Hand-off gate (0021):** both test kitchens pass, in CI and through the two tester agents on staging, before a build goes to Vero and [Husband].
+
+**Selectors for the tester agents:** role plus name first (`button "Send"`, `button "Open chat"`, `region "Kitchen"`, `button "Choose Spinach omelette"`, `button "Undo: …"`, `checkbox "Feta"`). Otherwise `data-widget`, `data-entity-id`, `data-change="new|updated"`. Names live in `en.json` and change only on purpose.
 
 ## 9. Folder layout
 
@@ -150,22 +164,22 @@ Wrapping Base UI in `primitives/` means swapping libraries touches one folder.
 ## 10. First UI build plan
 
 1. Skeleton: tokens, i18n, primitives, lint, tests, manifest.
-2. Sign-in (link, plus code if UX2).
-3. Shell: phone dock (Peek/Full, keyboard, safe areas), desktop split, stubbed chat.
+2. Sign-in (link + code; rolling session per FE1, Sign out everywhere).
+3. Shell: phone dock (Peek/Full/Minimized + chat button per UX4, keyboard, safe areas), desktop split, stubbed chat, widget error boundaries.
 4. Chat stream on the fake interpreter: bubbles, receipt, Undo, errors, live region.
 5. Registry, reducer, Kitchen widget → **journey steps 1–4**.
 6. Meal ideas, Choose, Recipe → steps 5–6. Meal plan → step 7.
 7. `useKitchenSync`, persistence, offline snapshot → step 8.
 8. Playwright journey with axe in CI; manual VoiceOver pass.
-9. Then sheets, To review, Settings, [Husband] cues.
+9. Then sheets (incl. the after-cooking step, M8), To review, Settings, [Husband] cues; household smoke test.
 
 ---
 
 ## Questions for Vero
 
-1. **FE1. How long should you stay signed in on a device?** **Rec:** 60 days, renewed each use, with Sign out in Settings. It makes the iPhone sign-in hurdle (UX2) rare.
-2. **FE2. With no internet, should the app accept messages and send them later?** **Rec:** no. Offline shows your last-known kitchen read-only, with Send disabled. Messages applied hours later could surprise you.
-3. **FE3. Dark mode in MVP 1?** **Rec:** no. Colours are tokens, so following the phone's setting later is small.
+1. **FE1. How long should you stay signed in on a device?** **Rec:** a rolling **1 year** (in practice "never" for daily use), plus **Sign out everywhere** in Settings. Still open.
+2. **FE2. Offline: queue messages or a local model?** **Rec:** read-only offline now (Send disabled), queued messages next MVP. Still open.
+3. **FE3. Dark mode:** answered → 0017 (no dark mode; semantic tokens, §4).
 
 ## Risks and how we'd reverse
 
@@ -179,5 +193,5 @@ Wrapping Base UI in `primitives/` means swapping libraries touches one folder.
 
 **Contract changes requested (all accepted in the integration pass; see backend §6 and its changelog)**
 - `ApplyResult.applied[].refs`; translatable `Msg {code, params, text}` summaries and rejections; `createdAt/By` and `updatedAt/By` on rows; `state` always included in ApplyResult.
-- Session length per FE1; *if UX2 is yes,* one email with link and code.
+- Session length per FE1; one email with link and code (0017).
 - The turn stream is merged with AI's pipeline. **Choose** streams via `POST /api/meals/choose`.

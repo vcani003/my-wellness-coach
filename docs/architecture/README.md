@@ -28,6 +28,8 @@ Start here; it's a one-page summary. The four specialist sections hold the detai
          └── every ~15 s: "did anything change?" (so you see your husband's changes)
 ```
 
+On a phone the chat dock can also be **minimized** to a floating chat button, giving the workspace the full screen (0017).
+
 This is spec §11's boundary: **conversation → interpretation → persistent events → domain services → widgets.**
 - **The AI only proposes.** Code checks every change before anything is saved.
 - **Buttons use the same path as chat.** So Undo, Choose and ticking a box can't bypass the checks.
@@ -40,11 +42,11 @@ This is spec §11's boundary: **conversation → interpretation → persistent e
 | App | **Next.js 16** (React, TypeScript): one app for screens + server | Your preference; one codebase, one deploy |
 | Hosting | **Vercel** (free plan) | Made for Next.js. The free plan is for personal, non-commercial use, which fits an MVP. |
 | Database | **Postgres on Neon** (free plan) | Standard, reliable, good for event history |
-| Sign-in | **Better Auth** with email links (+ code if UX2), invite-only, max 3 accounts | Users stay in our own database, with no extra vendor |
-| AI | **Claude Opus 5.5** with structured outputs | Reliable structured answers, plus allergy checks in code too |
+| Sign-in | **Better Auth**: one email with a link + 6-digit code, invite-only, max 4 accounts (you, your husband, 2 tester agents) | Users stay in our own database, with no extra vendor |
+| AI | **Claude Opus 5.5** with structured outputs; the model is a per-task server setting | Reliable structured answers. Allergy checks in code too: every member's allergies count, and an allergen dish is always flagged with whose allergy and their own note, never medical advice |
 | UI parts | **Base UI** components, **Tailwind** styling, **next-intl** text | Accessible building blocks; translation-ready from day one |
-| Tests | Vitest, Playwright + automated accessibility checks, a fixed "fake AI" for repeatable runs | The tester agent uses the real AI on staging |
-| Environments | **Production** (you + your husband) and **staging** (tester agent, previews) | The tester never touches your real kitchen |
+| Tests | Vitest, Playwright + automated accessibility checks, a fixed "fake AI" for repeatable runs | Two tester agents use the real AI on staging, in a single-person and a household test kitchen; both must pass before a build reaches you |
+| Environments | **Production** (you + your husband) and **staging** (tester agents, previews) | The testers never touch your real kitchen |
 
 **Future assistants (spec §5):** shared data (you, membership, allergies and preferences, the history format) is kept apart from Kitchen data. A future Fitness assistant reads it through a small defined interface and never through Kitchen's tables or prompts. Adding its widget means one new folder plus one line.
 
@@ -54,19 +56,19 @@ This is spec §11's boundary: **conversation → interpretation → persistent e
 |---|---|
 | AI | ~$15–18 production + a few $ staging (≈3¢ per kitchen update, 7¢ per set of meal ideas, 5¢ per recipe) |
 | Hosting, database, email | $0 (free plans) |
-| Safety net | Hard spend limits of $30 production and $10 staging, plus per-person message limits (C2) |
+| Safety net | A $40 hard cap ($30 production + $10 staging), **target about $20**, plus per-person message limits (0020) |
 
 ## The first UI build ([frontend.md §10](frontend.md))
 
 1. **Skeleton:** styling, text setup, components, tests, app manifest
-2. **Sign-in:** needs **UX2** and **FE1**
-3. **Layout:** the phone chat dock and desktop split. Needs **UX3**. The iPhone keyboard is the riskiest part, so test it on a real iPhone early.
+2. **Sign-in:** needs **FE1**
+3. **Layout:** the phone chat dock (Peek, Full, Minimized with a chat button: needs **UX4**) and desktop split. The iPhone keyboard is the riskiest part, so test it on a real iPhone early.
 4. **Chat:** running on the fake AI, with "What changed", Undo and errors
 5. **Kitchen widget:** journey steps 1–4
-6. **Meal ideas → Choose → Recipe → Meal plan:** needs **M5, R2**, plus **AI3** for assumed basics
-7. **Sync between you two and saving across sessions:** shaped by **H2, H3**
+6. **Meal ideas → Choose → Recipe → Meal plan:** needs **R2** and **AI6**
+7. **Sync between you two, saving across sessions, offline view:** needs **FE2**
 8. **The full journey test:** automated, with accessibility checks, plus a short screen-reader pass
-9. **Then:** sheets, To review, Settings, shared-kitchen cues. Needs **M6, M7, K1, D1, AI1**
+9. **Then:** sheets (including the after-cooking "Update your kitchen" step), To review, Settings, shared-kitchen cues. Needs **M8, D1**
 
 The real AI gets plugged in alongside steps 4–6, behind the same contract.
 Questions are needed **by the step that uses them**, not all up front.
@@ -76,7 +78,7 @@ Questions are needed **by the step that uses them**, not all up front.
 | Risk | If it happens |
 |---|---|
 | The iPhone keyboard covers the chat dock | It's isolated in one small piece; there's a fallback approach ready |
-| The iPhone home-screen app doesn't share sign-in with Safari | The 6-digit code (UX2) avoids it |
+| The iPhone home-screen app doesn't share sign-in with Safari | The 6-digit code (0017) avoids it |
 | Free database hours run out | Slower background checking, or about $5–19/month |
 | The AI misreads messages | A test set of example messages runs on every change; Undo and corrections are always available |
 | Vercel's free plan is non-commercial | Move to Pro (about $20/month) or another host; it's a standard Next.js app |
