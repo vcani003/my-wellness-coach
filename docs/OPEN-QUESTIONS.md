@@ -11,16 +11,6 @@
 
 ## Outstanding
 
-### ST1. 🟡 How the tester agents use the staging copy
-Staging is set up: its own database, two tester accounts, and two test kitchens. It's behind **two locks**: Vercel's own login wall for preview copies, and the app's sign-in. I'm **not allowed to type sign-in codes into sites other than your local copy**, so the testers can't sign in to staging by themselves.
-- **(a)** Before a big deploy, you sign in once in the app's built-in browser (to Vercel, then with a tester code), and the tester agents take it from there.
-- **(b)** Turn off Vercel's login wall for preview copies. The app's own sign-in still protects it, but that removes one lock, and I'd still need you to enter the tester code.
-- **(c)** Tester agents run on your **local copy** before every deploy (stand-in AI, no codes needed). Staging is used to prove database updates work on a real Neon database before they touch yours.
-
-**Rec:** (c) as the routine, plus (a) before bigger changes. Keep both locks.
-
-> Answer:
-
 ### GH1. 🟡 Make the GitHub repo public?
 It's **private** for now: [github.com/vcani003/my-wellness-coach](https://github.com/vcani003/my-wellness-coach). There are no secrets anywhere in its history (checked). But it does contain personal details: **Levi's seafood allergy and medicine note** (used as a test case), your names, your stores, and your Gmail address on every commit.
 **Rec:** keep it private. If you want it public later (for a portfolio, say), first replace those details with made-up ones and use a GitHub "noreply" commit email. Going public can't be fully undone.
@@ -140,5 +130,6 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | AI9 | Low vs allergens | [0025](decisions/0025-batches-and-use-it-up.md): Low never brings allergen dishes back |
 | D2 | Returning after deletion | [0015](decisions/0015-language-units-policies-data.md): yes, as a fresh start with a new code |
 | SU1 | Levi signs up himself | [0029](decisions/0029-invites-and-passphrases.md): invite / setup links + own passphrase; deployed 2026-10-14 |
+| ST1 | How testers use staging | [0021](decisions/0021-tester-agents.md): local-copy testers before every deploy; Vero signs in to staging before bigger changes; both locks kept |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |
