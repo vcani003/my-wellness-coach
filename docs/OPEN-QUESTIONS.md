@@ -11,19 +11,6 @@
 
 ## Outstanding
 
-### SU1. ⛔ Levi signs up himself (you asked): invite link + his own passphrase
-**Status: built and tested (601 unit tests, 44 browser tests); not live. Answering "go" here approves it AND the deploy.**
-**Rec:**
-- **No open sign-up.** In **Settings → Kitchen → "Invite someone"**, you get a **single-use invite link** that's valid for 24 hours. You send it to Levi however you like.
-- **For Levi** (his account already exists, with his allergy): **Settings → "Send sign-in setup link"** next to his name, so he keeps his account. "Invite someone new" is for new people only.
-- They open it and choose their **name** and a **passphrase** (at least 12 characters, shown with Show/Hide). He's signed in and joins your kitchen. The link stops working once used.
-- Passphrases are stored **scrambled (hashed)**, never readable, not even by you or me.
-- **Forgot your passphrase?** Another kitchen member can send a **reset link** from Settings, the same way as an invite.
-- Your current access code keeps working. You can switch to your own passphrase from Settings whenever you like. Vercel access codes become a backup only.
-- The **max 4 accounts** limit stays (0006). This **replaces the planned email sign-in** (S4 / Resend no longer needed).
-
-> Answer:
-
 ### GH1. 🟡 Make the GitHub repo public?
 It's **private** for now: [github.com/vcani003/my-wellness-coach](https://github.com/vcani003/my-wellness-coach). There are no secrets anywhere in its history (checked). But it does contain personal details: **Levi's seafood allergy and medicine note** (used as a test case), your names, your stores, and your Gmail address on every commit.
 **Rec:** keep it private. If you want it public later (for a portfolio, say), first replace those details with made-up ones and use a GitHub "noreply" commit email. Going public can't be fully undone.
@@ -64,7 +51,8 @@ These need **your** accounts. Keep every key and code private: you paste them yo
   - **S6. Anthropic:** create a workspace called `wellness-coach-staging` with a **$5 monthly limit**, and create a key in it (30-day expiry, like the other).
   - **S7. Vercel:** Claude gives you the exact `npx vercel env add … preview` commands, so the test copy uses the staging database and key, never your real kitchen.
   - Until then, the tester agents run against the local copy on your Mac, using the stand-in AI.
-- **S4. Resend:** not needed today. It's for email sign-in later.
+- **S4. Resend: no longer needed** (0029 replaced email sign-in).
+- ~~S4. Resend:~~ not needed today. It's for email sign-in later.
 
 ---
 
@@ -141,5 +129,6 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | MI1 | Named dish goes straight to its recipe | [0013](decisions/0013-meal-lifecycle.md): approved 2026-10-14 |
 | AI9 | Low vs allergens | [0025](decisions/0025-batches-and-use-it-up.md): Low never brings allergen dishes back |
 | D2 | Returning after deletion | [0015](decisions/0015-language-units-policies-data.md): yes, as a fresh start with a new code |
+| SU1 | Levi signs up himself | [0029](decisions/0029-invites-and-passphrases.md): invite / setup links + own passphrase; deployed 2026-10-14 |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |
