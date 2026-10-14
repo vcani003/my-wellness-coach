@@ -1,10 +1,11 @@
 /** `POST /api/chat`: one chat turn, streamed as NDJSON turn events (backend-data.md §6). */
 import { z } from "zod";
-import { getInterpreter, handleChatTurn } from "@/ai";
+import { getInterpreter, getMeals, handleChatTurn } from "@/ai";
 import { Id } from "@/contracts/common";
 import { checkChatRateLimit } from "@/lib/rate-limit";
 import { getScope } from "@/server/session";
 import { isSameOrigin, jsonError } from "@/server/http";
+import { ndjson } from "@/server/ndjson";
 
 const Body = z.object({
   kitchenId: Id,
@@ -35,22 +36,10 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const events = handleChatTurn(
-    { db: ctx.db, scope: ctx.scope, interpreter: getInterpreter({ db: ctx.db, scope: ctx.scope }) },
-    { clientMessageId: parsed.data.clientMessageId, text: parsed.data.text },
+  return ndjson(
+    handleChatTurn(
+      { db: ctx.db, scope: ctx.scope, interpreter: getInterpreter({ db: ctx.db, scope: ctx.scope }), meals: getMeals() },
+      { clientMessageId: parsed.data.clientMessageId, text: parsed.data.text },
+    ),
   );
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      const next = await events.next();
-      if (next.done) controller.close();
-      else controller.enqueue(encoder.encode(`${JSON.stringify(next.value)}\n`));
-    },
-    async cancel() {
-      await events.return(undefined);
-    },
-  });
-  return new Response(stream, {
-    headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" },
-  });
 }

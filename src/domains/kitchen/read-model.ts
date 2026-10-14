@@ -220,7 +220,12 @@ export function buildRecipeView(
           const m = resolveItem({ name: ing.name }, kitchen);
           if (m.kind === "found" && m.item.stock?.value !== "out") item = { id: m.item.id, name: m.item.name.value };
         }
-        return { name: ing.name, ...(ing.basic ? { basic: true } : {}), ...(item ? { item } : {}) };
+        return {
+          name: ing.name,
+          ...(ing.amount ? { amount: ing.amount } : {}),
+          ...(ing.basic ? { basic: true } : {}),
+          ...(item ? { item } : {}),
+        };
       }),
       steps: recipe.steps,
       basicsAssumed: recipe.basicsAssumed,

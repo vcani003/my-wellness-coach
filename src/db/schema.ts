@@ -154,10 +154,16 @@ export const mealIdeas = pgTable(
     missing: jsonb("missing").$type<string[]>().notNull(),
     basedOnVersion: integer("based_on_version").notNull(),
     assistantMessageId: text("assistant_message_id"),
+    /** Card order within the set (0, 1, 2…), so "the second one" resolves (0013). */
+    position: integer("position").notNull().default(0),
     createdAt: ts("created_at").notNull(),
     createdBy: text("created_by").notNull(),
   },
-  (t) => [index("meal_ideas_kitchen_idx").on(t.kitchenId)],
+  (t) => [
+    index("meal_ideas_kitchen_idx").on(t.kitchenId),
+    // "The cards this user was last shown": latest set per person in a kitchen.
+    index("meal_ideas_shown_idx").on(t.kitchenId, t.createdBy, t.createdAt),
+  ],
 );
 
 // ─── Projections: Kitchen ─────────────────────────────────────────────────────────────

@@ -102,6 +102,7 @@ export function toRecipeResult(out: RecipeOutput, b: RecipeBuild): RecipeResult 
     text,
     ingredients: ingredients.map((i) => ({
       name: i.name,
+      ...(i.amount ? { amount: i.amount } : {}),
       ...(i.itemId ? { itemId: i.itemId } : {}),
       ...(i.group === "basic" ? { basic: true } : {}),
     })),

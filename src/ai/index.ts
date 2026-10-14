@@ -11,9 +11,11 @@ import { getChangesSince } from "@/domains/kitchen/queries";
 import type { KitchenScope } from "@/shared/membership";
 import { createFakeInterpreter } from "./fake";
 import type { Interpreter } from "./interpreter";
+import { getMealAI } from "./meals";
+import type { MealAI } from "./meals";
 import { createRealInterpreter } from "./real";
 
-export { handleChatTurn, type ChatTurnInput } from "./turn";
+export { handleChatTurn, handleChooseMeal, type ChatTurnInput, type ChooseMealInput } from "./turn";
 export type { Interpreter, InterpretRequest, InterpretResult } from "./interpreter";
 
 export const NOT_CONFIGURED_REPLY =
@@ -38,6 +40,11 @@ export function selectInterpreterKind(env: Env = process.env): InterpreterKind {
 const RECENT_CHANGES = 30;
 
 let real: Interpreter | undefined;
+
+/** Ideas and recipes, from the same server setting as the interpreter (0020). */
+export function getMeals(env: Env = process.env): MealAI {
+  return getMealAI(selectInterpreterKind(env));
+}
 
 export function getInterpreter(ctx: { db: Db; scope: KitchenScope }, env: Env = process.env): Interpreter {
   switch (selectInterpreterKind(env)) {

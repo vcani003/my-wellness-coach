@@ -126,7 +126,7 @@ export const RecipeView = z.object({
   source: z.enum(["user", "ai"]),
   text: z.string(),
   ingredients: z.array(
-    z.object({ name: z.string(), basic: z.boolean().optional(), item: ItemRef.optional() }),
+    z.object({ name: z.string(), amount: z.string().optional(), basic: z.boolean().optional(), item: ItemRef.optional() }),
   ),
   steps: z.array(z.string()),
   basicsAssumed: z.array(z.string()),

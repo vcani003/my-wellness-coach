@@ -21,6 +21,17 @@ export const MealIdea = z.object({
 });
 export type MealIdea = z.infer<typeof MealIdea>;
 
+/**
+ * "Update your kitchen" after cooking (0013, M8): the in-kitchen ingredients just recorded as used
+ * in this meal. Each gets Still have some / Running low / Out; answer with `submitUpdateKitchen`.
+ */
+export const UpdateKitchenPrompt = z.object({
+  mealId: Id,
+  title: z.string(),
+  items: z.array(z.object({ itemId: Id, name: z.string() })),
+});
+export type UpdateKitchenPrompt = z.infer<typeof UpdateKitchenPrompt>;
+
 export const StreamEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ack"), turnId: Id, messageId: Id }),
   z.object({ type: z.literal("status"), phase: StreamPhase }),
@@ -31,6 +42,8 @@ export const StreamEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("notes"), notes: z.array(Msg) }),
   z.object({ type: z.literal("text"), delta: z.string() }),
   z.object({ type: z.literal("idea"), setId: Id, basedOnVersion: z.number().int().nonnegative(), idea: MealIdea }),
+  /** The idea set failed part-way (e.g. a refusal): remove its cards; they can't be chosen. */
+  z.object({ type: z.literal("ideas.dropped"), setId: Id }),
   z.object({
     type: z.literal("recipe"),
     mealId: Id,
@@ -45,6 +58,8 @@ export const StreamEvent = z.discriminatedUnion("type", [
     version: z.number().int(),
     newVersion: z.number().int().nonnegative(),
   }),
+  /** Open "Update your kitchen" for a meal just marked done (0013). */
+  z.object({ type: z.literal("update-kitchen"), ...UpdateKitchenPrompt.shape }),
   z.object({ type: z.literal("done"), turnId: Id, assistantMessageId: Id }),
   z.object({ type: z.literal("error"), reason: Msg, changed: z.boolean(), retryable: z.boolean() }),
 ]);

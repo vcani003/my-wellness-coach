@@ -32,6 +32,13 @@ export type ItemTarget = z.infer<typeof ItemTarget>;
 
 export const MealTarget = z.strictObject({ mealId: Id });
 
+/**
+ * Plan or cook: a meal, or `{ideaId}` = the live meal chosen from that idea card. Lets "plan the
+ * omelette" choose and plan in ONE change set (one receipt, one Undo); with no live meal for the
+ * idea → UNKNOWN_TARGET. Put the `meal.choose` first in the same proposal.
+ */
+export const MealStepTarget = z.union([MealTarget, z.strictObject({ ideaId: Id })]);
+
 export const ItemFields = z.object({
   name: fact(z.string().min(1).max(200)),
   quantity: optionalFact(Quantity),
@@ -87,13 +94,13 @@ export const MealChoose = z.object({
 export const MealPlan = z.object({
   ...common,
   type: z.literal("meal.plan"),
-  target: MealTarget,
+  target: MealStepTarget,
 });
 
 export const MealTransition = z.object({
   ...common,
   type: z.literal("meal.transition"),
-  target: MealTarget,
+  target: MealStepTarget,
   to: MealStatus,
   /** After-cooking note; only with `to: "done"` (0013). Stored as said. */
   note: z.string().max(2000).optional(),
@@ -101,6 +108,8 @@ export const MealTransition = z.object({
 
 export const RecipeIngredient = z.object({
   name: z.string().min(1).max(200),
+  /** As written in the recipe ("2", "1 cup"), kept as said (0015). Absent = not given. */
+  amount: z.string().min(1).max(100).optional(),
   itemId: Id.optional(),
   /** An assumed basic such as salt (0019). */
   basic: z.boolean().optional(),

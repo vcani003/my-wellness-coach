@@ -1,0 +1,2 @@
+ALTER TABLE "meal_ideas" ADD COLUMN "position" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+CREATE INDEX "meal_ideas_shown_idx" ON "meal_ideas" USING btree ("kitchen_id","created_by","created_at");

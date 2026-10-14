@@ -486,15 +486,26 @@ function mealTransition(
   return ok(events, summary, refs);
 }
 
+/**
+ * `{mealId}`, or `{ideaId}` = the live meal chosen from that card (a `meal.choose` earlier in the
+ * same proposal has already been applied to `env.kitchen`, so "plan the omelette" is one change set).
+ */
+function stepMeal(target: OperationOf<"meal.plan">["target"], kitchen: KitchenEntities): Meal | undefined {
+  if ("mealId" in target) return kitchen.meals[target.mealId];
+  return Object.values(kitchen.meals).find(
+    (m) => m.ideaId === target.ideaId && m.status !== "done" && m.status !== "cancelled",
+  );
+}
+
 function mealPlan(op: OperationOf<"meal.plan">, env: OpEnv): OpOutcome {
-  const meal = env.kitchen.meals[op.target.mealId];
+  const meal = stepMeal(op.target, env.kitchen);
   if (!meal) return reject("UNKNOWN_TARGET");
   if (meal.status === "planned" || meal.status === "cooking") return noChange();
   return mealTransition(meal, "planned", undefined, env, "MEAL_PLANNED");
 }
 
 function mealTransitionOp(op: OperationOf<"meal.transition">, env: OpEnv): OpOutcome {
-  const meal = env.kitchen.meals[op.target.mealId];
+  const meal = stepMeal(op.target, env.kitchen);
   if (!meal) return reject("UNKNOWN_TARGET");
   if (op.note !== undefined && op.to !== "done") return reject("INVALID_OPERATION");
   if (op.to === meal.status) {
@@ -914,6 +925,7 @@ function targetKeys(op: Operation): string[] {
       return "mealId" in op.target ? [`meal:${op.target.mealId}`] : [];
     case "meal.plan":
     case "meal.transition":
+      return "mealId" in op.target ? [`meal:${op.target.mealId}`] : [];
     case "recipe.save":
     case "checklist.tick":
       return [`meal:${op.target.mealId}`];

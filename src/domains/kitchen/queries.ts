@@ -3,11 +3,14 @@
  * Every function takes a `KitchenScope`, so the membership check can't be skipped.
  * Reads never throw because of bad or missing rows (0018).
  */
-import { and, asc, eq, gt, isNotNull } from "drizzle-orm";
-import { changeSets, kitchens } from "@/db/schema";
+import { and, asc, desc, eq, gt, inArray, isNotNull } from "drizzle-orm";
+import { changeSets, items, kitchens, mealIdeas } from "@/db/schema";
 import type { Queryable } from "@/db/client";
 import { ChangeSetSummary, type ChangeSetSummary as ChangeSetSummaryT } from "@/contracts/apply-result";
 import type { KitchenState, RecipeView, ShoppingItemRow } from "@/contracts/kitchen-state";
+import { MealIdea, type MealIdea as MealIdeaT } from "@/contracts/stream";
+import type { Fact } from "@/contracts/common";
+import { computeAllergenFlags } from "@/shared/profile/allergens";
 import { loadNames } from "@/shared/identity";
 import { listMembers, type KitchenScope } from "@/shared/membership";
 import { loadProfiles } from "@/shared/profile/store";
@@ -105,4 +108,142 @@ export async function getChangesSince(
     else console.error("kitchen.read: dropped a change-set summary", { id: r.id, issues: parsed.error.issues });
   }
   return out;
+}
+
+// ─── Meals: ideas and context (0005, 0009, 0013, 0019) ──────────────────────────────────
+
+/** A stored idea set, in card order. */
+export interface IdeaSet {
+  setId: string;
+  basedOnVersion: number;
+  ideas: MealIdeaT[];
+}
+
+/** Every member's allergies count, whoever is asking (0019); flags are computed on every read. */
+async function memberRestrictions(db: Queryable, kitchenId: string): Promise<Restriction[]> {
+  const members = await listMembers(db, kitchenId);
+  const profiles = await loadProfiles(
+    db,
+    members.map((m) => m.userId),
+  );
+  return Object.values(profiles.restrictions);
+}
+
+/** Current names of these items in this kitchen (unknown IDs are simply absent). */
+export async function itemNames(db: Queryable, kitchenId: string, ids: string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({ id: items.id, name: items.name })
+    .from(items)
+    .where(and(eq(items.kitchenId, kitchenId), inArray(items.id, [...new Set(ids)])));
+  return new Map(rows.map((r) => [r.id, (r.name as Fact<string>).value]));
+}
+
+/**
+ * Allergen flags for an idea card: over its name, the kitchen items it uses (by their names, so
+ * an idea using the kitchen's shrimp is flagged even if its name doesn't say so) and what's missing.
+ */
+export function ideaFlags(
+  idea: { name: string; uses: string[]; missing: string[] },
+  names: Map<string, string>,
+  restrictions: Restriction[],
+) {
+  const used = idea.uses.flatMap((id) => (names.has(id) ? [names.get(id)!] : []));
+  return computeAllergenFlags([idea.name, ...used, ...idea.missing], restrictions);
+}
+
+type IdeaDbRow = typeof mealIdeas.$inferSelect;
+
+async function toIdeaSet(db: Queryable, kitchenId: string, rows: IdeaDbRow[]): Promise<IdeaSet | null> {
+  if (rows.length === 0) return null;
+  const [restrictions, names] = await Promise.all([
+    memberRestrictions(db, kitchenId),
+    itemNames(db, kitchenId, rows.flatMap((r) => r.uses)),
+  ]);
+  const ideas: MealIdeaT[] = [];
+  for (const r of [...rows].sort((a, b) => a.position - b.position)) {
+    const parsed = MealIdea.safeParse({
+      ideaId: r.id,
+      name: r.name,
+      why: r.why,
+      uses: r.uses,
+      missing: r.missing,
+      allergenFlags: ideaFlags(r, names, restrictions),
+    });
+    if (parsed.success) ideas.push(parsed.data);
+    else console.error("kitchen.read: dropped a meal idea", { id: r.id, issues: parsed.error.issues });
+  }
+  return { setId: rows[0].setId, basedOnVersion: rows[0].basedOnVersion, ideas };
+}
+
+/** One stored idea set, in card order, or null. */
+export async function getIdeaSet(db: Queryable, scope: KitchenScope, setId: string): Promise<IdeaSet | null> {
+  const rows = await db
+    .select()
+    .from(mealIdeas)
+    .where(and(eq(mealIdeas.kitchenId, scope.kitchenId), eq(mealIdeas.setId, setId)));
+  return toIdeaSet(db, scope.kitchenId, rows);
+}
+
+/**
+ * The idea cards THIS user was last shown in this kitchen, in card order (0013), so "the second
+ * one" resolves. Chats are private (H2), so another member's cards never count. Null = none yet.
+ */
+export async function getLatestIdeaSet(db: Queryable, scope: KitchenScope): Promise<IdeaSet | null> {
+  const [latest] = await db
+    .select({ setId: mealIdeas.setId })
+    .from(mealIdeas)
+    .where(and(eq(mealIdeas.kitchenId, scope.kitchenId), eq(mealIdeas.createdBy, scope.userId)))
+    .orderBy(desc(mealIdeas.createdAt), desc(mealIdeas.position))
+    .limit(1);
+  return latest ? getIdeaSet(db, scope, latest.setId) : null;
+}
+
+/** What every idea or recipe call needs besides the kitchen (ai.md §2, 0012, 0019). */
+export interface MealProfileContext {
+  /** Members with display names, so an allergy line can say whose it is. */
+  members: { userId: string; name: string }[];
+  /** Every member's allergies and diets, each with the person's own note (0019). */
+  restrictions: Restriction[];
+  /** The asker's lasting preferences only, as said (0012). */
+  preferences: string[];
+}
+
+export async function getMealProfileContext(db: Queryable, scope: KitchenScope): Promise<MealProfileContext> {
+  const members = await listMembers(db, scope.kitchenId);
+  const profiles = await loadProfiles(
+    db,
+    members.map((m) => m.userId),
+  );
+  return {
+    members: members.map((m) => ({ userId: m.userId, name: m.displayName })),
+    restrictions: Object.values(profiles.restrictions),
+    preferences: Object.values(profiles.preferences)
+      .filter((p) => p.userId === scope.userId)
+      .map((p) => p.statement.value),
+  };
+}
+
+/** Whether a proposal ID was already applied in this kitchen (a retried follow-up). */
+export async function wasApplied(db: Queryable, scope: KitchenScope, proposalId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: changeSets.id })
+    .from(changeSets)
+    .where(and(eq(changeSets.kitchenId, scope.kitchenId), eq(changeSets.proposalId, proposalId)))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** One stored idea card's content, for writing its recipe; null if unknown here. */
+export async function getIdea(
+  db: Queryable,
+  scope: KitchenScope,
+  ideaId: string,
+): Promise<{ name: string; why: string; uses: string[]; missing: string[] } | null> {
+  const [row] = await db
+    .select({ name: mealIdeas.name, why: mealIdeas.why, uses: mealIdeas.uses, missing: mealIdeas.missing })
+    .from(mealIdeas)
+    .where(and(eq(mealIdeas.kitchenId, scope.kitchenId), eq(mealIdeas.id, ideaId)))
+    .limit(1);
+  return row ?? null;
 }

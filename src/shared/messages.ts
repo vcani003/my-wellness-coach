@@ -37,6 +37,8 @@ const TEMPLATES: Record<string, string> = {
   PREFERENCE_SAVED: "I'll remember: {statement}",
   PREFERENCE_REMOVED: "Forgot: {statement}",
   UNDONE: "Undid that change",
+  // notes (0010, 0019)
+  BASICS_ASSUMED: "Assumes {basics}. Tell me if you don't have them.",
   // shopping list (0027)
   SHOPPING_ADDED: "Added {name} to the shopping list",
   SHOPPING_ADDED_STORE: "Added {name} to the shopping list ({store})",

@@ -165,7 +165,18 @@
     "SHOPPING_DONE": "Put {count} things from the shopping list in your kitchen: {names}",
     "SHOPPING_REVIEW_QUEUED": "Saved for later in To review: {names}",
     "NOT_ON_LIST": "{name} isn't on the shopping list any more",
-    "NOT_TICKED": "{name} isn't ticked yet"
+    "NOT_TICKED": "{name} isn't ticked yet",
+    "MEAL_CHOSEN": "Chose {title}",
+    "MEAL_PLANNED": "Added {title} to the meal plan",
+    "MEAL_STATUS": "{title}: {status}",
+    "MEAL_NOTE_SAVED": "Saved a note on {title}",
+    "RECIPE_SAVED": "Saved the recipe for {title}",
+    "TICKED": "Ticked {ingredient}",
+    "UNTICKED": "Unticked {ingredient}",
+    "REVIEW_QUEUED": "Saved for later in To review",
+    "REVIEW_RESOLVED": "Done with To review",
+    "INVALID_TRANSITION": "{title} can't go from {from} to {to}",
+    "BASICS_ASSUMED": "Assumes {basics}. Tell me if you don't have them."
   },
   "msgPlain": {
     "ITEM_MOVED": "{name} moved to the {location}",

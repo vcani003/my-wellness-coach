@@ -12,24 +12,24 @@
  */
 import { and, asc, eq, gt, inArray, isNotNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { changeSets, kitchens, mealIdeas, users } from "@/db/schema";
+import { changeSets, kitchens, mealIdeas, meals, users } from "@/db/schema";
 import type { Db, Queryable } from "@/db/client";
 import { ApplyResult, type ApplyResult as ApplyResultT } from "@/contracts/apply-result";
 import type { Msg, Quantity, ShoppingSource } from "@/contracts/common";
 import type { Operation } from "@/contracts/operations";
 import { ProposedChange } from "@/contracts/proposed-change";
-import { MealIdea } from "@/contracts/stream";
+import type { MealIdea, UpdateKitchenPrompt } from "@/contracts/stream";
+import { standardName } from "@/shared/text";
 import { msg } from "@/shared/messages";
 import { listMembers, type KitchenScope } from "@/shared/membership";
 import { appendEvents, eventExistsInStreams, loadChangeSetEvents, loadStream } from "@/shared/events/store";
 import { kitchenStream, streamKind, userStream } from "@/shared/events/types";
 import { loadProfiles, persistProfileEntities, replaceProfiles } from "@/shared/profile/store";
 import { emptyProfileState, getProfileEntity, replayProfile } from "@/shared/profile/state";
-import { computeAllergenFlags } from "@/shared/profile/allergens";
 import { getKitchenEntity, replay } from "./state";
 import { loadKitchenEntities, persistKitchenEntities, replaceKitchenProjections } from "./store";
 import { planProposal, touchedKeys, type RevertPlan } from "./validate";
-import { readKitchenState } from "./queries";
+import { getRecipe, ideaFlags, itemNames, readKitchenState } from "./queries";
 
 export type ApplyOutcome =
   | { ok: true; result: ApplyResultT }
@@ -360,17 +360,142 @@ export function resolveReview(
   ]);
 }
 
+// ─── Meal buttons (0005, 0013) ────────────────────────────────────────────────────────
+// Same one write path as chat. `tapId` is the idempotency key, so a double tap is harmless.
+
+/** Choose an idea card (creates the meal, status "chosen") or re-choose a live meal. */
+export function chooseMealTap(db: Db, scope: KitchenScope, args: TapArgs & ({ ideaId: string } | { mealId: string })) {
+  const target = "ideaId" in args ? { ideaId: args.ideaId } : { mealId: args.mealId };
+  return tap(db, scope, args, "meal.choose", [{ opId: "choose", type: "meal.choose", target }]);
+}
+
+export function planMeal(db: Db, scope: KitchenScope, args: TapArgs & { mealId: string }) {
+  return tap(db, scope, args, "meal.plan", [{ opId: "plan", type: "meal.plan", target: { mealId: args.mealId } }]);
+}
+
+/**
+ * Start cooking, cancel, or "I made it" (done). Done records the recipe's in-kitchen ingredients
+ * as used in this meal, amount unknown (0013); the refs of kind `item` are what "Update your
+ * kitchen" asks about (see `updateKitchenPrompt`).
+ */
+export function moveMeal(db: Db, scope: KitchenScope, args: TapArgs & { mealId: string; to: "cooking" | "cancelled" | "done" }) {
+  return tap(db, scope, args, `meal.${args.to}`, [
+    { opId: args.to, type: "meal.transition", target: { mealId: args.mealId }, to: args.to },
+  ]);
+}
+
+/** Shared recipe-checklist ticks (M6, 0013): the other member sees who ticked. */
+export function tickIngredient(db: Db, scope: KitchenScope, args: TapArgs & { mealId: string; ingredient: string; ticked: boolean }) {
+  return tap(db, scope, args, args.ticked ? "checklist.tick" : "checklist.untick", [
+    { opId: "tick", type: "checklist.tick", target: { mealId: args.mealId }, ingredient: args.ingredient, ticked: args.ticked },
+  ]);
+}
+
+export type AfterCookingStock = "have" | "low" | "out";
+
+/**
+ * "Update your kitchen" → Done (0013, M8): Running low / Out become `item.use` with that stock;
+ * Still have some changes nothing. The optional note is saved on the meal as said. From a To
+ * review card, pass its `reviewId` and the card closes in the same change set (one Undo for all).
+ */
+export function updateKitchenAfterCooking(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { mealId: string; items: { itemId: string; stock: AfterCookingStock }[]; note?: string; reviewId?: string },
+) {
+  const note = args.note?.trim();
+  const ops: Operation[] = [
+    ...(note ? [{ opId: "note", type: "meal.transition" as const, target: { mealId: args.mealId }, to: "done" as const, note }] : []),
+    ...args.items
+      .filter((i) => i.stock !== "have")
+      .map((i, n) => ({
+        opId: `use-${n + 1}`,
+        type: "item.use" as const,
+        target: { itemId: i.itemId },
+        fields: { stock: said(i.stock as "low" | "out") },
+      })),
+    ...(args.reviewId
+      ? [{ opId: "resolve", type: "review.resolve" as const, target: { reviewId: args.reviewId }, outcome: "done" as const }]
+      : []),
+  ];
+  return tap(db, scope, args, "after-cooking.done", ops);
+}
+
+/** "Do later" on "Update your kitchen": the card waits in To review (0013). */
+export function queueAfterCooking(db: Db, scope: KitchenScope, args: TapArgs & { mealId: string; items: { itemId: string; name: string }[] }) {
+  return tap(db, scope, args, "review.queue", [
+    { opId: "queue", type: "review.queue", kind: "after-cooking", mealId: args.mealId, items: args.items },
+  ]);
+}
+
+/**
+ * "Add Need items to shopping list" (0027): the recipe's ingredients that aren't in the kitchen
+ * and aren't assumed basics, merged into the list like any add (source `recipe`). `names` limits
+ * it to the ones chosen on screen. No recipe → UNKNOWN_TARGET.
+ */
+export async function addRecipeNeedsToShoppingList(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { mealId: string; names?: string[] },
+): Promise<ApplyOutcome> {
+  try {
+    const recipe = await getRecipe(db, scope, args.mealId);
+    if (!recipe) return { ok: false, error: { reason: msg("UNKNOWN_TARGET"), retryable: false } };
+    const chosen = args.names ? new Set(args.names.map(standardName)) : null;
+    const needs = recipe.ingredients
+      .filter((i) => !i.item && !i.basic)
+      .filter((i) => !chosen || chosen.has(standardName(i.name)))
+      .slice(0, 50);
+    return addShoppingItems(db, scope, { ...args, source: "recipe", items: needs.map((i) => ({ name: i.name })) });
+  } catch (error) {
+    console.error("kitchen.apply: couldn't add recipe needs", { error });
+    return { ok: false, error: { reason: msg("SAVE_FAILED"), retryable: true } };
+  }
+}
+
+/**
+ * What "Update your kitchen" asks about after a meal is marked done: the kitchen items the done
+ * transition recorded as used (its `item` refs), with their current names. Null if `opId` didn't
+ * apply. Shared by chat (the `update-kitchen` stream event) and the "I made it" button.
+ */
+export async function updateKitchenPrompt(
+  db: Queryable,
+  scope: KitchenScope,
+  result: ApplyResultT,
+  mealId: string,
+): Promise<UpdateKitchenPrompt | null> {
+  const op = result.applied.find((a) => a.refs.some((r) => r.kind === "meal" && r.id === mealId) && a.summary.code === "MEAL_STATUS" && a.summary.params.status === "done");
+  if (!op) return null;
+  const [meal] = await db
+    .select({ title: meals.title })
+    .from(meals)
+    .where(and(eq(meals.kitchenId, scope.kitchenId), eq(meals.id, mealId)))
+    .limit(1);
+  const ids = op.refs.filter((r) => r.kind === "item").map((r) => r.id);
+  const names = await itemNames(db, scope.kitchenId, ids);
+  return {
+    mealId,
+    title: meal?.title ?? "",
+    items: ids.flatMap((id) => (names.has(id) ? [{ itemId: id, name: names.get(id)! }] : [])),
+  };
+}
+
 export interface NewMealIdea {
   ideaId?: string;
   name: string;
   why: string;
+  /** Kitchen item IDs; IDs that aren't in this kitchen are dropped. */
   uses: string[];
   missing: string[];
+  /** Card order within the set. Default: its index in `ideas`. */
+  position?: number;
 }
 
 /**
- * Store a set of meal ideas so "Choose" / "Add that" points at a real idea (0005). Returns the
- * ideas as stream `idea` payloads, with allergen flags computed from current profiles.
+ * Store a set of meal ideas so "Choose" / "the second one" / "Add that" points at a real idea
+ * (0005, 0013). Returns the ideas as stream `idea` payloads, with allergen flags computed from
+ * current profiles over the name, the kitchen items used (by name) and the missing ones (0019).
+ * Ideas can be recorded one at a time as they stream: pass the same `setId` and each `position`.
  */
 export async function recordMealIdeas(
   db: Queryable,
@@ -385,19 +510,22 @@ export async function recordMealIdeas(
     members.map((m) => m.userId),
   );
   const restrictions = Object.values(profiles.restrictions);
+  const names = await itemNames(db, scope.kitchenId, set.ideas.flatMap((i) => i.uses));
   const out: MealIdea[] = [];
-  for (const idea of set.ideas) {
+  for (const [index, idea] of set.ideas.entries()) {
     const ideaId = idea.ideaId ?? randomUUID();
+    const uses = [...new Set(idea.uses)].filter((id) => names.has(id));
     await db.insert(mealIdeas).values({
       id: ideaId,
       kitchenId: scope.kitchenId,
       setId,
       name: idea.name,
       why: idea.why,
-      uses: idea.uses,
+      uses,
       missing: idea.missing,
       basedOnVersion: set.basedOnVersion,
       assistantMessageId: set.assistantMessageId ?? null,
+      position: idea.position ?? index,
       createdAt: now,
       createdBy: scope.userId,
     });
@@ -405,12 +533,21 @@ export async function recordMealIdeas(
       ideaId,
       name: idea.name,
       why: idea.why,
-      uses: idea.uses,
+      uses,
       missing: idea.missing,
-      allergenFlags: computeAllergenFlags([idea.name, ...idea.missing], restrictions),
+      allergenFlags: ideaFlags({ name: idea.name, uses, missing: idea.missing }, names, restrictions),
     });
   }
   return { setId, ideas: out };
+}
+
+/**
+ * Remove an idea set that failed part-way (a mid-stream refusal, ai.md): its cards can no longer
+ * be chosen. Ideas aren't kitchen events, so this is a plain delete. A meal already chosen from
+ * one keeps working (it doesn't need the idea row).
+ */
+export async function dropIdeaSet(db: Queryable, scope: KitchenScope, setId: string): Promise<void> {
+  await db.delete(mealIdeas).where(and(eq(mealIdeas.kitchenId, scope.kitchenId), eq(mealIdeas.setId, setId)));
 }
 
 /**

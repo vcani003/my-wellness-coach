@@ -339,8 +339,9 @@ describe("recipes", () => {
       source: "ai",
       basicsAssumed: ["salt", "olive oil"],
     });
-    expect(result.operation.ingredients[0]).toEqual({ name: "eggs", itemId: "item-3" });
-    expect(result.operation.ingredients[3]).toEqual({ name: "salt", basic: true });
+    // Amounts are kept as written (RecipeIngredient.amount, backend §6).
+    expect(result.operation.ingredients[0]).toEqual({ name: "eggs", amount: "4", itemId: "item-3" });
+    expect(result.operation.ingredients[3]).toEqual({ name: "salt", amount: "a pinch", basic: true });
     expect(result.operation.text).toContain("- 4 eggs");
     expect(result.operation).not.toHaveProperty("evidence"); // a Choose tap, not chat
   });

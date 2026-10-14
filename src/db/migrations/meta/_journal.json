@@ -43,6 +43,13 @@
       "when": 1791994003394,
       "tag": "0005_chat_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791995541272,
+      "tag": "0006_meal_idea_position",
+      "breakpoints": true
     }
   ]
 }

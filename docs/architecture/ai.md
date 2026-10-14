@@ -264,3 +264,5 @@ eval/            cases · runner · matchers
 6. **`RecipeIngredient.amount?: string`** (and on `RecipeView`): amounts are only in `text` for now.
 7. **Message code `BASICS_ASSUMED`**: "Assumes {basics}. Tell me if you don't have them." Add it to `messages.ts` / `en.json`.
 8. Optional: `meal.plan` / `meal.transition` with `{ideaId}`, or `meal.choose {title}` for a dish named in chat that isn't on a card. This would replace the `meal-step` follow-up and the route through ideas.
+
+**Backend status (2026-10-14):** 1–7 built (backend-data.md §6 "Meal follow-ups" and changelog). For 8, `meal.plan` / `meal.transition` now take `{ideaId}`; the turn folds a `meal-step` follow-up into the main proposal with it, so the follow-up shape is unchanged. `meal.choose {title}` isn't built. `to-recipe.ts` now passes each ingredient's `amount` into `recipe.save`.
