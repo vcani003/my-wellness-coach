@@ -1,20 +1,21 @@
 /**
  * Who is making this request, and in which kitchen.
  *
- * MILESTONE 2 STAND-IN: there's no sign-in yet (the sign-in milestone replaces this file's body
- * with Better Auth). In local development the "acting as" cookie picks Vero or Levi in the
- * `demo` kitchen; anywhere else there is no session, so every route refuses.
+ * Identity comes from the backend (`getCurrentUser`): the interim access-code session in
+ * production, or the dev-only "acting as" switch locally (DEV_ACTING_AS, e.g. `demo-vero`).
+ * The kitchen is the first one the user is a member of (MVP 1: one kitchen per person, 0006).
+ * Email sign-in replaces the access code later; this file's shape stays.
  */
 import "server-only";
-import { cookies } from "next/headers";
 import { connection } from "next/server";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { Db } from "@/db/client";
-import { kitchens } from "@/db/schema";
+import { kitchens, memberships } from "@/db/schema";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { listMembers, requireMember, type KitchenScope, type Member } from "@/shared/membership";
 import { scenarioKitchenId, seedScenario } from "../../scripts/scenarios";
 import { getDb } from "./db";
-import { DEV_ACTING_AS_COOKIE, isDevActingAsOn } from "./dev-mode";
+import { isDevActingAsOn } from "./dev-mode";
 
 export interface Session {
   userId: string;
@@ -53,14 +54,22 @@ export async function getSession(): Promise<Session | null> {
   // Per-request, never prerendered (Cache Components): wait for the real request before any
   // database work. Cookies alone aren't enough, because runtime prefetching can see cookies.
   await connection();
-  const wanted = (await cookies()).get(DEV_ACTING_AS_COOKIE)?.value;
-  if (!isDevActingAsOn()) return null;
+  const devActingAs = isDevActingAsOn();
   const db = await getDb();
-  await ensureDemoKitchen(db);
-  const members = await listMembers(db, DEV_KITCHEN_ID);
-  if (members.length === 0) return null;
-  const me = members.find((m) => m.userId === wanted) ?? members[0];
-  return { userId: me.userId, displayName: me.displayName, kitchenId: DEV_KITCHEN_ID, members, devActingAs: true };
+  if (devActingAs) await ensureDemoKitchen(db);
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const [membership] = await db
+    .select({ kitchenId: memberships.kitchenId })
+    .from(memberships)
+    .where(eq(memberships.userId, user.id))
+    .orderBy(asc(memberships.createdAt))
+    .limit(1);
+  if (!membership) return null;
+  const members = await listMembers(db, membership.kitchenId);
+  const me = members.find((m) => m.userId === user.id);
+  if (!me) return null;
+  return { userId: me.userId, displayName: me.displayName, kitchenId: membership.kitchenId, members, devActingAs };
 }
 
 /** The membership-checked scope for a kitchen, or null (not signed in / not a member). */

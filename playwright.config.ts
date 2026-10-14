@@ -35,6 +35,6 @@ export default defineConfig({
     url: `http://localhost:${PORT}`,
     reuseExistingServer: false,
     timeout: 180_000,
-    env: { PGLITE_DIR: ".data/pglite-e2e", NEXT_DIST_DIR: ".next-e2e", NEXT_TELEMETRY_DISABLED: "1" },
+    env: { DEV_ACTING_AS: "demo-vero", PGLITE_DIR: ".data/pglite-e2e", NEXT_DIST_DIR: ".next-e2e", NEXT_TELEMETRY_DISABLED: "1" },
   },
 });

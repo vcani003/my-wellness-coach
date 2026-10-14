@@ -7,8 +7,8 @@
     "loading": "Opening your kitchen…",
     "signedInAs": "Signed in as {name}",
     "noSession": {
-      "title": "Sign-in isn't built yet",
-      "body": "This build only runs locally, with the developer “acting as” switch."
+      "title": "You're signed out",
+      "body": "Open the unlock page and enter your access code to continue."
     },
     "errorPage": {
       "title": "Something didn't load",
@@ -138,5 +138,19 @@
   },
   "msgPlain": {
     "ITEM_MOVED": "{name} moved to the {location}"
+  },
+  "unlock": {
+    "title": "Kitchen",
+    "intro": "Enter your access code to continue. You'll stay signed in on this device.",
+    "label": "Access code",
+    "submit": "Unlock",
+    "checking": "Checking…",
+    "errors": {
+      "empty": "Enter your access code.",
+      "failed": "Something went wrong. Please try again.",
+      "tooMany": "Too many tries. Please wait {minutes} min and try again.",
+      "notConfigured": "Access codes aren't set up on this server yet.",
+      "wrong": "That code didn't work. Check it and try again."
+    }
   }
 }

@@ -289,3 +289,20 @@ export const profilePreferences = pgTable(
   },
   (t) => [index("profile_preferences_user_idx").on(t.userId)],
 );
+
+// ─── Shared: rate limits ──────────────────────────────────────────────────────────────
+
+/**
+ * Fixed-window counters (backend-data.md §7): chat messages per user per hour and per day, and
+ * access-code attempts per IP and overall. `key` names the limit and who it's for (an IP is
+ * stored only as a keyed hash). Old windows are pruned; nothing here is history.
+ */
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text("key").notNull(),
+    windowStart: ts("window_start").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.key, t.windowStart] }), index("rate_limits_window_idx").on(t.windowStart)],
+);

@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { getInterpreter, handleChatTurn } from "@/ai";
 import { Id } from "@/contracts/common";
+import { checkChatRateLimit } from "@/lib/rate-limit";
 import { getScope } from "@/server/session";
 import { isSameOrigin, jsonError } from "@/server/http";
 
@@ -23,6 +24,15 @@ export async function POST(request: Request): Promise<Response> {
 
   const ctx = await getScope(parsed.data.kitchenId);
   if (!ctx) return jsonError(403);
+
+  // Per-person message limits protect the AI spend cap (0020, backend-data.md §7).
+  const limit = await checkChatRateLimit(ctx.db, ctx.session.userId);
+  if (!limit.ok) {
+    return Response.json(
+      { error: limit.reason },
+      { status: 429, headers: { "retry-after": String(limit.retryAfterSeconds), "cache-control": "no-store" } },
+    );
+  }
 
   const events = handleChatTurn(
     { db: ctx.db, scope: ctx.scope, interpreter: getInterpreter({ db: ctx.db, scope: ctx.scope }) },

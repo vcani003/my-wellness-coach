@@ -10,7 +10,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, request, test, type Page } from "@playwright/test";
 
 const KITCHEN_ID = "test-kitchen-demo";
-const COOKIE = "kitchen-dev-acting-as";
+const COOKIE = "dev_acting_as"; // DEV_ACTING_AS_COOKIE (src/lib/auth/current-user.ts)
 
 async function resetAndActAs(page: Page, baseURL: string, userId: "demo-vero" | "demo-levi") {
   const res = await page.request.post("/api/dev/reset", { headers: { origin: baseURL } });

@@ -38,7 +38,7 @@ Each environment has its own Neon project, Anthropic workspace, key and spend li
 
 **Not confirmed:**
 - **Neon storage:** listed as both 0.5 GB and 1 GB. Either is ample.
-- **Neon driver:** Neon's HTTP driver can't run interactive transactions, which the write path needs (lock, then write). Use its WebSocket `Pool` driver (or `pg`) with Drizzle. Check when S2 lands; only `src/db/client.ts` changes.
+- **Neon driver (built 2026-10-14, not yet run against a real Neon database):** Neon's HTTP driver can't run interactive transactions, which the write path needs (lock, then write). `src/db/client.ts` uses its **WebSocket `Pool` driver** (`@neondatabase/serverless` 1.2.0 + `drizzle-orm/neon-serverless`) when `DATABASE_URL` is set, and PGlite otherwise. Drizzle checks out one pooled connection for each `db.transaction`, so `SELECT … FOR UPDATE` holds until commit. Node 22+ has a built-in WebSocket, so no `ws` package is needed on Node 24.
 
 ## 3. Event model (spec §4, decisions 0007 and 0011)
 Every change is saved as a permanent **event** (a record of something that happened). The current kitchen is computed from the events. Nothing is overwritten or deleted, apart from the privacy exceptions in §7.
@@ -198,6 +198,14 @@ The stream is one JSON object per line (NDJSON), checked with the shared Zod sch
 ## 7. Security and privacy
 - **Per-kitchen authorization:** all data access goes through `requireMember(user, kitchen)`. Data functions only accept the scope object it returns, so forgetting the check fails at compile time. Tests also try to reach another kitchen and must fail. Postgres row-level security (rules enforced inside the database) can be added later as a second lock.
 - **Invite-only:** an email allowlist, `disableSignUp`, and a database cap of **4 accounts** (0006, 0021). Login links and codes expire after 5 minutes and work once.
+- **Interim access-code gate (2026-10-14, until email sign-in; 0026's first real test).** A temporary measure so Vero can use a deployed app before Better Auth and Resend exist. Remove it when sign-in lands.
+  - `ACCESS_CODES=vero=<code>,levi=<code>`: one personal code per real user (at least 12 characters). The name is the user ID created by `npm run db:bootstrap`. Codes are compared in constant time.
+  - `src/proxy.ts` (Next.js 16's renamed Middleware) protects every page and API route except `/unlock` and static assets. Pages without a session go to `/unlock`; API routes get 401. It fails closed (500) if the environment is invalid.
+  - Unlocking sets a **signed cookie** (HMAC with `SESSION_SECRET`; httpOnly, Secure, SameSite=Lax, `__Host-` in production). It's a **rolling 1-year session** (0017), re-issued at most once a day while in use. `getCurrentUser()` re-checks the cookie in every handler rather than trusting the proxy.
+  - **Revoking:** change one person's code to sign out only them; change `SESSION_SECRET` to sign everyone out. There's no "Sign out everywhere" button until Better Auth.
+  - **Rate limits** on attempts (Postgres counters): 5 per 15 minutes per IP (stored as a keyed hash, not the address), and 50 an hour overall. Every attempt counts, right or wrong. The overall cap means a flood could stop *new* unlocks for up to an hour; existing sessions are unaffected.
+  - **Dev-only "acting as":** `DEV_ACTING_AS=<userId>` skips the gate locally (a `dev_acting_as` cookie can pick another user). The server refuses to start in production if it's set.
+- **Chat rate limit (built):** `checkChatRateLimit(db, userId)` in `src/lib/rate-limit.ts`, 60 an hour and 300 a day per user, all or nothing (a refused message counts against neither window). The chat route calls it before interpreting and, when refused, sends `error {reason: RATE_LIMITED, changed: false, retryable: true}`.
 - **Tester agents (0021):** two `isTest` accounts that the database restricts to `isTest` kitchens, on **staging** only. A staging-only sign-in route serves those accounts, and production refuses to start if the route is enabled.
 - **AI spend:**
   - an Anthropic spend limit per workspace: $30 for production and $10 for staging, the $40 cap (0020); target about $20
@@ -246,8 +254,9 @@ No accounts or Docker needed: the database is **PGlite**, an embedded Postgres t
 | Step | Command |
 |---|---|
 | Install (Node 24+; npm) | `npm install` |
-| Optional settings | `cp .env.example .env.local` (only `PGLITE_DIR`; leave `DATABASE_URL` empty) |
+| Optional settings | `cp .env.example .env.local`. Leave `DATABASE_URL` empty. Set `DEV_ACTING_AS=vero` (or `tester-1`) to skip the access-code gate, or set `SESSION_SECRET` + `ACCESS_CODES` to try it. With neither, every page goes to `/unlock`, which says codes aren't set up. |
 | Create or update the local database | `npm run db:migrate` |
+| Create the real users and the Home kitchen | `npm run db:bootstrap` (safe to run again) |
 | Load a test kitchen (resets it first) | `npm run db:seed -- single` (add `--after-shopping` for journey step 1 done) or `npm run db:seed -- household` |
 | Checks | `npm run typecheck` · `npm run lint` · `npm test` |
 | After changing `src/db/schema.ts` | `npm run db:generate` (writes SQL to `src/db/migrations`; commit it) |
@@ -255,8 +264,35 @@ No accounts or Docker needed: the database is **PGlite**, an embedded Postgres t
 
 - Tests open their own in-memory PGlite per test file, so they never touch `.data/`.
 - To start over locally, delete `.data/pglite`.
-- The seed and migrate scripts refuse to run when `DATABASE_URL` is set or `NODE_ENV=production`.
+- `db:migrate` and `db:bootstrap` target Neon when `DATABASE_URL` is set (in the shell or `.env.local`), otherwise PGlite. `db:seed` is local only: it refuses to run when `DATABASE_URL` is set or `NODE_ENV=production`.
 - Seeding resets only `isTest` kitchens and `isTest` users (`tester-1`, `tester-2`). Resetting a scenario also clears its testers' profiles.
+- PGlite allows one process per folder: stop `npm run dev` before running a script against the same `.data/pglite`.
+
+### Deploying to Vercel (production, Vero and Levi)
+**Environment variables** (Vercel → Project → Settings → Environment Variables, scope *Production*). Names and comments are in `.env.example`; never commit values.
+
+| Name | Value |
+|---|---|
+| `DATABASE_URL` | The Neon connection string (Neon → Connect; the pooled one is fine), with `sslmode=require` |
+| `SESSION_SECRET` | At least 32 random characters: `openssl rand -base64 48` |
+| `ACCESS_CODES` | `vero=<code>` today; `vero=<code>,levi=<code>` once Levi joins. Codes from `openssl rand -hex 8` (at least 12 characters, no commas) |
+| `AI_MODE` | `fake` until the real interpreter is merged, then `real` |
+| `ANTHROPIC_API_KEY` | Required only when `AI_MODE=real` |
+
+Don't set `DEV_ACTING_AS` or `PGLITE_DIR`. The server refuses to start if a required variable is missing or the dev switch is set, and the log names the variable (never its value).
+
+**Steps, in order:**
+1. **Migrate and bootstrap from your laptop**, pointing at Neon for one command each (the value stays in your shell, not in a file):
+   `DATABASE_URL='<neon url>' npm run db:migrate`, then `DATABASE_URL='<neon url>' npm run db:bootstrap`. Both are safe to re-run. Re-run `db:migrate` after any deploy that adds a migration, **before** that deploy goes live.
+2. **Deploy** (import the repo in Vercel; framework Next.js; Node 24).
+3. **Check after deploying:**
+   - Opening the site redirects to `/unlock`, and `/api/anything` returns 401 without a cookie.
+   - A wrong code says "didn't work"; your code lands on the home page and stays signed in after closing the browser.
+   - Vercel → Logs show no "Invalid environment variables" or `[unlock]` errors.
+   - After 6 wrong tries from one phone, it says "Too many tries" (optional; it clears in 15 minutes).
+
+**Adding Levi:** add `levi=<code>` to `ACCESS_CODES` and redeploy (Vercel applies env changes on the next deploy). His user and membership already exist from the bootstrap; re-running it is harmless.
+**Signing someone out:** change their code (just them) or `SESSION_SECRET` (everyone), then redeploy.
 
 ## Questions for Vero
 Tracked in `OPEN-QUESTIONS.md`. H2 and H3: answered → 0017. B14: answered → 0021. Still open: **D1** (Rec: a deleted member's items stay, credited to "a former member").
@@ -311,3 +347,4 @@ Tracked in `OPEN-QUESTIONS.md`. H2 and H3: answered → 0017. B14: answered → 
 | Stream | `applied` nests the ApplyResult under `result`. |
 | Allergen words | A small starter list in `src/shared/profile/allergens.ts`; the AI specialist owns the full list and should replace it there (one list, not two). |
 | Not built yet | `getEvents(userId, …)` from §5; the 4-account cap and Better Auth tables (sign-in milestone); route handlers. |
+| **Deployable for Vero (2026-10-14, 0026)** | Neon via the WebSocket Pool driver when `DATABASE_URL` is set, PGlite otherwise (§2); `db:migrate` works on both. **Interim access-code gate** in place of email sign-in for now (§7): `src/proxy.ts`, `/unlock`, signed 1-year rolling cookie, `getCurrentUser()` / `requireCurrentUser()` in `src/lib/auth/current-user.ts`. New `rate_limits` table (migration 0002) for unlock attempts and `checkChatRateLimit` (new message code `RATE_LIMITED`). `npm run db:bootstrap` creates users `vero`, `levi` and the shared kitchen `home` ("Home"). Production env validation at start (`src/instrumentation.ts`); new env vars `SESSION_SECRET`, `ACCESS_CODES`, `AI_MODE`, `ANTHROPIC_API_KEY`, `DEV_ACTING_AS`. Deploy steps in §10. |

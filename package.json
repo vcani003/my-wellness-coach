@@ -18,12 +18,14 @@
     "db:migrate": "tsx scripts/db-migrate.ts",
     "db:seed": "tsx scripts/db-seed.ts",
     "test:e2e": "playwright test",
-    "eval": "vitest run --config vitest.eval.config.ts"
+    "eval": "vitest run --config vitest.eval.config.ts",
+    "db:bootstrap": "tsx scripts/db-bootstrap.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.133.0",
     "@base-ui/react": "1.9.0",
     "@electric-sql/pglite": "0.5.9",
+    "@neondatabase/serverless": "1.2.0",
     "@phosphor-icons/react": "2.1.10",
     "@tailwindcss/postcss": "4.3.3",
     "drizzle-orm": "0.45.4",
