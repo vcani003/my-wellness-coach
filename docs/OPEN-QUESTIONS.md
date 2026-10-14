@@ -11,6 +11,12 @@
 
 ## Outstanding
 
+### D2. ⚪ If someone deletes their data, can they come back?
+*(From the Backend specialist, building Settings)* After deleting, their old access code stops working, with a clear message. That way the app never quietly recreates a deleted account.
+**Rec:** yes, as a **fresh start**. You remove their old code and add a new one, and they come back as a new member with an empty profile. Their old changes in the kitchen still show "a former member".
+
+> Answer:
+
 ### AI9. 🟡 Does a "Low" item bring allergen dishes back into meal ideas?
 Decision 0025 lets a *use-it-up* allergen item (say, defrosted shrimp) still appear in unprompted ideas, flagged. "Use it up" currently also counts **Low**. But Low means *running out*, not *going off*, so a "fish sauce is low" note could bring seafood dishes back for Levi.
 **Rec (AI):** no. Only items that need using before they spoil count (the oldest batch, defrosted, sitting long). Low still nudges ordinary ideas, just not allergen ones.
