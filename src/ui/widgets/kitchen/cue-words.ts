@@ -7,6 +7,7 @@
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useMemo } from "react";
 import type { Msg } from "@/contracts/common";
+import { localizeParams } from "@/ui/chat/format-msg";
 import { actorName, sentenceCase } from "@/ui/fallbacks";
 import type { CueEntry } from "@/ui/sync/shared-cues";
 
@@ -27,9 +28,7 @@ export function useCueWords() {
       const params: Record<string, string | number> = {};
       for (const [k, v] of Object.entries(m.params)) params[k] = typeof v === "boolean" ? String(v) : v;
       if (typeof params.name === "string" && !params.name.trim()) params.name = t("fallback.unknownItem");
-      if (typeof params.location === "string" && t.has(`location.${params.location}`)) {
-        params.location = t(`location.${params.location}`);
-      }
+      localizeParams(params, t);
       const key = `kitchen.since.did.${m.code}`;
       return t.has(key) ? t(key, params) : t("kitchen.since.did.other");
     },

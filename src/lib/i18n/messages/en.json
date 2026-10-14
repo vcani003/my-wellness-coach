@@ -82,6 +82,8 @@
         "ITEM_BATCH_ADDED": "added more {name}",
         "ITEM_UPDATED": "updated the {name}",
         "ITEM_MOVED": "moved the {name} to the {location}",
+        "ITEM_CATEGORY": "put the {name} under {categoryName}",
+        "CATEGORY_REMEMBERED": "filed {name} under {categoryName} for next time",
         "ITEM_USED": "used some of the {name}",
         "ITEM_USED_RECORDED": "used {name}",
         "ITEM_LOW": "marked the {name} running low",
@@ -112,7 +114,38 @@
       "update": "Update your kitchen · {from}",
       "skipped": "Skipped. Your list is as it was.",
       "summary": "{count} to review"
+    },
+    "seeAll": {
+      "link": "See all ({count})",
+      "searchLink": "Search your kitchen",
+      "pageTitle": "Your kitchen",
+      "heading": "Your kitchen",
+      "back": "Back",
+      "searchLabel": "Search your kitchen",
+      "searchPlaceholder": "Search your kitchen",
+      "clear": "Clear search",
+      "viewLabel": "Group items",
+      "byPlace": "By place",
+      "byType": "By type",
+      "sortedHint": "Kitchen sorted these itself. To move one, tell me in chat, like “fish sauce goes under sauces”.",
+      "matches": "{count, plural, one {# match} other {# matches}}",
+      "noMatches": "No matches for “{query}”",
+      "noMatchesHint": "Try another word, or ask Kitchen in chat."
     }
+  },
+  "category": {
+    "produce": "Produce",
+    "meat_seafood": "Meat & seafood",
+    "dairy_eggs": "Dairy & eggs",
+    "rice_noodles_grains": "Rice, noodles & grains",
+    "sauces_condiments": "Sauces & condiments",
+    "spices_seasonings": "Spices & seasonings",
+    "canned_jarred": "Canned & jarred",
+    "baking": "Baking",
+    "snacks_sweets": "Snacks & sweets",
+    "drinks": "Drinks",
+    "leftovers": "Leftovers",
+    "other": "Other"
   },
   "chat": {
     "label": "Chat",
@@ -190,6 +223,8 @@
     "ITEM_RESTOCKED": "Added {name} (back in stock)",
     "ITEM_UPDATED": "Updated {name}",
     "ITEM_MOVED": "{name} → {location}",
+    "ITEM_CATEGORY": "{name} → {categoryName}",
+    "CATEGORY_REMEMBERED": "I'll put {name} under {categoryName} from now on",
     "ITEM_USED": "Used {name}",
     "ITEM_LOW": "{name}: running low",
     "ITEM_OUT": "{name}: out",
@@ -248,7 +283,8 @@
   },
   "msgPlain": {
     "ITEM_MOVED": "{name} moved to the {location}",
-    "SHOPPING_STORE": "{name} moved to {store} on your list"
+    "SHOPPING_STORE": "{name} moved to {store} on your list",
+    "ITEM_CATEGORY": "{name} now under {categoryName}"
   },
   "msgIcu": {
     "ITEM_BATCH_USED_UP": "{name}: finished a batch ({left, plural, one {# batch left} other {# batches left}})",

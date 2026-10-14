@@ -20,3 +20,4 @@ export { CloudSlash as NotSyncedIcon } from "@phosphor-icons/react/dist/csr/Clou
 export { X as CloseIcon } from "@phosphor-icons/react/dist/csr/X";
 export { Shield as AllergyIcon } from "@phosphor-icons/react/dist/csr/Shield";
 export { ArrowLeft as BackIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+export { MagnifyingGlass as SearchIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";

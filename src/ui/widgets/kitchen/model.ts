@@ -1,5 +1,9 @@
-/** Pure helpers for the Kitchen widget (ux.md §3, decision 0011). */
+/** Pure helpers for the Kitchen widget and See all (ux.md §3, decision 0011, CAT1). */
+import { ITEM_CATEGORIES, type ItemCategory } from "@/contracts/common";
 import type { ItemRow } from "@/contracts/kitchen-state";
+import { guessCategory } from "@/shared/item-category";
+import { searchItems } from "@/shared/item-search";
+import { foldText, singularWord } from "@/shared/text";
 
 export const GROUP_ORDER = ["fridge", "freezer", "pantry", "unknown"] as const;
 export type GroupKey = (typeof GROUP_ORDER)[number];
@@ -47,4 +51,85 @@ export function isDefrosted(item: ItemRow): boolean {
   const batches = batchesOf(item);
   if (batches.length === 0) return Boolean(item.defrostedOn) && !item.frozen?.value;
   return batches.some((b) => Boolean(b.defrostedOn) && !b.frozen?.value);
+}
+
+/**
+ * "By type" (CAT1 Rec): the 12 categories in their fixed order (`ITEM_CATEGORIES`), empty groups
+ * left out, most recently changed first inside each. An item from an older cached state without a
+ * category gets the kitchen's keyword guess, the same one the backend uses (0018).
+ */
+export interface CategoryGroup {
+  key: ItemCategory;
+  items: ItemRow[];
+}
+
+export function categoryOf(item: ItemRow): ItemCategory {
+  return item.category?.value ?? guessCategory(item.name.value).category;
+}
+
+const byUpdatedDesc = (a: ItemRow, b: ItemRow) => b.updatedAt.localeCompare(a.updatedAt);
+const inKitchen = (item: ItemRow) => item.stock?.value !== "out";
+
+export function groupByCategory(items: readonly ItemRow[]): CategoryGroup[] {
+  const groups = new Map<ItemCategory, ItemRow[]>(ITEM_CATEGORIES.map((k) => [k, []]));
+  for (const item of items) if (inKitchen(item)) groups.get(categoryOf(item))!.push(item);
+  return ITEM_CATEGORIES.map((key) => ({ key, items: groups.get(key)!.slice().sort(byUpdatedDesc) })).filter(
+    (g) => g.items.length > 0,
+  );
+}
+
+/** Search results (CAT1): one flat list, most recently changed first, using the shared matcher. */
+export function searchKitchen(items: readonly ItemRow[], query: string): ItemRow[] {
+  return searchItems(items.filter(inKitchen), query).sort(byUpdatedDesc);
+}
+
+export interface TextPart {
+  text: string;
+  match: boolean;
+}
+
+/**
+ * Splits a shown name into parts, marking where a query word starts one of its words, the same way
+ * `matchesItemSearch` matches (case- and accent-insensitive, word starts): "nuoc" marks "Nước" in
+ * "Nước mắm". A name found only through its English gloss or standard name has nothing marked.
+ */
+export function highlightParts(text: string, query: string): TextPart[] {
+  const words = foldText(query).split(" ").filter(Boolean);
+  if (!words.length || !text) return [{ text, match: false }];
+  // Fold character by character, so a position in the folded name maps back to the shown name.
+  // A combining accent folds to nothing and stays with its letter.
+  const chars = Array.from(text);
+  const folded = chars.map((c) => (/\p{M}/u.test(c) ? "" : foldText(c) || " "));
+  const inWord = (k: number) => folded[k] === "" || /[\p{L}\p{N}]/u.test(folded[k]);
+  const marked = new Array<boolean>(chars.length).fill(false);
+  let i = 0;
+  while (i < chars.length) {
+    if (!inWord(i)) {
+      i++;
+      continue;
+    }
+    let end = i;
+    while (end < chars.length && inWord(end)) end++;
+    const word = folded.slice(i, end).join("");
+    let longest = 0;
+    for (const q of words) {
+      for (const candidate of [q, singularWord(q)]) {
+        if (word.startsWith(candidate)) longest = Math.max(longest, candidate.length);
+      }
+    }
+    // Mark whole characters (with their accents) until the folded prefix is covered.
+    let covered = 0;
+    for (let j = i; j < end && (covered < longest || (longest > 0 && folded[j] === "")); j++) {
+      marked[j] = true;
+      covered += folded[j].length;
+    }
+    i = end;
+  }
+  const parts: TextPart[] = [];
+  chars.forEach((c, k) => {
+    const last = parts.at(-1);
+    if (last && last.match === marked[k]) last.text += c;
+    else parts.push({ text: c, match: marked[k] });
+  });
+  return parts;
 }

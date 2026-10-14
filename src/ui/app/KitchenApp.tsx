@@ -61,7 +61,7 @@ export interface KitchenAppProps {
   initialHistory?: ChatHistoryPage | null;
   /** Your allergies or diets someone else added that you haven't confirmed (AI7): the home banner. */
   initialPendingConfirm?: PendingConfirm[];
-  /** The route's page: null on `/`, the Recipe or Settings on their routes (shown in the workspace). */
+  /** The route's page: null on `/`, the Recipe, Settings or Kitchen See all on their routes (shown in the workspace). */
   children?: ReactNode;
 }
 
@@ -187,8 +187,9 @@ function KitchenScreen({
   });
   const pathname = usePathname();
   const settingsOpen = pathname === "/settings" || Boolean(pathname?.startsWith("/settings/"));
-  // A route page (the Recipe, Settings) replaces the widgets; they stay mounted underneath.
-  const routeOpen = meals.openMealId !== null || settingsOpen;
+  const seeAllOpen = pathname === "/kitchen";
+  // A route page (the Recipe, Settings, Kitchen See all) replaces the widgets; they stay mounted underneath.
+  const routeOpen = meals.openMealId !== null || settingsOpen || seeAllOpen;
 
   const chat = useChat({
     kitchenId,

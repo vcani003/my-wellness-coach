@@ -151,6 +151,11 @@
   button {
     cursor: pointer;
   }
+
+  /* Search fields have their own named Clear button (See all, CAT1): hide the browser's unnamed one. */
+  input[type="search"]::-webkit-search-cancel-button {
+    appearance: none;
+  }
 }
 
 @layer components {

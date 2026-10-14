@@ -11,6 +11,22 @@ import { useCallback } from "react";
 import type { Msg } from "@/contracts/common";
 import { sentenceCase } from "../fallbacks";
 
+type Translate = ReturnType<typeof useTranslations>;
+
+/**
+ * Params the backend sends as IDs are shown in the user's language: `location` ("freezer") and,
+ * for CAT1's ITEM_CATEGORY / CATEGORY_REMEMBERED, `categoryName` from the `category` ID (the
+ * backend's `categoryName` is only the English fallback).
+ */
+export function localizeParams(params: Record<string, string | number>, t: Translate) {
+  if (typeof params.location === "string" && t.has(`location.${params.location}`)) {
+    params.location = t(`location.${params.location}`);
+  }
+  if (typeof params.category === "string" && t.has(`category.${params.category}`)) {
+    params.categoryName = t(`category.${params.category}`);
+  }
+}
+
 export function useFormatMsg() {
   const t = useTranslations();
   const locale = useLocale();
@@ -18,9 +34,7 @@ export function useFormatMsg() {
     (m: Msg, mode: "display" | "plain" = "display"): string => {
       const params: Record<string, string | number> = {};
       for (const [k, v] of Object.entries(m.params)) params[k] = typeof v === "boolean" ? String(v) : v;
-      if (typeof params.location === "string" && t.has(`location.${params.location}`)) {
-        params.location = t(`location.${params.location}`);
-      }
+      localizeParams(params, t);
       const keys = mode === "plain" ? [`msgPlain.${m.code}`, `msgIcu.${m.code}`, `msg.${m.code}`] : [`msgIcu.${m.code}`, `msg.${m.code}`];
       for (const key of keys) if (t.has(key)) return sentenceCase(t(key, params), locale);
       return sentenceCase(m.text || m.code, locale);

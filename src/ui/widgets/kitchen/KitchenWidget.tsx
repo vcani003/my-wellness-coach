@@ -6,15 +6,17 @@
  * "Levi used up the eggs" for what left the list (SharedCues, ux.md §6). Empty, loading, error and
  * stale states stay inside the widget (0018).
  */
+import Link from "next/link";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useRef } from "react";
 import type { ItemRow } from "@/contracts/kitchen-state";
 import { actorName, byOther as byOtherActor, itemName, sentenceCase } from "@/ui/fallbacks";
 import { Collapsible } from "@/ui/primitives/Collapsible";
-import { CaretDownIcon } from "@/ui/primitives/icons";
+import { CaretDownIcon, SearchIcon } from "@/ui/primitives/icons";
 import { useKitchenData, type ChangeMark } from "@/ui/sync/KitchenDataContext";
 import type { WidgetProps } from "@/ui/workspace/types";
-import { batchesOf, calendarDaysSince, groupItems, isDefrosted } from "./model";
+import { batchesOf, calendarDaysSince, groupItems, highlightParts, isDefrosted } from "./model";
+import { requestSeeAllFocus } from "./see-all-focus";
 import { LiveRemovals, SinceLastVisit } from "./SharedCues";
 import { ToReview } from "./ToReview";
 
@@ -72,6 +74,28 @@ export function KitchenWidget({ onRetry }: WidgetProps) {
       {cues && <SinceLastVisit cues={cues} onDismissed={() => rootRef.current?.focus()} />}
       {cues && <LiveRemovals cues={cues} />}
       <ToReview reviews={state.toReview} finalFocus={rootRef} />
+      {groups.length > 0 && (
+        // CAT1: the full view (sorting, search) is one tap away; this compact list stays as it is.
+        <div className="-my-2 flex items-center justify-end gap-1">
+          <Link
+            href="/kitchen"
+            data-kitchen-opener="search"
+            aria-label={t("seeAll.searchLink")}
+            onClick={() => requestSeeAllFocus("search")}
+            className="flex size-tap items-center justify-center rounded-full text-accent-text"
+          >
+            <SearchIcon aria-hidden="true" className="size-icon" />
+          </Link>
+          <Link
+            href="/kitchen"
+            data-kitchen-opener="all"
+            onClick={() => requestSeeAllFocus("heading")}
+            className="flex min-h-tap items-center rounded-button px-3 text-small font-medium text-accent-text underline underline-offset-2"
+          >
+            {t("seeAll.link", { count: state.items.filter((i) => i.stock?.value !== "out").length })}
+          </Link>
+        </div>
+      )}
       {groups.length === 0 ? (
         <p className="text-body text-text-muted">{t("empty")}</p>
       ) : (
@@ -102,18 +126,42 @@ export function KitchenWidget({ onRetry }: WidgetProps) {
   );
 }
 
-function ItemRowView({
+/** A search match inside a name (CAT1): marked, so it doesn't rely on colour alone (bold too). */
+export function HighlightedName({ text, query }: { text: string; query?: string }) {
+  if (!query?.trim()) return <>{text}</>;
+  return (
+    <>
+      {highlightParts(text, query).map((part, i) =>
+        part.match ? (
+          <mark key={i} className="bg-highlight-bg font-strong text-text-default">
+            {part.text}
+          </mark>
+        ) : (
+          <span key={i}>{part.text}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+export function ItemRowView({
   item,
   mark,
   remote,
   meId,
   now,
+  showPlace = false,
+  query,
 }: {
   item: ItemRow;
   mark?: ChangeMark;
   remote: boolean;
   meId: string;
   now: Date;
+  /** See all's By type and search results: "Fish sauce · Pantry" (CAT1). */
+  showPlace?: boolean;
+  /** See all's search: the words to mark in the name. */
+  query?: string;
 }) {
   const t = useTranslations();
   const format = useFormatter();
@@ -130,7 +178,15 @@ function ItemRowView({
   const content = (
     <>
       <span className="flex flex-wrap items-baseline gap-x-2">
-        <span className="text-body font-medium">{name}</span>
+        <span className="text-body font-medium">
+          <HighlightedName text={name} query={query} />
+          {showPlace && (
+            <span className="text-small font-regular text-text-muted">
+              {" · "}
+              {t(`kitchen.groups.${item.location?.value ?? "unknown"}`)}
+            </span>
+          )}
+        </span>
         {item.quantity && <span className="text-small text-text-muted">{item.quantity.value.asSaid}</span>}
         {mark && (
           <span className="rounded-button bg-highlight-bg px-2 text-caption font-strong text-highlight-text">
