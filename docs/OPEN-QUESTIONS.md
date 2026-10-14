@@ -11,6 +11,12 @@
 
 ## Outstanding
 
+### GH2. ⛔ OK to push the "Do later" work to GitHub? (no deploy)
+Two of my pushes accidentally carried the "Do later" session's unfinished files, so the code on GitHub is incomplete right now. **The live app is unaffected**, because nothing was deployed. That session's finished commit, "Do later on Done shopping queues items in To review", completes it. I re-checked it on a clean copy: typecheck and lint clean, 309 tests pass.
+**Rec:** yes, push it. It's GitHub only; nothing goes live until a later deploy.
+
+> Answer:
+
 ### P2. ⛔ What to build next (no deploys today; progress shown on localhost)
 What MVP 1 still lacks, roughly smallest first. Pick, or put them in order:
 - **(a) Chat history survives a reload.** Right now the conversation disappears if you reload or reopen the app, and Kitchen loses the context of what you just said. Small, and it matters for today's test.
