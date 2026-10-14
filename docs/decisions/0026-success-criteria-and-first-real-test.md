@@ -12,3 +12,7 @@ Vero is shopping at **MD Oriental** (an Asian grocery) and sometimes **Publix**,
 - **Test 2, Levi:** can Levi check the pantry and make changes too?
 - **Report:** was the app meaningful today? Write a short note.
 - **Extra checks** (orchestrator's suggestions): unpacking after shopping in one message, including Vietnamese ingredient names; freezing proteins for the week; and "what can I make this week?" from the new groceries.
+
+## Staples (T2)
+- **Today:** "what staples do I need?" is answered in chat, grounded in the kitchen and in where Vero shops. Kitchen offers "Want me to remember X as one of your staples?" and saves only on a yes (0012).
+- **A Shopping list widget** (tick-off, shared) would be **new scope**. It's decided after today's test, based on whether Vero missed it.

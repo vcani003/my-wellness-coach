@@ -14,7 +14,7 @@
 ### T1. ⛔ Today: deploy a small version for your grocery trip (in progress)
 **Goal:** live in about 2 hours, for you only. Levi is added tonight.
 **Status:** three specialists are building in parallel: the screens, the real AI, and online hosting with a simple lock. Then I merge, test, and deploy **with your go-ahead**.
-**Your part:** steps S1–S3 below. Answer here with "go" when you're ready for me to deploy, or "use the home Wi-Fi fallback" if time runs out.
+**Plan accepted (2026-10-14).** The home Wi-Fi fallback applies if time runs out. **Still needed:** S1–S3 (Vero is setting them up), then a final **"go"** right before the deploy.
 
 **What today's version does:**
 - You tell Kitchen what you have and what you made (pho), and the Kitchen widget updates.
@@ -22,13 +22,6 @@
 - After shopping, you tell it what you bought.
 
 **What it doesn't do yet:** email sign-in (a private **access code** for now), meal ideas, recipes, the meal plan, or batches.
-
-> Answer:
-
-### T2. 🟡 Staples and a shopping list
-"What staples do I need?" has two parts: knowing your **usual staples**, and keeping a **shopping list**.
-- **Today, Rec:** Kitchen answers in chat. It uses what's in your kitchen, that you made pho, where you shop, and common staples for the dishes you make. When you mention a staple, it offers "Want me to remember fish sauce as one of your staples?". That uses the preferences design you already approved (0012), so it's not new scope.
-- **Later, a choice for you:** a **Shopping list widget** (tick-off, shared with Levi). It's genuinely useful, but it's **new scope**: a 5th widget, beyond the spec's MVP set. **Rec:** decide after today's test, based on whether you missed it.
 
 > Answer:
 
@@ -106,5 +99,6 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | C10, C11 | Cheaper models | [0020](decisions/0020-ai-cost-and-model.md): decided by tests; interpreting stays Opus; back to Opus after misses |
 | D1 | Deleting data in a shared kitchen | [0015](decisions/0015-language-units-policies-data.md): items stay as "former member" |
 | B15 | Success criteria | [0026](decisions/0026-success-criteria-and-first-real-test.md): testers + 2 weeks; grocery test today |
+| T2 | Staples and shopping list | [0026](decisions/0026-success-criteria-and-first-real-test.md): staples answered in chat + "remember as a staple?"; a Shopping list widget is decided after today |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |
