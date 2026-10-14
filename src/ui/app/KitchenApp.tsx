@@ -9,7 +9,14 @@
  * person's changes arrive through `useKitchenSync`.
  */
 import { useLocale, useNow, useTranslations } from "next-intl";
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  finishShopping,
+  removeShoppingListItem,
+  tickShoppingListItem,
+  undoChange,
+  untickShoppingListItem,
+} from "@/app/actions";
 import type { ApplyResult } from "@/contracts/apply-result";
 import type { KitchenState } from "@/contracts/kitchen-state";
 import { AnnouncerProvider, useAnnounce } from "@/ui/a11y/Announcer";
@@ -22,6 +29,7 @@ import { CaretDownIcon, CaretUpIcon, ChatIcon, MinusIcon } from "@/ui/primitives
 import { DevBar } from "@/ui/shell/DevBar";
 import { DESKTOP_QUERY, useMediaQuery } from "@/ui/shell/useMediaQuery";
 import { useKeyboardInset } from "@/ui/shell/viewport";
+import { KitchenActionsProvider, type KitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { KitchenDataProvider, type ChangeMark } from "@/ui/sync/KitchenDataContext";
 import { useKitchenSync } from "@/ui/sync/useKitchenSync";
 import { focusFor, initialWorkspace, workspaceReducer } from "@/ui/workspace/layout";
@@ -43,11 +51,28 @@ export function marksFrom(result: ApplyResult): Record<string, ChangeMark> {
   const marks: Record<string, ChangeMark> = {};
   for (const op of result.applied) {
     for (const ref of op.refs) {
-      if (ref.kind !== "item" || ref.change === "removed") continue;
+      if ((ref.kind !== "item" && ref.kind !== "shopping") || ref.change === "removed") continue;
       if (marks[ref.id] !== "new") marks[ref.id] = ref.change === "added" ? "new" : "updated";
     }
   }
   return marks;
+}
+
+/** The widget you last used, so a phone reopens with it on top (ux.md §10). Per phone, best effort. */
+const LAST_FOCUSED_KEY = "workspace.lastFocused";
+function rememberFocus(id: string) {
+  try {
+    window.localStorage.setItem(LAST_FOCUSED_KEY, id);
+  } catch {
+    // Private mode or blocked storage: the app just opens in the default order.
+  }
+}
+function lastFocused(): string | null {
+  try {
+    return window.localStorage.getItem(LAST_FOCUSED_KEY);
+  } catch {
+    return null;
+  }
 }
 
 export function KitchenApp(props: KitchenAppProps) {
@@ -74,6 +99,7 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState }: Ki
   const [dock, setDock] = useState<DockState>("peek");
   const [newReply, setNewReply] = useState(false);
   const [updatedWhileFull, setUpdatedWhileFull] = useState(false);
+  const [turn, setTurn] = useState(0);
 
   const headerRef = useRef<HTMLElement>(null);
   const dockRef = useRef<HTMLElement>(null);
@@ -104,6 +130,7 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState }: Ki
           result.applied.flatMap((a) => a.refs),
         );
         dispatchWorkspace({ type: "turnApplied", focus });
+        if (focus[0]) rememberFocus(focus[0]);
         // On a phone the affected widget scrolls into view, unless you're reading Full chat.
         if (focus[0] && dockNow.current !== "full") requestAnimationFrame(() => showWidget(focus[0]));
         if (dockNow.current === "full" && focus.length) setUpdatedWhileFull(true);
@@ -132,10 +159,41 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState }: Ki
       // "New" / "Updated" labels last until your next message (ux.md §1).
       setMarks({});
       setRemoteIds(new Set());
+      setTurn((n) => n + 1);
       dispatchWorkspace({ type: "messageSent" });
     }
     return sent;
   };
+
+  // A phone reopens with the widget you last used on top (ux.md §10: the list is waiting at the store).
+  useEffect(() => {
+    const id = lastFocused();
+    if (id && !window.matchMedia(DESKTOP_QUERY).matches && registry.some((w) => w.id === id)) {
+      dispatchWorkspace({ type: "restoreFocus", id });
+    }
+  }, []);
+
+  // Buttons that change the kitchen without chat (the shopping list's tick, Remove, Done shopping).
+  const actions = useMemo<KitchenActions>(() => {
+    const tap = () => ({
+      kitchenId,
+      tapId: crypto.randomUUID(),
+      basedOnVersion: sync.getSnapshot().state?.version ?? 0,
+    });
+    return {
+      kitchenId,
+      tickShopping: (shoppingItemId, ticked) =>
+        (ticked ? tickShoppingListItem : untickShoppingListItem)({ ...tap(), shoppingItemId }),
+      removeShopping: (shoppingItemId) => removeShoppingListItem({ ...tap(), shoppingItemId }),
+      finishShopping: (ids) => finishShopping({ ...tap(), items: ids.map((shoppingItemId) => ({ shoppingItemId })) }),
+      undo: (changeSetId) => undoChange({ ...tap(), changeSetId }),
+      showOwn(result, opts) {
+        sync.applyOwn(result.state);
+        if (opts?.highlight) setMarks(marksFrom(result));
+      },
+      touched: rememberFocus,
+    };
+  }, [kitchenId, sync]);
 
   // The other person's changes: soft highlight + one announcement per sync; never move focus,
   // reorder widgets or change the dock (ux.md §6).
@@ -218,7 +276,8 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState }: Ki
   );
 
   return (
-    <KitchenDataProvider value={{ me, snapshot, marks, remoteIds, now }}>
+    <KitchenActionsProvider value={actions}>
+    <KitchenDataProvider value={{ me, snapshot, marks, remoteIds, now, turn }}>
       <div className="app-shell min-h-dvh desk:grid desk:h-dvh desk:grid-cols-[1fr_2fr] desk:grid-rows-[auto_minmax(0,1fr)] desk:overflow-hidden">
         <a href="#workspace" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-sm focus:bg-surface-raised focus:p-2">
             {t("app.skipToWorkspace")}
@@ -336,5 +395,6 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState }: Ki
         )}
       </div>
     </KitchenDataProvider>
+    </KitchenActionsProvider>
   );
 }

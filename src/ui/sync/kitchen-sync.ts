@@ -21,7 +21,7 @@ export function pollDelay({ hidden, idleMs }: { hidden: boolean; idleMs: number 
 }
 
 export interface RemoteChange {
-  /** Item IDs added or changed by someone else. */
+  /** Item and shopping-list IDs added or changed by someone else. */
   ids: string[];
   /** Their display names (for "Levi updated the kitchen"). */
   actorNames: string[];
@@ -29,10 +29,10 @@ export interface RemoteChange {
 
 /** What changed between two states that wasn't done by `meId`. */
 export function diffRemote(prev: KitchenState | null, next: KitchenState, meId: string): RemoteChange {
-  const before = new Map((prev?.items ?? []).map((i) => [i.id, i.updatedAt]));
+  const before = new Map([...(prev?.items ?? []), ...(prev?.shoppingList ?? [])].map((i) => [i.id, i.updatedAt]));
   const ids: string[] = [];
   const names = new Set<string>();
-  for (const item of next.items) {
+  for (const item of [...next.items, ...next.shoppingList]) {
     if (before.get(item.id) === item.updatedAt) continue;
     if ("missing" in item.updatedBy) {
       ids.push(item.id);

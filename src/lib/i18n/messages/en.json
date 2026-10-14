@@ -95,7 +95,8 @@
     "view": "View",
     "viewLabel": "View in Kitchen",
     "notChanged": "Not changed: {reason}",
-    "announceUndone": "Undone: {changes}"
+    "announceUndone": "Undone: {changes}",
+    "shoppingGroup": "On your list, {store}: {names}"
   },
   "fallback": {
     "unknownItem": "Unknown item",
@@ -134,10 +135,23 @@
     "INVALID_OPERATION": "That change doesn't make sense",
     "UNDO_OF_UNDO": "An undo can't be undone; tell me what to fix",
     "INVALID_PROPOSAL": "I couldn't understand that change, so nothing changed",
-    "SAVE_FAILED": "I couldn't save that, so nothing changed"
+    "SAVE_FAILED": "I couldn't save that, so nothing changed",
+    "SHOPPING_ADDED": "Added {name} to the shopping list",
+    "SHOPPING_ADDED_STORE": "Added {name} to the shopping list ({store})",
+    "SHOPPING_ALREADY": "{name} is already on the shopping list",
+    "SHOPPING_STORE": "{name} → {store}",
+    "SHOPPING_UPDATED": "Updated {name} on the shopping list",
+    "SHOPPING_TICKED": "Got {name}",
+    "SHOPPING_UNTICKED": "Unticked {name}",
+    "SHOPPING_REMOVED": "Took {name} off the shopping list",
+    "SHOPPING_NOT_FOUND": "{name} isn't on the shopping list",
+    "SHOPPING_DONE": "Put {count} things from the shopping list in your kitchen: {names}",
+    "NOT_ON_LIST": "{name} isn't on the shopping list any more",
+    "NOT_TICKED": "{name} isn't ticked yet"
   },
   "msgPlain": {
-    "ITEM_MOVED": "{name} moved to the {location}"
+    "ITEM_MOVED": "{name} moved to the {location}",
+    "SHOPPING_STORE": "{name} moved to {store} on your list"
   },
   "unlock": {
     "pageTitle": "Unlock · Kitchen",
@@ -157,6 +171,46 @@
       "tooMany": "Too many tries. Please wait {minutes} min and try again.",
       "notConfigured": "Access codes aren't set up on this server yet.",
       "wrong": "That code didn't work. Check it and try again."
+    }
+  },
+  "shopping": {
+    "title": "Shopping list",
+    "summary": "{count} · {got} got",
+    "anywhere": "Anywhere",
+    "groupLabel": "{store}, {count, plural, one {# item} other {# items}}",
+    "tickLabel": "{name}, got it",
+    "tickLabelBy": "{name}, got it, ticked by {person}",
+    "more": "More for {name}",
+    "remove": "Remove",
+    "removed": "{name} removed",
+    "undoRemoveLabel": "Undo: took {name} off your list",
+    "undo": "Undo",
+    "notSynced": "Not synced yet",
+    "tickFailed": "Couldn't save that",
+    "retry": "Retry",
+    "removeFailed": "Couldn't remove {name}. Try again.",
+    "doneShopping": "Done shopping",
+    "empty": "Your list is clear. Tell me what you need.",
+    "loading": "Loading your list…",
+    "error": "Couldn't load your list.",
+    "stale": "Offline · showing your list as of {time}. Ticks are saved on this phone and sync when you're back online.",
+    "queuedCount": "{count, plural, one {# tick} other {# ticks}} not synced yet",
+    "done": "Added {count} to your kitchen. {left, plural, =0 {Your list is clear.} one {# thing is still on your list.} other {# things are still on your list.}}",
+    "doneUndoLabel": "Undo: added {names} to your kitchen",
+    "doneFailed": "Couldn't add those to your kitchen, so nothing changed. Try again.",
+    "undone": "Undone.",
+    "cantUndo": "Can't undo this now. Tell me what to fix.",
+    "sheet": {
+      "title": "Add to your kitchen?",
+      "from": "From your shopping list",
+      "unselectAll": "Unselect all",
+      "selectAll": "Select all",
+      "gotIt": "Got it",
+      "notTicked": "Not ticked",
+      "add": "{count, plural, =0 {Add items} one {Add # item} other {Add # items}}",
+      "adding": "Adding…",
+      "doLater": "Do later",
+      "skip": "Skip"
     }
   }
 }

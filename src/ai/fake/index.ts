@@ -4,7 +4,7 @@
  * Deterministic and tiny, so the app runs locally with no accounts and the end-to-end tests are
  * repeatable (backend-data.md §8). It understands only:
  *   "I bought X, Y and Z" · "I froze the X" · "I used the rest of the X" · "X is running low" ·
- *   "undo"
+ *   "add X and Y to the list [for Store]" · "undo"
  * and answers anything else politely with no changes. Everything it proposes still goes through
  * the real backend validate → apply path. The AI specialist replaces this folder (ai.md §9).
  */
@@ -59,6 +59,19 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
         case "low":
           operations = itemOps(intent.targets, "item.use", { stock: said("low") });
           reply = `Noted: the ${names(intent.targets)} running low.`;
+          break;
+        case "toList":
+          operations = intent.items.map((s) => ({
+            opId: "",
+            type: "shopping.add",
+            evidence: s.raw,
+            fields: {
+              name: said(s.name),
+              ...(s.quantity ? { quantity: said(s.quantity) } : {}),
+              ...(intent.store ? { store: said(intent.store) } : {}),
+            },
+          }));
+          reply = `On your list: ${names(intent.items)}.`;
           break;
         case "undo": {
           // Your own latest change that isn't undone and isn't itself an Undo (H3, 0017).

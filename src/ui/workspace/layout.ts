@@ -29,7 +29,9 @@ export type WorkspaceEvent =
   | { type: "remoteChange" }
   | { type: "userToggled"; id: string; expanded: boolean }
   | { type: "userClosed"; id: string }
-  | { type: "messageSent" };
+  | { type: "messageSent" }
+  /** App open on a phone: the widget you last used goes on top, so the list waits at the store (ux.md §10). */
+  | { type: "restoreFocus"; id: string };
 
 export function workspaceReducer(state: WorkspaceState, event: WorkspaceEvent): WorkspaceState {
   switch (event.type) {
@@ -52,6 +54,10 @@ export function workspaceReducer(state: WorkspaceState, event: WorkspaceEvent): 
       return { ...state, closed: [...new Set([...state.closed, event.id])], focused: state.focused === event.id ? null : state.focused };
     case "messageSent":
       return state.updated.length ? { ...state, updated: [] } : state;
+    case "restoreFocus":
+      // Only before anything else has happened this visit.
+      if (state.order.length || state.focused || Object.keys(state.toggled).length) return state;
+      return { ...state, order: [event.id], focused: event.id };
   }
 }
 

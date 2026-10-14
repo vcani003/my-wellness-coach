@@ -10,6 +10,7 @@ export type FakeIntent =
   | { kind: "usedUp"; targets: Segment[] }
   | { kind: "low"; targets: Segment[] }
   | { kind: "undo" }
+  | { kind: "toList"; items: Segment[]; store?: string }
   | { kind: "unknown" };
 
 /** A piece of the message: `raw` is exactly as typed (used as evidence), `name` is cleaned. */
@@ -34,6 +35,12 @@ const LOW = [
   new RegExp(String.raw`\blow\s+on\s+(.+?)` + END, "i"),
   new RegExp(String.raw`^\s*(.+?)(?:\s+(?:is|are)|'s)\s+(?:running|getting)\s+low` + END, "i"),
 ];
+
+/** "add garlic and ginger to the list" · "put oatmilk on my shopping list for Publix" (0027). */
+const TO_LIST = new RegExp(
+  String.raw`^\s*(?:please\s+)?(?:add|put)\s+(.+?)\s+(?:to|on)\s+(?:the|my|our)\s+(?:shopping\s+)?list(?:\s+(?:for|at|from)\s+(.+?))?` + END,
+  "i",
+);
 
 const LEADING_FILLER = /^(?:all\s+(?:of\s+)?the|the|my|our|some|a|an|more)\s+/i;
 const UNIT =
@@ -68,6 +75,8 @@ function segments(list: string): Segment[] {
 
 export function matchIntent(text: string): FakeIntent {
   if (UNDO.test(text)) return { kind: "undo" };
+  const toList = TO_LIST.exec(text);
+  if (toList) return { kind: "toList", items: segments(toList[1]), ...(toList[2] ? { store: toList[2].trim() } : {}) };
   const bought = BOUGHT.exec(text);
   if (bought) return { kind: "bought", items: segments(bought[1]) };
   const froze = FROZE.exec(text);

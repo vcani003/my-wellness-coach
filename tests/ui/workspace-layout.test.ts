@@ -1,5 +1,5 @@
 /** The pure widget selection / order / focus rules (0004, ux.md §2, frontend.md §2). */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ChangeRef } from "@/contracts/apply-result";
 import { focusFor, initialWorkspace, selectWidgets, workspaceReducer, type WorkspaceState } from "@/ui/workspace/layout";
 import { registry } from "@/ui/workspace/registry";
@@ -81,9 +81,61 @@ describe("workspace selection", () => {
   });
 
   it("the real registry: Kitchen is always present (empty state) and wants item changes", () => {
-    expect(registry.map((w) => w.id)).toEqual(["kitchen.items"]);
+    expect(registry.map((w) => w.id)).toEqual(["kitchen.items", "shopping.list"]);
     expect(registry[0].isPresent(null)).toBe(true);
     expect(focusFor(registry, [ref("item")])).toEqual(["kitchen.items"]);
     expect(focusFor(registry, [ref("profile")])).toEqual([]);
   });
+
+  it("the real registry: the Shopping list appears on its first item, stays once emptied, and wants list changes", () => {
+    const shopping = registry.find((w) => w.id === "shopping.list")!;
+    const empty = { ...kitchen([]), kitchenId: "k-shop" };
+    const withItem = { ...empty, shoppingList: [shoppingRow("s1", "garlic")] };
+    vi.stubGlobal("window", {}); // in the browser
+    try {
+      expect(shopping.isPresent(null)).toBe(false);
+      expect(shopping.isPresent(empty)).toBe(false);
+      expect(shopping.isPresent(withItem)).toBe(true);
+      expect(shopping.isPresent(empty)).toBe(true); // emptied this session: "Your list is clear"
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(focusFor(registry, [ref("shopping")])).toEqual(["shopping.list"]);
+  });
+
+  // Regression: "seen this session" lived in server memory too, so after one request with items
+  // the server rendered an empty list for everyone and the page failed to hydrate.
+  it("on the server, the Shopping list shows only when it has items (no memory across requests)", () => {
+    const shopping = registry.find((w) => w.id === "shopping.list")!;
+    const empty = { ...kitchen([]), kitchenId: "k-server" };
+    expect(shopping.isPresent({ ...empty, shoppingList: [shoppingRow("s1", "garlic")] })).toBe(true);
+    expect(shopping.isPresent(empty)).toBe(false);
+  });
+
+  it("restoreFocus puts the last-used widget on top and open on a phone, only before anything else happened", () => {
+    const data = { ...kitchen([]), shoppingList: [shoppingRow("s1", "garlic")] };
+    const restored = workspaceReducer(initialWorkspace, { type: "restoreFocus", id: "shopping.list" });
+    const phone = selectWidgets(restored, { registry, data, layout: "phone" });
+    expect(phone.map((w) => [w.def.id, w.expanded])).toEqual([
+      ["shopping.list", true],
+      ["kitchen.items", false],
+    ]);
+    const afterTurn = workspaceReducer(initialWorkspace, { type: "turnApplied", focus: ["kitchen.items"] });
+    expect(workspaceReducer(afterTurn, { type: "restoreFocus", id: "shopping.list" })).toBe(afterTurn);
+  });
 });
+
+function shoppingRow(id: string, name: string) {
+  const at = "2026-10-14T10:00:00.000Z";
+  const by = { id: "vero", name: "Vero" };
+  return {
+    id,
+    name: { value: name, basis: "said" as const, confidence: "high" as const },
+    standardName: name,
+    source: "chat" as const,
+    createdAt: at,
+    createdBy: by,
+    updatedAt: at,
+    updatedBy: by,
+  };
+}

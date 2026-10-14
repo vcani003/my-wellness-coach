@@ -1,0 +1,30 @@
+"use client";
+/**
+ * Buttons that change the kitchen without chat (backend-data.md §6 server actions). The app
+ * provides the real server actions; component tests provide fakes. Each call already carries the
+ * kitchen, a fresh tap ID and the version on screen.
+ */
+import { createContext, useContext } from "react";
+import type { ApplyResult } from "@/contracts/apply-result";
+import type { ActionResult } from "@/app/actions";
+
+export interface KitchenActions {
+  kitchenId: string;
+  tickShopping(shoppingItemId: string, ticked: boolean): Promise<ActionResult>;
+  removeShopping(shoppingItemId: string): Promise<ActionResult>;
+  finishShopping(shoppingItemIds: string[]): Promise<ActionResult>;
+  undo(changeSetId: string): Promise<ActionResult>;
+  /** Show a saved button change now; `highlight` marks its rows New / Updated. */
+  showOwn(result: ApplyResult, opts?: { highlight?: boolean }): void;
+  /** Remember that you used this widget, so a phone reopens with it on top (ux.md §10). */
+  touched(widgetId: string): void;
+}
+
+const Ctx = createContext<KitchenActions | null>(null);
+export const KitchenActionsProvider = Ctx.Provider;
+
+export function useKitchenActions(): KitchenActions {
+  const value = useContext(Ctx);
+  if (!value) throw new Error("useKitchenActions must be used inside KitchenActionsProvider");
+  return value;
+}

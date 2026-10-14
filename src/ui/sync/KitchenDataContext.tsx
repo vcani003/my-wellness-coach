@@ -17,6 +17,8 @@ export interface KitchenData {
   remoteIds: ReadonlySet<string>;
   /** "Now" for relative times; refreshed every minute. */
   now: Date;
+  /** Counts your sent messages: per-turn notes ("removed · Undo") last until the next one. */
+  turn?: number;
 }
 
 const Ctx = createContext<KitchenData | null>(null);

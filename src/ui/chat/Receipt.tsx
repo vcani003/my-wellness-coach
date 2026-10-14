@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import { CheckIcon, UndoIcon } from "@/ui/primitives/icons";
 import type { Receipt as ReceiptModel } from "./chat-reducer";
 import { useFormatMsg } from "./format-msg";
+import { receiptLines, SHOPPING_GROUP } from "./receipt-lines";
 
 export function Receipt({
   receipt,
@@ -20,10 +21,14 @@ export function Receipt({
   onView?: () => void;
 }) {
   const t = useTranslations("receipt");
-  const formatMsg = useFormatMsg();
+  const tAll = useTranslations();
+  const formatAny = useFormatMsg();
+  const formatMsg: typeof formatAny = (m, mode) =>
+    m.code === SHOPPING_GROUP ? t("shoppingGroup", { store: String(m.params.store), names: String(m.params.names) }) : formatAny(m, mode);
+  const lines = receiptLines(receipt.applied, tAll("shopping.anywhere"));
   const undone = receipt.undo === "done";
   const savedSomething = receipt.applied.some((a) => a.refs.length > 0);
-  const plainChanges = receipt.applied.map((a) => formatMsg(a.summary, "plain")).join(", ");
+  const plainChanges = lines.map((l) => formatMsg(l.summary, "plain")).join(", ");
   const canUndo = Boolean(onUndo) && receipt.undoable && savedSomething && !undone && receipt.undo !== "refused";
 
   return (
@@ -34,11 +39,11 @@ export function Receipt({
     >
       <h3 className="text-caption font-strong text-text-muted">{t("title")}</h3>
       <ul className="mt-1 flex flex-col gap-1">
-        {receipt.applied.map((a) => {
-          const display = formatMsg(a.summary);
-          const plain = formatMsg(a.summary, "plain");
+        {lines.map((line) => {
+          const display = formatMsg(line.summary);
+          const plain = formatMsg(line.summary, "plain");
           return (
-            <li key={a.opId} className={`flex items-start gap-2 text-small ${undone ? "text-text-muted line-through" : ""}`}>
+            <li key={line.key} className={`flex items-start gap-2 text-small ${undone ? "text-text-muted line-through" : ""}`}>
               <CheckIcon aria-hidden="true" className="mt-0.5 size-icon-sm shrink-0 text-success-text" />
               {display === plain ? (
                 <span>{display}</span>
