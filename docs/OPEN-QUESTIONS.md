@@ -11,40 +11,7 @@
 
 ## Outstanding
 
-### N1. 🟡 Being told when the AI budget runs out (you asked)
-**(a)** When the monthly spend limit is hit, Kitchen shows a clear, calm message instead of a generic error: *"Kitchen's AI budget for this month is used up. It resets on the 1st. Your kitchen and list still work."*
-**(b)** Optionally, a quiet in-app heads-up at about **80%** of the monthly budget, based on the cost Kitchen already logs for each message.
-(The Anthropic Console's own email alert works today with no build.)
-**Rec:** (a) now, since it's small. (b) later.
-
-> Answer:
-
-### SL4. 🟡 Ticking items at the store with bad signal
-Offline is read-only in MVP 1 (0017), but stores often have poor signal, and ticking is exactly what you'd do there.
-**Rec (UX):** a small exception just for ticks. They save on your phone and sync when the signal is back, and anything not yet synced is marked "Not synced yet". Everything else stays read-only offline.
-
-> Answer:
-
-### SL5. 🟡 "I bought garlic" in chat: does garlic leave the list?
-**Rec (UX):** yes. It goes into the kitchen and comes off the list in one step, with one Undo for both. That matches "Done shopping" (SL2).
-
-> Answer:
-
-### T1. ⛔ Today: deploy a small version for your grocery trip (in progress)
-**Goal:** live in about 2 hours, for you only. Levi is added tonight.
-**Status: deployed 2026-10-14** (shopping list + new login page live the same afternoon) at https://my-wellness-coach-mu.vercel.app, behind the access code (strangers are redirected to /unlock, and the API refuses without a code). Previously: ready to deploy. The screens, the real AI and the online hosting are merged. All tests pass: 217 unit and integration, 8 in a real browser, plus a production build.
-**Plan accepted (2026-10-14).** The home Wi-Fi fallback applies if time runs out. **Still needed:** S1–S3 (Vero is setting them up), then a final **"go"** right before the deploy.
-
-**What today's version does:**
-- You tell Kitchen what you have and what you made (pho), and the Kitchen widget updates.
-- You ask "what staples do I still need?", grouped by MD Oriental / Publix, and "what do I have?".
-- After shopping, you tell it what you bought.
-
-**What it doesn't do yet:** email sign-in (a private **access code** for now), meal ideas, recipes, the meal plan, or batches.
-
-> Answer:
-
-## Setup tasks for you: do these now for today's deploy
+## Setup tasks (S1–S3 done 2026-10-14; S4 later for email sign-in)
 These need **your** accounts. Keep every key and code private: you paste them yourself, and I'll never ask you to send them in chat.
 - **S1. Anthropic (about 5 min):** at console.anthropic.com, create a workspace (for example "wellness-coach"), set its **monthly spend limit to $10** (see C12), and create an **API key**. Keep it somewhere safe for S3.
 - **S2. Neon (about 5 min):** at neon.com, sign up (free), create a project "wellness-coach" in a US East region, and copy the **connection string** from the dashboard.
@@ -127,5 +94,8 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | T2 (revisited) | Shopping list | [0027](decisions/0027-shopping-list-in-mvp.md): in MVP 1 after the first real test |
 | SL1–SL3 | Shopping list: stores, Done shopping, Out offers | [0027](decisions/0027-shopping-list-in-mvp.md): Recs approved |
 | — | Deploy permission | [0028](decisions/0028-deploy-authority.md): routine deploys without asking |
+| T1, S1–S3 | First deploy for the grocery trip | Done 2026-10-14: Anthropic (dedicated workspace, $10 limit), Neon and Vercel set up; live at https://my-wellness-coach-mu.vercel.app |
+| SL4, SL5 | Offline ticks; "I bought X" clears the list | [0027](decisions/0027-shopping-list-in-mvp.md): both Recs approved and live |
+| N1 | Budget-exhausted notice | [0020](decisions/0020-ai-cost-and-model.md): calm message now; 80% heads-up later |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |
