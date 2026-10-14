@@ -19,6 +19,11 @@ export interface Restriction extends AuditFields {
   subject: Fact<string>;
   subjectKey: string;
   note?: Fact<string>;
+  /**
+   * When the owner confirmed it (AI7, 0019): adding it themselves, editing its note, or Keep.
+   * Absent = another member added it and the owner hasn't verified it yet ("Added by Vero").
+   */
+  verifiedAt?: string;
 }
 
 export interface Preference extends AuditFields {
@@ -42,6 +47,7 @@ export const PROFILE_EVENT = {
   restrictionAdded: "profile.restriction.added",
   restrictionUpdated: "profile.restriction.updated",
   restrictionRemoved: "profile.restriction.removed",
+  restrictionVerified: "profile.restriction.verified",
   preferenceSaved: "profile.preference.saved",
   preferenceRemoved: "profile.preference.removed",
 } as const;
@@ -62,6 +68,9 @@ export interface RestrictionUpdatedPayload {
 export interface RestrictionRemovedPayload {
   restrictionId: string;
 }
+export interface RestrictionVerifiedPayload {
+  restrictionId: string;
+}
 export interface PreferenceSavedPayload {
   preferenceId: string;
   userId: string;
@@ -80,6 +89,7 @@ export function profileTouchedKeys(event: EventEnvelope): string[] {
     case PROFILE_EVENT.restrictionAdded:
     case PROFILE_EVENT.restrictionUpdated:
     case PROFILE_EVENT.restrictionRemoved:
+    case PROFILE_EVENT.restrictionVerified:
       return [`restriction:${p.restrictionId as string}`];
     case PROFILE_EVENT.preferenceSaved:
     case PROFILE_EVENT.preferenceRemoved:
@@ -124,6 +134,8 @@ export function applyProfileEvent(state: ProfileState, event: EventEnvelope): Pr
         subject: p.subject,
         subjectKey: p.subjectKey,
         note: p.note,
+        // Your own allergy is verified as you say it; someone else's waits for you (AI7).
+        verifiedAt: event.actor === p.userId ? event.recordedAt : undefined,
         ...created(event),
       });
       return { ...state, restrictions: { ...state.restrictions, [r.id]: r } };
@@ -132,7 +144,15 @@ export function applyProfileEvent(state: ProfileState, event: EventEnvelope): Pr
       const p = event.payload as RestrictionUpdatedPayload;
       const prev = state.restrictions[p.restrictionId];
       if (!prev) return state;
-      const next: Restriction = compact({ ...prev, note: p.note ?? undefined, ...stamp(event) });
+      const verifiedAt = prev.verifiedAt ?? (event.actor === prev.userId ? event.recordedAt : undefined);
+      const next: Restriction = compact({ ...prev, note: p.note ?? undefined, verifiedAt, ...stamp(event) });
+      return { ...state, restrictions: { ...state.restrictions, [next.id]: next } };
+    }
+    case PROFILE_EVENT.restrictionVerified: {
+      const p = event.payload as RestrictionVerifiedPayload;
+      const prev = state.restrictions[p.restrictionId];
+      if (!prev) return state;
+      const next: Restriction = { ...prev, verifiedAt: prev.verifiedAt ?? event.recordedAt, ...stamp(event) };
       return { ...state, restrictions: { ...state.restrictions, [next.id]: next } };
     }
     case PROFILE_EVENT.restrictionRemoved: {

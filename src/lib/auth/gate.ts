@@ -37,7 +37,8 @@ export function gate(req: NextRequest, e: Env, now: Date = new Date()): NextResp
 
   const res = NextResponse.next();
   if (cfg && shouldRefresh(session, now)) {
-    const token = issueSession(cfg, session.userId, now);
+    // The proxy has no database: carry the epoch forward; handlers check it (getCurrentUser).
+    const token = issueSession(cfg, session.userId, now, session.epoch);
     if (token) res.cookies.set(name, token, sessionCookieOptions(production));
   }
   return res;

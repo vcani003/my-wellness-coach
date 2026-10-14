@@ -45,7 +45,22 @@ export const users = pgTable("users", {
   email: text("email").unique(),
   /** Tester agent account (0021): may only join `isTest` kitchens. */
   isTest: boolean("is_test").notNull().default(false),
+  /**
+   * Session generation ("Sign out everywhere", 0017). Every session cookie carries the epoch it
+   * was issued under; bumping this rejects all older cookies. Cookies from before 0007 count as 0.
+   */
+  sessionEpoch: integer("session_epoch").notNull().default(0),
   createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+/**
+ * People who deleted their data (D1, 0015). Only the ID and when: it keeps their old kitchen
+ * changes labelled "a former member", and a trigger (migration 0007) stops the ID from being
+ * created again by `db:bootstrap` or a still-listed access code.
+ */
+export const deletedUsers = pgTable("deleted_users", {
+  id: text("id").primaryKey(),
+  deletedAt: ts("deleted_at").notNull(),
 });
 
 export const kitchens = pgTable("kitchens", {
@@ -314,6 +329,11 @@ export const profileRestrictions = pgTable(
     subject: jsonb("subject").$type<Fact<string>>().notNull(),
     subjectKey: text("subject_key").notNull(),
     note: jsonb("note").$type<Fact<string>>(),
+    /**
+     * When the owner confirmed it (AI7, 0019): set when they add it themselves, edit its note, or
+     * tap Keep. Null = added by another member and not yet verified ("Added by Vero").
+     */
+    verifiedAt: ts("verified_at"),
     ...audit,
   },
   (t) => [index("profile_restrictions_user_idx").on(t.userId)],

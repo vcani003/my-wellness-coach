@@ -87,8 +87,13 @@ export type AllergenFlag = z.infer<typeof AllergenFlag>;
 export const MissingRef = z.object({ id: Id, missing: z.literal(true) });
 export type MissingRef = z.infer<typeof MissingRef>;
 
-/** Who did something. A deleted or unknown person comes back as a MissingRef ("Someone"). */
-export const ActorRef = z.union([z.object({ id: Id, name: z.string() }), MissingRef]);
+/**
+ * Who did something. An unknown person comes back as a MissingRef ("Someone"); someone who
+ * deleted their data (D1, 0015) as `{ id, missing: true, former: true }`, shown as "a former member".
+ */
+export const FormerMemberRef = z.object({ id: Id, missing: z.literal(true), former: z.literal(true) });
+export type FormerMemberRef = z.infer<typeof FormerMemberRef>;
+export const ActorRef = z.union([z.object({ id: Id, name: z.string() }), FormerMemberRef, MissingRef]);
 export type ActorRef = z.infer<typeof ActorRef>;
 
 export const MealRef = z.union([z.object({ id: Id, title: z.string() }), MissingRef]);

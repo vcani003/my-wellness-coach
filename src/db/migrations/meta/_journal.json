@@ -50,6 +50,13 @@
       "when": 1791995541272,
       "tag": "0006_meal_idea_position",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791996883731,
+      "tag": "0007_settings",
+      "breakpoints": true
     }
   ]
 }

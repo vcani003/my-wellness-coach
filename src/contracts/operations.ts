@@ -211,6 +211,16 @@ export const RestrictionRemove = z.object({
   type: z.literal("profile.restriction.remove"),
 });
 
+/**
+ * The owner confirms a restriction another member added for them (AI7, 0019): Settings' "Keep".
+ * Only the owner may; already verified → a no-change. Button only in MVP 1 (not in the AI's schema).
+ */
+export const RestrictionVerify = z.object({
+  ...common,
+  type: z.literal("profile.restriction.verify"),
+  target: z.strictObject({ restrictionId: Id }),
+});
+
 export const PreferenceSave = z.object({
   ...common,
   type: z.literal("profile.preference.save"),
@@ -314,6 +324,7 @@ export const Operation = z.discriminatedUnion("type", [
   RestrictionAdd,
   RestrictionUpdate,
   RestrictionRemove,
+  RestrictionVerify,
   PreferenceSave,
   PreferenceRemove,
   ShoppingAdd,
@@ -334,6 +345,7 @@ export const PROFILE_OPERATION_TYPES = [
   "profile.restriction.add",
   "profile.restriction.update",
   "profile.restriction.remove",
+  "profile.restriction.verify",
   "profile.preference.save",
   "profile.preference.remove",
 ] as const satisfies readonly OperationType[];

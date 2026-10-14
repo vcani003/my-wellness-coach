@@ -18,10 +18,10 @@ afterAll(() => close());
 describe("bootstrap", () => {
   it("creates Vero, Levi and the shared Home kitchen, and is safe to run twice", async () => {
     const first = await bootstrap(db);
-    expect(first).toEqual({ createdUsers: ["vero", "levi"], createdKitchen: true, createdMemberships: ["vero", "levi"] });
+    expect(first).toEqual({ createdUsers: ["vero", "levi"], createdKitchen: true, createdMemberships: ["vero", "levi"], skippedDeleted: [] });
 
     const second = await bootstrap(db);
-    expect(second).toEqual({ createdUsers: [], createdKitchen: false, createdMemberships: [] });
+    expect(second).toEqual({ createdUsers: [], createdKitchen: false, createdMemberships: [], skippedDeleted: [] });
 
     const [home] = await db.select().from(kitchens).where(eq(kitchens.id, HOME_KITCHEN.id));
     expect(home).toMatchObject({ name: "Home", isTest: false });
@@ -38,7 +38,7 @@ describe("bootstrap", () => {
   it("repairs a half-finished setup without touching what exists", async () => {
     await db.delete(memberships).where(eq(memberships.userId, "levi"));
     await db.update(users).set({ displayName: "Levi Le" }).where(eq(users.id, "levi"));
-    expect(await bootstrap(db)).toEqual({ createdUsers: [], createdKitchen: false, createdMemberships: ["levi"] });
+    expect(await bootstrap(db)).toEqual({ createdUsers: [], createdKitchen: false, createdMemberships: ["levi"], skippedDeleted: [] });
     const [levi] = await db.select().from(users).where(eq(users.id, "levi"));
     expect(levi.displayName).toBe("Levi Le");
   });

@@ -7,7 +7,8 @@ import { attemptUnlock } from "@/lib/auth/unlock";
 import { sessionCookieName, sessionCookieOptions } from "@/lib/auth/session";
 import { env } from "@/lib/env";
 
-export type UnlockErrorKey = "empty" | "failed" | "tooMany" | "notConfigured" | "wrong";
+/** `deleted`: the code belongs to someone who deleted their data (D1); en.json `unlock.errors.deleted`. */
+export type UnlockErrorKey = "empty" | "failed" | "tooMany" | "notConfigured" | "wrong" | "deleted";
 
 export interface UnlockState {
   error?: { key: UnlockErrorKey; minutes?: number };
@@ -36,6 +37,7 @@ export async function unlock(_prev: UnlockState, form: FormData): Promise<Unlock
       return { error: { key: "tooMany", minutes } };
     }
     if (result.reason === "not_configured") return { error: { key: "notConfigured" } };
+    if (result.reason === "deleted") return { error: { key: "deleted" } };
     return { error: { key: "wrong" } };
   }
   const production = e.NODE_ENV === "production";

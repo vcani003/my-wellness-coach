@@ -31,13 +31,15 @@ export class UnauthenticatedError extends Error {
   }
 }
 
-async function loadUser(db: Queryable, id: string, allowTest: boolean): Promise<CurrentUser | null> {
+async function loadUser(db: Queryable, id: string, allowTest: boolean, epoch?: number): Promise<CurrentUser | null> {
   const [row] = await db
-    .select({ id: users.id, displayName: users.displayName, isTest: users.isTest })
+    .select({ id: users.id, displayName: users.displayName, isTest: users.isTest, sessionEpoch: users.sessionEpoch })
     .from(users)
     .where(eq(users.id, id))
     .limit(1);
   if (!row || (row.isTest && !allowTest)) return null;
+  // "Sign out everywhere" (0017): a cookie from another session generation no longer counts.
+  if (epoch !== undefined && epoch !== row.sessionEpoch) return null;
   return { id: row.id, displayName: row.displayName };
 }
 
@@ -58,8 +60,8 @@ export async function resolveCurrentUser(
     now,
   );
   if (!session) return null;
-  // Tester accounts never hold a real session (0021).
-  return loadUser(db, session.userId, false);
+  // Tester accounts never hold a real session (0021). A deleted person has no row (D1).
+  return loadUser(db, session.userId, false, session.epoch);
 }
 
 /** The signed-in user, or null. Server only. */

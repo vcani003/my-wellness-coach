@@ -5,7 +5,7 @@
  * - A restriction is saved only with `basis: said` (NOT_SAID otherwise); never inferred.
  * - Adding one for another member is allowed only for a member of the same kitchen. Asking the
  *   speaker to confirm first is the AI's job (ai.md §4, OPEN-QUESTIONS AI7 Rec).
- * - Only the profile's owner can update a restriction's note or remove it.
+ * - Only the profile's owner can update a restriction's note, remove it, or verify it (AI7).
  * - A lasting preference needs the ID of the message where the user said "yes".
  */
 import type { OperationOf } from "@/contracts/operations";
@@ -21,6 +21,7 @@ import {
   type RestrictionAddedPayload,
   type RestrictionRemovedPayload,
   type RestrictionUpdatedPayload,
+  type RestrictionVerifiedPayload,
 } from "./state";
 
 export interface ProfileValidationContext {
@@ -36,6 +37,7 @@ type ProfileOp = OperationOf<
   | "profile.restriction.add"
   | "profile.restriction.update"
   | "profile.restriction.remove"
+  | "profile.restriction.verify"
   | "profile.preference.save"
   | "profile.preference.remove"
 >;
@@ -44,6 +46,20 @@ const subjectKey = (s: string) => standardName(s).replace(/ allergy$/, "");
 
 export function validateProfileOperation(op: ProfileOp, ctx: ProfileValidationContext): OpOutcome {
   switch (op.type) {
+    case "profile.restriction.verify": {
+      const existing = ctx.profiles.restrictions[op.target.restrictionId];
+      const name = existing ? ctx.members.get(existing.userId) : undefined;
+      if (!existing || !name) return reject("UNKNOWN_TARGET");
+      if (existing.userId !== ctx.actorId) return reject("NOT_ALLOWED");
+      if (existing.verifiedAt) return { ok: true, events: [], summary: msg("NO_CHANGE"), refs: [] };
+      const payload: RestrictionVerifiedPayload = { restrictionId: existing.id };
+      return {
+        ok: true,
+        events: [ctx.make(userStream(existing.userId), PROFILE_EVENT.restrictionVerified, payload)],
+        summary: msg("RESTRICTION_VERIFIED", { name, kind: existing.kind, subject: existing.subject.value }),
+        refs: [{ kind: "profile", id: existing.id, change: "updated" }],
+      };
+    }
     case "profile.restriction.add":
     case "profile.restriction.update":
     case "profile.restriction.remove": {

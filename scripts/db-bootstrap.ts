@@ -13,6 +13,9 @@ try {
     r.createdKitchen ? `kitchen "home"` : "",
     r.createdMemberships.length ? `memberships for ${r.createdMemberships.join(", ")}` : "",
   ].filter(Boolean);
+  if (r.skippedDeleted.length) {
+    console.log(`Skipped ${r.skippedDeleted.join(", ")}: deleted their data (D1). Remove their code from ACCESS_CODES.`);
+  }
   console.log(`Bootstrap on ${where}: ${created.length ? `created ${created.join("; ")}` : "already set up, nothing to do"}`);
 } finally {
   await close();

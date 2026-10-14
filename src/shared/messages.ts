@@ -34,6 +34,8 @@ const TEMPLATES: Record<string, string> = {
   RESTRICTION_ADDED: "Saved {name}'s {kind}: {subject}",
   RESTRICTION_UPDATED: "Updated {name}'s {kind}: {subject}",
   RESTRICTION_REMOVED: "Removed {name}'s {kind}: {subject}",
+  RESTRICTION_VERIFIED: "Confirmed {name}'s {kind}: {subject}",
+  FORMER_MEMBER_PROFILE: "Changed a former member's profile",
   PREFERENCE_SAVED: "I'll remember: {statement}",
   PREFERENCE_REMOVED: "Forgot: {statement}",
   UNDONE: "Undid that change",

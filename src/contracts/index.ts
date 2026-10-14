@@ -8,3 +8,4 @@ export * from "./proposed-change";
 export * from "./kitchen-state";
 export * from "./apply-result";
 export * from "./stream";
+export * from "./settings";

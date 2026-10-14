@@ -6,7 +6,7 @@
  * Pure, so it never throws for bad data.
  */
 import type { z } from "zod";
-import type { ActorRef, AllergenFlag, MealRef } from "@/contracts/common";
+import type { AllergenFlag, MealRef } from "@/contracts/common";
 import {
   ItemRow,
   MealRow,
@@ -16,6 +16,7 @@ import {
   ShoppingItemRow,
   TickRow,
 } from "@/contracts/kitchen-state";
+import { actorRef, type NameDirectory } from "@/shared/identity";
 import { computeAllergenFlags } from "@/shared/profile/allergens";
 import type { Restriction } from "@/shared/profile/state";
 import { resolveItem } from "./validate";
@@ -25,16 +26,13 @@ import type { KitchenEntities, Meal, Recipe, Review } from "./state";
 export interface ReadContext {
   kitchenId: string;
   version: number;
-  /** userId → display name, for anyone who may appear as an actor. */
-  names: ReadonlyMap<string, string>;
+  /** userId → display name, for anyone who may appear as an actor (+ who deleted their data). */
+  names: NameDirectory;
   /** Every current member's restrictions: allergies count whoever is asking (0019). */
   restrictions: Restriction[];
 }
 
-export function actorRef(id: string, names: ReadonlyMap<string, string>): ActorRef {
-  const name = names.get(id);
-  return name === undefined ? { id, missing: true } : { id, name };
-}
+export { actorRef };
 
 function mealRef(id: string, kitchen: KitchenEntities): MealRef {
   const meal = kitchen.meals[id];
@@ -55,7 +53,7 @@ function checked<S extends z.ZodType>(schema: S, rows: unknown[], what: string):
   return out;
 }
 
-function audit(e: { createdAt: string; createdBy: string; updatedAt: string; updatedBy: string }, names: ReadonlyMap<string, string>) {
+function audit(e: { createdAt: string; createdBy: string; updatedAt: string; updatedBy: string }, names: NameDirectory) {
   return {
     createdAt: e.createdAt,
     createdBy: actorRef(e.createdBy, names),

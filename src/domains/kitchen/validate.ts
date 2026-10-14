@@ -986,6 +986,7 @@ function validateOperation(op: Operation, env: OpEnv): OpOutcome {
     case "profile.restriction.add":
     case "profile.restriction.update":
     case "profile.restriction.remove":
+    case "profile.restriction.verify":
     case "profile.preference.save":
     case "profile.preference.remove":
       return validateProfileOperation(op, {
