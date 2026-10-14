@@ -11,6 +11,13 @@
 
 ## Outstanding
 
+### SM1. 🟡 A real-AI check before every deploy (to prevent today's outage)
+Today's chat outage happened because our tests use a simulated AI, which doesn't enforce the real AI's rules. A new test now catches that exact problem, but a real check is safer.
+**Rec:** before each deploy, I run a tiny **real-AI smoke check** using your **staging key** (S6, $5 limit): one short call per task (understanding a message, meal ideas, recipe, re-wording), about **2–5¢ per deploy**. If any call is rejected, the deploy stops.
+**What I need from you, once:** open `~/Desktop/code/kitchen-preview/.env.local` in TextEdit and add a line `ANTHROPIC_API_KEY=` followed by your **staging** key. That file is never committed or uploaded, and I never see the key's value; the check script reads it directly.
+
+> Answer:
+
 ### CAT1. 🟡 Organising and searching your kitchen (you asked)
 **Rec (being built on this):**
 - The full kitchen view (**See all**) gets a toggle: **By place** (Fridge / Freezer / Pantry / Not sure where, as now) | **By type**.
