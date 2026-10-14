@@ -11,16 +11,6 @@
 
 ## Outstanding
 
-### MI1. 🟡 When you name a dish, go straight to its recipe?
-From your local test: *"I was thinking a chicken curry, with coconut milk, lemongrass, kaffir. I have a curry base seasoning packet. I also have potatoes."*
-**Rec (being built on this, following M1: naming a meal in chat counts as choosing it):**
-- What you say you have goes into the kitchen: curry base packet, potatoes.
-- Kitchen goes **straight to a recipe for your dish**. It uses your chicken thighs (oldest batch first) and puts what you mentioned but don't have (coconut milk, lemongrass, kaffir lime leaves) under **Need**, with one tap to add them to the shopping list.
-- No idea cards in between. If you say "or something else?", you get ideas.
-- Allergies still apply: any member's allergen gets the badge.
-
-> Answer:
-
 ### D2. ⚪ If someone deletes their data, can they come back?
 *(From the Backend specialist, building Settings)* After deleting, their old access code stops working, with a clear message. That way the app never quietly recreates a deleted account.
 **Rec:** yes, as a **fresh start**. You remove their old code and add a new one, and they come back as a new member with an empty profile. Their old changes in the kitchen still show "a former member".
@@ -147,5 +137,6 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | N1 | Budget-exhausted notice | [0020](decisions/0020-ai-cost-and-model.md): calm message now; 80% heads-up later |
 | GH2 | Push the Do-later fix | Approved 2026-10-14; pushed after a clean-copy check (317 tests) |
 | P2 | Next builds | Order: (a) chat history → (d) meal ideas to cooking → (b) Settings → (e) staging + testers → (c) batches |
+| MI1 | Named dish goes straight to its recipe | [0013](decisions/0013-meal-lifecycle.md): approved 2026-10-14 |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |

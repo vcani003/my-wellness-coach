@@ -26,3 +26,10 @@ Full design: [ux.md](../architecture/ux.md) §3 and §5.
 - This step is required but **skippable** or **do later**.
 - **"Do later"** items wait in **To review** at the top of the Kitchen widget.
 - **No reserving** ingredients when planning (0008).
+
+## Naming a dish (MI1, approved 2026-10-14)
+When the user names a dish in chat ("I was thinking a chicken curry with coconut milk, lemongrass, kaffir"), Kitchen **goes straight to a recipe for that dish**, with no idea cards in between, consistent with M1 (naming counts as choosing).
+- Things the user says they have in the same message are added to the kitchen.
+- Ingredients mentioned as part of the dish but not in the kitchen go under **Need**, with one tap to add them to the shopping list.
+- The oldest batch is used first (0025), and allergen badges still apply (0019). "Or something else?" brings up idea cards.
+
