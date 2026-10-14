@@ -28,12 +28,16 @@ export interface LocalDb {
 /**
  * Open a PGlite database. `dataDir` undefined = in memory (tests).
  * Runs migrations unless `migrateOnOpen` is false.
+ * `migrationsFolder` defaults to the folder next to this file.
  */
-export async function openLocalDb(opts: { dataDir?: string; migrateOnOpen?: boolean } = {}): Promise<LocalDb> {
+export async function openLocalDb(
+  opts: { dataDir?: string; migrateOnOpen?: boolean; migrationsFolder?: string } = {},
+): Promise<LocalDb> {
   const client = opts.dataDir ? new PGlite(opts.dataDir) : new PGlite();
   const db = drizzle({ client, schema });
   if (opts.migrateOnOpen !== false) {
-    await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+    // Bundlers (Next.js) move this file, so the app server passes the folder explicitly.
+    await migrate(db, { migrationsFolder: opts.migrationsFolder ?? MIGRATIONS_FOLDER });
   }
   return { db, close: () => client.close() };
 }

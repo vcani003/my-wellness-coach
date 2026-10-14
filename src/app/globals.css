@@ -1,0 +1,240 @@
+/*
+ * Clay & Honey design tokens (decision 0024; docs/design/visual-direction.md §4, direction C).
+ *
+ * Every value is a SEMANTIC token, named for its role, never its look (0017, frontend.md §4).
+ * Tailwind's default palette, type scale, radii, shadows and spacing are reset to `initial`,
+ * so raw classes like `bg-white` or `p-5`-as-20px simply don't exist: components can only use
+ * these tokens. A dark theme later is one more block of values under `[data-theme="dark"]`
+ * (see the bottom of this file) with no component changes.
+ *
+ * Utility names follow the token names 1:1: `color.text.muted` → `--color-text-muted` →
+ * `text-text-muted`. Plum (`color.allergy.*`) is reserved for allergy flags only (V2).
+ */
+@import "tailwindcss";
+
+@theme static {
+  /* ── Colour (light theme) ─────────────────────────────────────────── */
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --color-surface-default: #faf4ec; /* page and workspace */
+  --color-surface-raised: #fffbf6; /* cards, chat dock, sheets */
+  --color-surface-sunken: #f1e8dc; /* message box, tags, group headers */
+  --color-text-default: #33281f;
+  --color-text-muted: #685a4d;
+  --color-text-inverse: #fffbf6; /* text on the accent */
+  --color-border-default: #e8dccc; /* decorative only: card edges, dividers */
+  --color-border-strong: #94826f; /* edges of inputs and checkboxes (3.4:1; don't lighten) */
+  --color-accent-default: #9a4e2f; /* primary buttons, chat button */
+  --color-accent-text: #8e4729; /* links, Undo */
+  --color-accent-soft: #f6e3d8; /* your own chat bubble */
+  --color-focus-ring: #2f6a6a;
+  --color-highlight-bg: #faefc9; /* "New" / "Updated" wash, new-reply dot */
+  --color-highlight-text: #654a0e;
+  --color-success-bg: #e6efe0;
+  --color-success-text: #3a6135;
+  --color-allergy-bg: #f3e9f2; /* reserved: allergy flags only */
+  --color-allergy-text: #5a2a57; /* reserved: allergy flags only */
+  --color-allergy-border: #87487f; /* reserved: allergy flags only */
+  --color-warning-bg: #f8edd6;
+  --color-warning-text: #6b4a0f;
+  --color-error-bg: #f9e6e3;
+  --color-error-text: #9b2d2a;
+  --color-selected-bg: #f6e3d8;
+  --color-selected-border: #9a4e2f;
+
+  /* ── Type ─────────────────────────────────────────────────────────── */
+  --font-*: initial;
+  --font-body: var(--font-nunito), system-ui, sans-serif;
+  --font-heading: var(--font-nunito), system-ui, sans-serif;
+
+  --font-weight-*: initial;
+  --font-weight-regular: 400;
+  --font-weight-medium: 600;
+  --font-weight-strong: 700;
+
+  --text-*: initial;
+  --text-caption: 13px;
+  --text-caption--line-height: 18px;
+  --text-small: 15px;
+  --text-small--line-height: 22px;
+  --text-body: 16px;
+  --text-body--line-height: 24px;
+  --text-title: 18px;
+  --text-title--line-height: 24px;
+  --text-heading: 22px;
+  --text-heading--line-height: 28px;
+
+  /* ── Space: 4 px base, space.1–7 = 4 · 8 · 12 · 16 · 24 · 32 · 48 px ─ */
+  --spacing-*: initial;
+  --spacing-0: 0px;
+  --spacing-px: 1px;
+  --spacing-0_5: 2px; /* focus-ring gap, hairlines */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 24px;
+  --spacing-6: 32px;
+  --spacing-7: 48px;
+  --spacing-tap: 44px; /* minimum tap target (frontend.md §6) */
+  --spacing-dot: 10px; /* new-reply dot */
+  --spacing-icon: 20px;
+  --spacing-icon-sm: 16px;
+  --spacing-avatar: 32px;
+  --spacing-fab: 56px; /* floating chat button */
+
+  /* ── Shape and depth ──────────────────────────────────────────────── */
+  --radius-*: initial;
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 26px;
+  --radius-button: 999px; /* pill */
+  --radius-full: 9999px;
+
+  --shadow-*: initial;
+  --shadow-card: 0 2px 10px rgb(51 40 31 / 0.07);
+  --shadow-dock: 0 -6px 24px rgb(51 40 31 / 0.1);
+  --shadow-fab: 0 4px 16px rgb(51 40 31 / 0.18);
+
+  /* ── Motion: soft settle, never bounce ────────────────────────────── */
+  --ease-*: initial;
+  --ease-gentle: cubic-bezier(0.33, 1, 0.68, 1);
+
+  /* ── Layout ───────────────────────────────────────────────────────── */
+  --breakpoint-*: initial;
+  --breakpoint-desk: 56.25rem; /* 900 px: chat left 1/3, workspace right 2/3 */
+}
+
+:root {
+  --motion-duration-quick: 140ms;
+  --motion-duration-gentle: 320ms;
+  --motion-duration-slow: 560ms;
+  --icon-stroke: 2px;
+
+  /* Set by src/ui/shell/viewport.ts (iOS keyboard; frontend.md §5). */
+  --keyboard-inset: 0px;
+  /* Set by the dock (ResizeObserver) so the workspace never hides behind it (WCAG 2.4.11). */
+  --dock-height: 0px;
+  --topbar-height: 56px;
+
+  color-scheme: light;
+}
+
+/* Reduced motion: every duration becomes 0 ms; highlights just appear (visual-direction §2). */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-quick: 0ms;
+    --motion-duration-gentle: 0ms;
+    --motion-duration-slow: 0ms;
+  }
+}
+
+@layer base {
+  html,
+  body {
+    background: var(--color-surface-default);
+    color: var(--color-text-default);
+    font-family: var(--font-body);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* 2 px ring in focus-ring with a 2 px gap, visible on every surface (visual-direction §2). */
+  :focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+
+  button {
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  /* "New" / "Updated" wash: fades in once, then stays until your next message (ux §1). */
+  .change-highlight {
+    background: var(--color-highlight-bg);
+    animation: highlight-in var(--motion-duration-slow) var(--ease-gentle);
+  }
+  @keyframes highlight-in {
+    from {
+      background: transparent;
+    }
+  }
+
+  /* "Kitchen is writing…": three soft dots; static words with reduced motion. */
+  .typing-dot {
+    animation: typing var(--motion-duration-slow) var(--ease-gentle) infinite alternate;
+  }
+  .typing-dot:nth-child(2) {
+    animation-delay: 160ms;
+  }
+  .typing-dot:nth-child(3) {
+    animation-delay: 320ms;
+  }
+  @keyframes typing {
+    to {
+      opacity: 0.25;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .typing-dot {
+      animation: none;
+    }
+  }
+}
+
+/*
+ * Shell layout (ux.md §1). Phone (< 900 px): the chat is docked at the bottom, above the iPhone
+ * keyboard (--keyboard-inset) and the home indicator (safe area). Desktop: a grid, see KitchenApp.
+ */
+/* Unlayered on purpose: these must win over utility classes (e.g. `flex`) on the same element. */
+.composer-area {
+  /* The home indicator needs room only while the keyboard is closed. */
+  padding-bottom: max(var(--spacing-3), calc(env(safe-area-inset-bottom) - var(--keyboard-inset)));
+}
+.chat-fab {
+  bottom: calc(env(safe-area-inset-bottom) + var(--spacing-4));
+}
+
+@media (width < 56.25rem) {
+  html {
+    scroll-padding-top: var(--topbar-height);
+    scroll-padding-bottom: calc(var(--dock-height) + var(--keyboard-inset));
+  }
+  .workspace {
+    padding-bottom: calc(var(--dock-height) + var(--keyboard-inset) + var(--spacing-5));
+    padding-left: max(var(--spacing-4), env(safe-area-inset-left));
+    padding-right: max(var(--spacing-4), env(safe-area-inset-right));
+  }
+  .chat-dock {
+    position: fixed;
+    inset-inline: 0;
+    bottom: var(--keyboard-inset);
+    z-index: 20;
+    max-height: calc(100dvh - var(--topbar-height) - var(--keyboard-inset));
+  }
+  .chat-dock[data-dock="full"] {
+    top: var(--topbar-height);
+  }
+  .chat-dock[data-dock="minimized"] {
+    display: none;
+  }
+  /* Peek: only the latest reply (and its receipt), kept to a share of the screen. */
+  .chat-dock[data-dock="peek"] .chat-log {
+    max-height: 40dvh;
+  }
+  .chat-dock[data-dock="peek"] [data-peek="false"] {
+    display: none;
+  }
+}
+
+/*
+ * Dark theme slot (FE3, 0017): not in MVP 1. Adding it = supplying every --color-* above here,
+ * plus a `data-theme` switch; no component changes.
+ *
+ * :root[data-theme="dark"] { --color-surface-default: …; … }
+ */

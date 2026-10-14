@@ -1,5 +1,7 @@
 /**
- * Test-kitchen scenarios (0021, backend-data.md §8): `single` and `household`.
+ * Test-kitchen scenarios (0021, backend-data.md §8): `single` and `household`, plus `demo`, a
+ * LOCAL-ONLY household with "Vero" and "Levi" display names for the dev "acting as" switch
+ * (milestone 2). Demo people are `isTest` accounts too, so they can never join a real kitchen.
  * `seedScenario` wipes the scenario's test kitchen and its testers' profiles, then loads the
  * scenario through the normal write path (so it has real events). It only ever touches
  * `isTest` kitchens and `isTest` users. Local only for now; the staging `/api/test/reset`
@@ -13,7 +15,7 @@ import { kitchenStream, userStream } from "@/shared/events/types";
 import { createKitchen, createUser } from "@/shared/identity";
 import { requireMember } from "@/shared/membership";
 
-export const SCENARIOS = ["single", "household"] as const;
+export const SCENARIOS = ["single", "household", "demo"] as const;
 export type ScenarioName = (typeof SCENARIOS)[number];
 
 export const TESTERS = [
@@ -21,10 +23,23 @@ export const TESTERS = [
   { id: "tester-2", displayName: "Tester Two", email: "tester-2@example.test" },
 ] as const;
 
+/** Local dev only (the "acting as" switch): stand-ins named like the real household. */
+export const DEMO_PEOPLE = [
+  { id: "demo-vero", displayName: "Vero", email: "demo-vero@example.test" },
+  { id: "demo-levi", displayName: "Levi", email: "demo-levi@example.test" },
+] as const;
+
+const PEOPLE = [...TESTERS, ...DEMO_PEOPLE];
+
 const KITCHENS: Record<ScenarioName, { id: string; name: string; members: string[] }> = {
   single: { id: "test-kitchen-single", name: "Single-person test kitchen", members: ["tester-1"] },
   household: { id: "test-kitchen-household", name: "Household test kitchen", members: ["tester-1", "tester-2"] },
+  demo: { id: "test-kitchen-demo", name: "Demo kitchen (local)", members: ["demo-vero", "demo-levi"] },
 };
+
+export function scenarioKitchenId(name: ScenarioName): string {
+  return KITCHENS[name].id;
+}
 
 const said = <T>(value: T) => ({ value, basis: "said" as const, confidence: "high" as const });
 
@@ -53,7 +68,7 @@ export async function resetScenario(db: Db, name: ScenarioName): Promise<void> {
 
 export async function seedScenario(db: Db, name: ScenarioName, opts: SeedOptions = {}): Promise<{ kitchenId: string; userIds: string[] }> {
   const k = KITCHENS[name];
-  for (const t of TESTERS) {
+  for (const t of PEOPLE.filter((p) => (k.members as string[]).includes(p.id))) {
     const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.id, t.id));
     if (!existing) await createUser(db, { ...t, isTest: true });
   }
@@ -92,10 +107,10 @@ export async function seedScenario(db: Db, name: ScenarioName, opts: SeedOptions
     );
   }
 
-  if (name === "household") {
-    // One tester has a seafood allergy with a personal note (0019, 0021).
+  if (name === "household" || name === "demo") {
+    // One member has a seafood allergy with a personal note (0019, 0021).
     const text = "I'm allergic to seafood, but I can eat shellfish if my medicine is on hand.";
-    await apply("tester-2", "seed-allergy", text, [
+    await apply(k.members[1], "seed-allergy", text, [
       {
         opId: "1",
         type: "profile.restriction.add",

@@ -251,7 +251,7 @@ No accounts or Docker needed: the database is **PGlite**, an embedded Postgres t
 | Load a test kitchen (resets it first) | `npm run db:seed -- single` (add `--after-shopping` for journey step 1 done) or `npm run db:seed -- household` |
 | Checks | `npm run typecheck` · `npm run lint` · `npm test` |
 | After changing `src/db/schema.ts` | `npm run db:generate` (writes SQL to `src/db/migrations`; commit it) |
-| Start the app | `npm run dev` (placeholder page only in this milestone) |
+| Start the app | `npm run dev` (the app with the fake AI and a dev "acting as" switch; see frontend.md "Run it locally") |
 
 - Tests open their own in-memory PGlite per test file, so they never touch `.data/`.
 - To start over locally, delete `.data/pglite`.

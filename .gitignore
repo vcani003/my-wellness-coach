@@ -11,6 +11,7 @@ node_modules/
 
 # Next.js
 /.next/
+/.next-e2e/
 /out/
 /build
 next-env.d.ts
@@ -18,6 +19,8 @@ next-env.d.ts
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
 
 # local embedded database (PGlite) and other local data
 /.data/
@@ -28,3 +31,6 @@ npm-debug.log*
 
 # Vercel
 .vercel
+
+# Agent worktrees
+/.claude/worktrees/

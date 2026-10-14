@@ -1,0 +1,89 @@
+/** The pure widget selection / order / focus rules (0004, ux.md §2, frontend.md §2). */
+import { describe, expect, it } from "vitest";
+import type { ChangeRef } from "@/contracts/apply-result";
+import { focusFor, initialWorkspace, selectWidgets, workspaceReducer, type WorkspaceState } from "@/ui/workspace/layout";
+import { registry } from "@/ui/workspace/registry";
+import type { WidgetDef } from "@/ui/workspace/types";
+import { kitchen } from "../support/kitchen-rows";
+
+const Noop = () => null;
+const def = (id: string, extra: Partial<WidgetDef> = {}): WidgetDef => ({
+  id,
+  domain: id.split(".")[0],
+  lifetime: "lasting",
+  titleKey: id,
+  isPresent: () => true,
+  wantsFocus: () => false,
+  Component: Noop,
+  ...extra,
+});
+
+// A pretend future registry: Kitchen, a Meal plan that wants meal refs, and a session widget.
+const kitchenW = def("kitchen.items", { wantsFocus: (r) => r.kind === "item" });
+const planW = def("kitchen.plan", { wantsFocus: (r) => r.kind === "meal" });
+const ideasW = def("kitchen.ideas", { lifetime: "session", isPresent: () => true });
+const fitnessW = def("fitness.today", { isPresent: () => false });
+const reg = [kitchenW, planW, ideasW, fitnessW];
+const ref = (kind: ChangeRef["kind"]): ChangeRef => ({ kind, id: `${kind}-1`, change: "updated" });
+const ids = (s: WorkspaceState, layout: "phone" | "desktop") =>
+  selectWidgets(s, { registry: reg, data: kitchen([]), layout }).map((w) => [w.def.id, w.expanded, w.updated] as const);
+
+describe("workspace selection", () => {
+  it("starts in registry order; phone expands only the first, desktop expands all; absent widgets are hidden", () => {
+    expect(ids(initialWorkspace, "phone")).toEqual([
+      ["kitchen.items", true, false],
+      ["kitchen.plan", false, false],
+      ["kitchen.ideas", false, false],
+    ]);
+    expect(ids(initialWorkspace, "desktop").every(([, expanded]) => expanded)).toBe(true);
+  });
+
+  it("after your message the focused widget moves to the top and is the one expanded on phone", () => {
+    const s = workspaceReducer(initialWorkspace, { type: "turnApplied", focus: ["kitchen.plan"] });
+    expect(ids(s, "phone")).toEqual([
+      ["kitchen.plan", true, false],
+      ["kitchen.items", false, false],
+      ["kitchen.ideas", false, false],
+    ]);
+  });
+
+  it("several widgets changed: the first in the receipt is focused, the others get an Updated dot until your next message", () => {
+    let s = workspaceReducer(initialWorkspace, { type: "turnApplied", focus: ["kitchen.plan", "kitchen.items"] });
+    expect(ids(s, "phone")[0]).toEqual(["kitchen.plan", true, false]);
+    expect(ids(s, "phone")[1]).toEqual(["kitchen.items", false, true]);
+    s = workspaceReducer(s, { type: "messageSent" });
+    expect(ids(s, "phone")[1]).toEqual(["kitchen.items", false, false]);
+  });
+
+  it("the other person's changes never reorder or refocus", () => {
+    const s = workspaceReducer(initialWorkspace, { type: "turnApplied", focus: ["kitchen.plan"] });
+    expect(workspaceReducer(s, { type: "remoteChange" })).toBe(s);
+  });
+
+  it("a user toggle sticks until the next turn", () => {
+    let s = workspaceReducer(initialWorkspace, { type: "userToggled", id: "kitchen.items", expanded: false });
+    expect(ids(s, "desktop")[0]).toEqual(["kitchen.items", false, false]);
+    s = workspaceReducer(s, { type: "turnApplied", focus: ["kitchen.items"] });
+    expect(ids(s, "desktop")[0]).toEqual(["kitchen.items", true, false]);
+  });
+
+  it("session widgets can be closed; lasting ones can't; a later turn that needs it brings it back", () => {
+    let s = workspaceReducer(initialWorkspace, { type: "userClosed", id: "kitchen.ideas" });
+    s = workspaceReducer(s, { type: "userClosed", id: "kitchen.items" });
+    expect(ids(s, "desktop").map(([id]) => id)).toEqual(["kitchen.items", "kitchen.plan"]);
+    s = workspaceReducer(s, { type: "turnApplied", focus: ["kitchen.ideas"] });
+    expect(ids(s, "desktop").map(([id]) => id)[0]).toBe("kitchen.ideas");
+  });
+
+  it("focusFor follows receipt order without repeats and ignores refs nobody wants", () => {
+    expect(focusFor(reg, [ref("meal"), ref("item"), ref("meal"), ref("profile")])).toEqual(["kitchen.plan", "kitchen.items"]);
+    expect(focusFor(reg, [])).toEqual([]);
+  });
+
+  it("the real registry: Kitchen is always present (empty state) and wants item changes", () => {
+    expect(registry.map((w) => w.id)).toEqual(["kitchen.items"]);
+    expect(registry[0].isPresent(null)).toBe(true);
+    expect(focusFor(registry, [ref("item")])).toEqual(["kitchen.items"]);
+    expect(focusFor(registry, [ref("profile")])).toEqual([]);
+  });
+});

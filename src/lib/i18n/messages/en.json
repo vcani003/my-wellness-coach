@@ -1,0 +1,142 @@
+{
+  "app": {
+    "name": "Kitchen",
+    "description": "Your kitchen assistant: tell it what changed, and it keeps track.",
+    "skipToChat": "Skip to chat",
+    "skipToWorkspace": "Skip to your kitchen",
+    "loading": "Opening your kitchen…",
+    "signedInAs": "Signed in as {name}",
+    "noSession": {
+      "title": "Sign-in isn't built yet",
+      "body": "This build only runs locally, with the developer “acting as” switch."
+    },
+    "errorPage": {
+      "title": "Something didn't load",
+      "body": "Your kitchen is safe. Try loading the page again.",
+      "retry": "Try again"
+    }
+  },
+  "dev": {
+    "label": "Dev only",
+    "actingAs": "Acting as",
+    "reset": "Reset",
+    "resetting": "Resetting…",
+    "resetFailed": "Couldn't reset"
+  },
+  "workspace": {
+    "label": "Workspace",
+    "heading": "Your kitchen",
+    "collapse": "Collapse {title}",
+    "expand": "Expand {title}",
+    "widgetError": "Couldn't load this.",
+    "retry": "Retry",
+    "updated": "Updated"
+  },
+  "kitchen": {
+    "title": "Kitchen",
+    "count": "{count, plural, =0 {empty} one {# item} other {# items}}",
+    "groups": {
+      "fridge": "Fridge",
+      "freezer": "Freezer",
+      "pantry": "Pantry",
+      "unknown": "Not sure where"
+    },
+    "empty": "Your kitchen is empty. Tell me what you've got.",
+    "loading": "Loading your kitchen…",
+    "error": "Couldn't load your kitchen.",
+    "retry": "Retry",
+    "stale": "Offline · showing your kitchen as of {time}",
+    "addedDaysAgo": "{days, plural, =0 {added today} =1 {added yesterday} other {added # days ago}}",
+    "low": "Running low",
+    "opened": "Opened",
+    "frozen": "Frozen",
+    "new": "New",
+    "updated": "Updated",
+    "byPerson": "{name} · {when}",
+    "justNow": "just now"
+  },
+  "chat": {
+    "label": "Chat",
+    "heading": "Chat with Kitchen",
+    "showChat": "Show chat",
+    "hideChat": "Hide chat",
+    "minimize": "Minimize chat",
+    "openChat": "Open chat",
+    "openChatNewReply": "Open chat, new reply",
+    "kitchenUpdated": "Kitchen updated",
+    "messagesLabel": "Conversation",
+    "you": "You",
+    "assistant": "Kitchen",
+    "writing": "Kitchen is writing…",
+    "composerLabel": "Message Kitchen",
+    "composerPlaceholder": "Tell me what changed, or ask what to make",
+    "send": "Send",
+    "welcome": "Hi! Tell me what you bought, froze or used up. I save things as soon as you tell me, and you can always Undo.",
+    "suggestionsLabel": "Ideas to start with",
+    "suggestions": {
+      "bought": "I bought…",
+      "froze": "I froze the…",
+      "low": "We're running low on…"
+    },
+    "notSent": "Not sent",
+    "tryAgain": "Try again",
+    "errorNothingChanged": "I couldn't save that, so nothing changed.",
+    "interrupted": "Reply interrupted. Your changes were saved.",
+    "announceKitchenUpdated": "Kitchen updated.",
+    "announceRemote": "{name} updated the kitchen."
+  },
+  "receipt": {
+    "title": "What changed",
+    "undo": "Undo",
+    "undoLabel": "Undo: {changes}",
+    "undoing": "Undoing…",
+    "undone": "Undone",
+    "cantUndo": "Can't undo this now. Tell me what to fix.",
+    "view": "View",
+    "viewLabel": "View in Kitchen",
+    "notChanged": "Not changed: {reason}",
+    "announceUndone": "Undone: {changes}"
+  },
+  "fallback": {
+    "unknownItem": "Unknown item",
+    "someone": "Someone",
+    "formerMember": "a former member"
+  },
+  "location": {
+    "fridge": "fridge",
+    "freezer": "freezer",
+    "pantry": "pantry"
+  },
+  "msg": {
+    "ITEM_ADDED": "Added {name}",
+    "ITEM_RESTOCKED": "Added {name} (back in stock)",
+    "ITEM_UPDATED": "Updated {name}",
+    "ITEM_MOVED": "{name} → {location}",
+    "ITEM_USED": "Used {name}",
+    "ITEM_LOW": "{name}: running low",
+    "ITEM_OUT": "{name}: out",
+    "ITEM_RECORDED": "{name} wasn't in your kitchen, so I added it",
+    "ITEM_USED_RECORDED": "{name} wasn't in your kitchen; noted it as used",
+    "ITEM_REMOVED": "Removed {name}",
+    "ITEM_REMOVE_NOT_FOUND": "{name} wasn't in your kitchen",
+    "NO_CHANGE": "Nothing to change",
+    "UNDONE": "Undid that change",
+    "UNKNOWN_ITEM": "That item isn't in this kitchen",
+    "AMBIGUOUS_ITEM": "More than one item matches {name}",
+    "EVIDENCE_NOT_FOUND": "I couldn't find that in what you typed",
+    "NOT_SAID": "Allergies and diets are saved only when you say them",
+    "NOT_ALLOWED": "That isn't allowed",
+    "ALREADY_OUT": "{name} is already out",
+    "STALE_TARGET": "That changed since; please check and try again",
+    "UNKNOWN_TARGET": "I couldn't find that",
+    "UNDO_CONFLICT": "Can't undo this now: something changed it since. Tell me what to fix.",
+    "ALREADY_UNDONE": "That was already undone",
+    "INVALID_OPERATION": "That change doesn't make sense",
+    "UNDO_OF_UNDO": "An undo can't be undone; tell me what to fix",
+    "INVALID_PROPOSAL": "I couldn't understand that change, so nothing changed",
+    "SAVE_FAILED": "I couldn't save that, so nothing changed"
+  },
+  "msgPlain": {
+    "ITEM_MOVED": "{name} moved to the {location}"
+  }
+}

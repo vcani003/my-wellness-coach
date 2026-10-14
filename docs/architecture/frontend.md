@@ -1,6 +1,6 @@
 # Frontend and accessibility architecture
 
-**Status:** Proposed, pending Vero's review · 2026-10-13 · Frontend + Accessibility specialist
+**Status:** Approved (0023); milestone 2 built 2026-10-14 (see "Build changelog" at the end) · Frontend + Accessibility specialist
 **Builds on:** [ux.md](ux.md), [backend-data.md](backend-data.md) (§6, §9); decisions 0001, 0002, 0004, 0005, 0007, 0011, 0013, 0015–0021. `ai.md` didn't exist yet, so the chat stream format in §3 is a proposal for AI and Backend to confirm. Where an outstanding question matters, the design works either way and cites its ID.
 
 ---
@@ -195,3 +195,40 @@ Wrapping Base UI in `primitives/` means swapping libraries touches one folder.
 - `ApplyResult.applied[].refs`; translatable `Msg {code, params, text}` summaries and rejections; `createdAt/By` and `updatedAt/By` on rows; `state` always included in ApplyResult.
 - Session length per FE1; one email with link and code (0017).
 - The turn stream is merged with AI's pipeline. **Choose** streams via `POST /api/meals/choose`.
+
+
+---
+
+## Run it locally (milestone 2)
+
+No accounts, no real AI. Node 24+.
+
+| Step | Command |
+|---|---|
+| Install | `npm install` |
+| Start the app | `npm run dev`, then open http://localhost:3000 (on a phone on the same Wi-Fi: the "Network" address it prints) |
+| Who you are | The yellow **Dev only** bar: switch **Acting as Vero / Levi** (the local `demo` kitchen, seeded on first load). **Reset** empties it. |
+| Checks | `npm run typecheck` · `npm run lint` · `npm test` |
+| End-to-end + accessibility | `npx playwright install chromium` (once), then `npm run test:e2e`. It starts its own server on port 3210 with its own database (`.data/pglite-e2e`), so it doesn't touch yours. `M2_SCREENSHOTS=1 npm run test:e2e` refreshes `docs/design/screenshots/m2-*.png`. |
+
+The stand-in AI understands only: "I bought X, Y and Z", "I froze the X", "I used the rest of the X", "X is running low", "undo". Anything else gets a polite "I didn't catch that".
+Stop `npm run dev` before `npm run db:seed` (one process per local database folder).
+
+## Build changelog
+
+| Date | Where the build differs from the design above, and why |
+|---|---|
+| 2026-10-14 (M2) | **Scope built:** §10 steps 1, 3, 4, 5 (skeleton, shell, chat on the fake interpreter, registry + Kitchen widget) plus thin server plumbing. Not built: sign-in, sheets, To review, See all, offline snapshot/service worker, Meal ideas/Recipe/Meal plan. |
+| | **Icons: Phosphor** (MIT), not lucide (§4): Clay & Honey specifies Phosphor (visual-direction §3C). Imported one by one through `src/ui/primitives/icons.tsx`. |
+| | **No TanStack Query yet** (§4): sync is one small framework-free store (`src/ui/sync/kitchen-sync.ts`) + `useKitchenSync`; the version-then-state polling needed custom code anyway. Easy to swap later. |
+| | **next-intl without the server plugin:** one locale, so messages load in the root layout and only client components translate. Add the plugin when a server component needs text. |
+| | **Tokens:** Tailwind's palette, spacing, radii, type and shadows are reset; only Clay & Honey semantic tokens exist (`src/app/globals.css`, utility names = token names, e.g. `text-text-muted`). Lint refuses hex colours, palette classes and hard-coded UI text. Dark mode = one more token block. |
+| | **Dev "acting as" switch** instead of sign-in: a cookie picks Vero or Levi in a new local-only `demo` seed scenario (stand-ins named like the household; tester scenarios untouched). Off in production twice over: compiled out (`NODE_ENV`), and the server refuses to start with `DEV_ACTING_AS` set (`src/instrumentation.ts`). `POST /api/dev/reset` answers 404 outside dev. |
+| | **Interpreter seam** (orchestrator spec): `src/ai/interpreter.ts` (`interpret` + optional `reword`), `getInterpreter()` returns the fake unless `AI_MODE=real` (TODO for the AI specialist). The draft reply is sent only if every op applied, else `reword` or a reply built from the receipt. The fake gets a "my recent changes" lookup for "undo". |
+| | **Chat history is in memory only** (no message storage exists yet); the client sends the last ≤10 turns with each message. |
+| | **Kitchen widget shows every item** (no compact 8 + See all yet). Within a group, most recently changed first. "Levi · just now" shows on any row last changed by someone else; it's highlighted if it arrived while you were looking. |
+| | **First-run suggestions** are "I bought…", "I froze the…", "We're running low on…" (what the stand-in understands), not ux.md's ideas/allergy ones, which would dead-end now. |
+| | **Phone Peek** caps the reply + receipt at 40% of the screen height; the workspace and focus padding follow the measured dock height (`--dock-height`). |
+| | **iPhone keyboard:** `src/ui/shell/viewport.ts` publishes `--keyboard-inset` from `visualViewport` (ignored under 120 px or when pinch-zoomed). Not yet tried on a real iPhone. |
+| | **e2e:** Chromium only, phone (393×852, touch) and desktop (1280×800). WebKit not installed yet. axe fails the run on serious/critical WCAG 2.2 A/AA issues. |
+| | **Next 16.4 housekeeping:** `agentRules: false` (otherwise `next dev` appends to AGENTS.md); `distDir` from `NEXT_DIST_DIR` so the e2e server has its own build folder (hence `.next-e2e` in tsconfig). |
