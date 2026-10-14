@@ -13,7 +13,7 @@
 
 ### T1. ⛔ Today: deploy a small version for your grocery trip (in progress)
 **Goal:** live in about 2 hours, for you only. Levi is added tonight.
-**Status:** three specialists are building in parallel: the screens, the real AI, and online hosting with a simple lock. Then I merge, test, and deploy **with your go-ahead**.
+**Status: ready to deploy.** The screens, the real AI and the online hosting are merged. All tests pass: 217 unit and integration, 8 in a real browser, plus a production build.
 **Plan accepted (2026-10-14).** The home Wi-Fi fallback applies if time runs out. **Still needed:** S1–S3 (Vero is setting them up), then a final **"go"** right before the deploy.
 
 **What today's version does:**
@@ -35,6 +35,10 @@ These need **your** accounts. Keep every key and code private: you paste them yo
   - `AI_MODE`: `real`
   - `SESSION_SECRET`: generate one in Terminal with `openssl rand -base64 32`
   - `ACCESS_CODES`: `vero=` followed by a long passphrase only you know. Levi's code gets added tonight.
+- **S3b. Set up the database (about 2 min, after S2):** in Terminal, in the project folder, run these two commands, pasting your Neon connection string between the quotes. Your string stays in your Terminal and is never saved to a file.
+  - `DATABASE_URL='<neon string>' npm run db:migrate`
+  - `DATABASE_URL='<neon string>' npm run db:bootstrap`
+- **Then tell me "ready".** I'll link the Vercel project, you add the five settings above in the dashboard, and on your **"go"** I deploy and check it.
 - **S4. Resend:** not needed today. It's for email sign-in later.
 
 ---
