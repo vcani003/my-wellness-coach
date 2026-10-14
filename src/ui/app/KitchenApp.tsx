@@ -41,6 +41,8 @@ import { useKeyboardInset } from "@/ui/shell/viewport";
 import { KitchenActionsProvider, type KitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { KitchenDataProvider, type ChangeMark } from "@/ui/sync/KitchenDataContext";
 import { useKitchenSync } from "@/ui/sync/useKitchenSync";
+import { useSharedCues } from "@/ui/sync/useSharedCues";
+import { useCueWords } from "@/ui/widgets/kitchen/cue-words";
 import { focusFor, initialWorkspace, workspaceReducer } from "@/ui/workspace/layout";
 import { registry } from "@/ui/workspace/registry";
 import { Workspace } from "@/ui/workspace/Workspace";
@@ -124,6 +126,13 @@ function KitchenScreen({
   useKeyboardInset();
 
   const { sync, snapshot } = useKitchenSync({ kitchenId, meId: me.id, initial: initialState });
+  const { cues, liveRemovals, clearLive } = useSharedCues({
+    kitchenId,
+    meId: me.id,
+    sync,
+    version: snapshot.state?.version ?? null,
+  });
+  const cueWords = useCueWords();
   const [workspace, dispatchWorkspace] = useReducer(workspaceReducer, initialWorkspace);
   const [marks, setMarks] = useState<Record<string, ChangeMark>>({});
   const [remoteIds, setRemoteIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -234,6 +243,7 @@ function KitchenScreen({
       // "New" / "Updated" labels last until your next message (ux.md §1).
       setMarks({});
       setRemoteIds(new Set());
+      clearLive();
       setTurn((n) => n + 1);
       dispatchWorkspace({ type: "messageSent" });
     }
@@ -276,18 +286,32 @@ function KitchenScreen({
   }, [kitchenId, sync]);
 
   // The other person's changes: soft highlight + one announcement per sync; never move focus,
-  // reorder widgets or change the dock (ux.md §6).
+  // reorder widgets or change the dock (ux.md §6). Items they used up or removed are gone from
+  // the state, so `/changes` says who ("Levi used up the eggs."), announced instead.
   useEffect(
     () =>
-      sync.onRemoteChange(({ ids, actorNames }) => {
+      sync.onRemoteChange((change) => {
+        const { ids, actorNames } = change;
         setRemoteIds((prev) => new Set([...prev, ...ids]));
         dispatchWorkspace({ type: "remoteChange" });
         const who = actorNames.length
           ? new Intl.ListFormat(locale, { type: "conjunction" }).format(actorNames)
           : t("fallback.someone");
-        announce(t("chat.announceRemote", { name: who }));
+        const updated = t("chat.announceRemote", { name: who });
+        if (!change.removedIds.length) {
+          announce(updated);
+          return;
+        }
+        void liveRemovals(change)
+          .catch(() => null)
+          .then((removed) => {
+            // "Levi used up the eggs." (+ "Levi updated the kitchen." for rows still there); if
+            // `/changes` couldn't say who, the plain "… updated the kitchen." still goes out.
+            if (!removed?.length) return announce(updated);
+            announce([cueWords.summarize(removed).text, ids.length ? updated : ""].filter(Boolean).join(" "));
+          });
       }),
-    [sync, announce, t, locale],
+    [sync, announce, t, locale, liveRemovals, cueWords],
   );
 
   // Keep the newest message in view. Keyed on the LAST message, so loading older messages at the
@@ -364,7 +388,7 @@ function KitchenScreen({
 
   return (
     <KitchenActionsProvider value={actions}>
-    <KitchenDataProvider value={{ me, snapshot, marks, remoteIds, now, turn }}>
+    <KitchenDataProvider value={{ me, snapshot, marks, remoteIds, now, turn, cues }}>
     <MealsProvider value={meals.value}>
     <ConfirmPromptProvider initial={initialPendingConfirm} fillComposer={fillComposer}>
       <div className="app-shell min-h-dvh desk:grid desk:h-dvh desk:grid-cols-[1fr_2fr] desk:grid-rows-[auto_minmax(0,1fr)] desk:overflow-hidden">

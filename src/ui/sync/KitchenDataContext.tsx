@@ -5,6 +5,7 @@
  */
 import { createContext, useContext } from "react";
 import type { SyncSnapshot } from "./kitchen-sync";
+import type { SharedCues } from "./useSharedCues";
 
 export type ChangeMark = "new" | "updated";
 
@@ -19,6 +20,8 @@ export interface KitchenData {
   now: Date;
   /** Counts your sent messages: per-turn notes ("removed · Undo") last until the next one. */
   turn?: number;
+  /** "Since your last visit" and the live removal cue (ux.md §6); absent = none. */
+  cues?: SharedCues;
 }
 
 const Ctx = createContext<KitchenData | null>(null);

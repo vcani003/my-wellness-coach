@@ -2,7 +2,8 @@
 /**
  * The Kitchen widget (ux.md §3, decisions 0011 and 0017): To review at the top, then items grouped Fridge / Freezer /
  * Pantry / Not sure where, "added X days ago", Running low, "New" / "Updated" after your own
- * message, and "Levi · just now" for the other person's changes. Empty, loading, error and
+ * message, and "Levi · just now" for the other person's changes, plus "Since your last visit" and
+ * "Levi used up the eggs" for what left the list (SharedCues, ux.md §6). Empty, loading, error and
  * stale states stay inside the widget (0018).
  */
 import { useFormatter, useLocale, useTranslations } from "next-intl";
@@ -14,6 +15,7 @@ import { CaretDownIcon } from "@/ui/primitives/icons";
 import { useKitchenData, type ChangeMark } from "@/ui/sync/KitchenDataContext";
 import type { WidgetProps } from "@/ui/workspace/types";
 import { batchesOf, calendarDaysSince, groupItems, isDefrosted } from "./model";
+import { LiveRemovals, SinceLastVisit } from "./SharedCues";
 import { ToReview } from "./ToReview";
 
 export function KitchenSummary() {
@@ -33,7 +35,7 @@ export function KitchenSummary() {
 export function KitchenWidget({ onRetry }: WidgetProps) {
   const t = useTranslations("kitchen");
   const format = useFormatter();
-  const { snapshot, marks, remoteIds, me, now } = useKitchenData();
+  const { snapshot, marks, remoteIds, me, now, cues } = useKitchenData();
   const { state, status, syncedAt } = snapshot;
   // Where focus goes when a To review sheet closes (the card it came from may be gone).
   const rootRef = useRef<HTMLDivElement>(null);
@@ -67,6 +69,8 @@ export function KitchenWidget({ onRetry }: WidgetProps) {
           {t("stale", { time: format.dateTime(new Date(syncedAt), { hour: "numeric", minute: "2-digit" }) })}
         </p>
       )}
+      {cues && <SinceLastVisit cues={cues} onDismissed={() => rootRef.current?.focus()} />}
+      {cues && <LiveRemovals cues={cues} />}
       <ToReview reviews={state.toReview} finalFocus={rootRef} />
       {groups.length === 0 ? (
         <p className="text-body text-text-muted">{t("empty")}</p>

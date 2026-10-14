@@ -8,7 +8,9 @@
  *   reloads the state.
  * Swapping polling for live updates later only changes this file and the hook.
  */
+import type { ChangeSetSummary } from "@/contracts/apply-result";
 import { KitchenState } from "@/contracts/kitchen-state";
+import { parseChanges } from "./shared-cues";
 
 export const POLL_ACTIVE_MS = 15_000;
 export const POLL_IDLE_MS = 60_000;
@@ -25,6 +27,15 @@ export interface RemoteChange {
   ids: string[];
   /** Their display names (for "Levi updated the kitchen"). */
   actorNames: string[];
+  /**
+   * Kitchen items that were on screen and are gone now (used up or removed). The state can't say
+   * who did it, so the live cue asks `/changes` (ux.md §6). Your own removals arrive through
+   * `applyOwn`, never here.
+   */
+  removedIds: string[];
+  /** The versions on screen before and after this sync. */
+  fromVersion: number;
+  toVersion: number;
 }
 
 /** What changed between two states that wasn't done by `meId`. */
@@ -42,7 +53,9 @@ export function diffRemote(prev: KitchenState | null, next: KitchenState, meId: 
     ids.push(item.id);
     names.add(item.updatedBy.name);
   }
-  return { ids, actorNames: [...names] };
+  const still = new Set(next.items.map((i) => i.id));
+  const removedIds = (prev?.items ?? []).filter((i) => !still.has(i.id)).map((i) => i.id);
+  return { ids, actorNames: [...names], removedIds, fromVersion: prev?.version ?? 0, toVersion: next.version };
 }
 
 export type SyncStatus = "loading" | "ok" | "stale" | "error";
@@ -98,7 +111,7 @@ export function createKitchenSync(opts: KitchenSyncOptions) {
     if (snap.state && next.version < snap.state.version) return; // older than what we show
     const change = remote ? diffRemote(snap.state, next, opts.meId) : null;
     set({ state: next, status: "ok", syncedAt: now() });
-    if (change && change.ids.length) for (const l of remoteListeners) l(change);
+    if (change && (change.ids.length || change.removedIds.length)) for (const l of remoteListeners) l(change);
   };
 
   const run = (task: () => Promise<void>) => {
@@ -148,6 +161,14 @@ export function createKitchenSync(opts: KitchenSyncOptions) {
           failed();
         }
       });
+    },
+    /** Change-set summaries after `since` (`/changes`), or null if that failed (0018). */
+    async changesSince(since: number): Promise<ChangeSetSummary[] | null> {
+      try {
+        return parseChanges(await fetchJson(`${base}/changes?since=${encodeURIComponent(String(since))}`));
+      } catch {
+        return null;
+      }
     },
     markOffline() {
       if (snap.state) set({ status: "stale" });

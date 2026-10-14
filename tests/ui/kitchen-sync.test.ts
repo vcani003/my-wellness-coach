@@ -22,7 +22,13 @@ describe("diffRemote", () => {
       ],
       2,
     );
-    expect(diffRemote(prev, next, "vero")).toEqual({ ids: ["milk"], actorNames: ["Levi"] });
+    expect(diffRemote(prev, next, "vero")).toEqual({ ids: ["milk"], actorNames: ["Levi"], removedIds: [], fromVersion: 1, toVersion: 2 });
+  });
+
+  it("reports kitchen items that left the list (used up or removed), which the state can't attribute", () => {
+    const prev = kitchen([item("eggs", "eggs"), item("milk", "milk")], 3);
+    const next = kitchen([item("milk", "milk")], 4);
+    expect(diffRemote(prev, next, "vero")).toMatchObject({ ids: [], removedIds: ["eggs"], fromVersion: 3, toVersion: 4 });
   });
 
   it("a missing person still counts as a remote change", () => {
@@ -57,6 +63,32 @@ describe("createKitchenSync", () => {
     await sync.check();
     expect(sync.getSnapshot().state?.version).toBe(2);
     expect(seen).toEqual([["Levi"]]);
+  });
+
+  it("a sync where an item only disappeared still tells listeners (tester run 2026-10-14 household, 5b)", async () => {
+    const { sync } = setup({ version: { version: 2 }, state: kitchen([], 2) });
+    const seen: string[][] = [];
+    sync.onRemoteChange((c) => seen.push(c.removedIds));
+    await sync.check();
+    expect(seen).toEqual([["eggs"]]);
+  });
+
+  it("changesSince reads /changes, drops malformed rows, and returns null when it fails (0018)", async () => {
+    const good = {
+      changeSetId: "cs1",
+      version: 2,
+      actor: LEVI,
+      via: "chat",
+      at: "2026-10-14T11:00:00.000Z",
+      summaries: [{ code: "ITEM_OUT", params: { name: "eggs" }, text: "eggs: out" }],
+      undone: false,
+    };
+    const fetchJson = vi.fn(async () => ({ changes: [good, { changeSetId: "bad" }] }));
+    const sync = createKitchenSync({ kitchenId: "k 1", meId: "vero", initial: null, fetchJson });
+    expect(await sync.changesSince(1)).toEqual([good]);
+    expect(fetchJson).toHaveBeenCalledWith("/api/kitchens/k%201/changes?since=1");
+    fetchJson.mockRejectedValueOnce(new Error("offline"));
+    expect(await sync.changesSince(1)).toBeNull();
   });
 
   it("your own ApplyResult state shows at once and is never replaced by an older poll", async () => {
