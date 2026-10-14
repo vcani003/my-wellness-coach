@@ -11,6 +11,16 @@
 
 ## Outstanding
 
+### MI1. 🟡 When you name a dish, go straight to its recipe?
+From your local test: *"I was thinking a chicken curry, with coconut milk, lemongrass, kaffir. I have a curry base seasoning packet. I also have potatoes."*
+**Rec (being built on this, following M1: naming a meal in chat counts as choosing it):**
+- What you say you have goes into the kitchen: curry base packet, potatoes.
+- Kitchen goes **straight to a recipe for your dish**. It uses your chicken thighs (oldest batch first) and puts what you mentioned but don't have (coconut milk, lemongrass, kaffir lime leaves) under **Need**, with one tap to add them to the shopping list.
+- No idea cards in between. If you say "or something else?", you get ideas.
+- Allergies still apply: any member's allergen gets the badge.
+
+> Answer:
+
 ### D2. ⚪ If someone deletes their data, can they come back?
 *(From the Backend specialist, building Settings)* After deleting, their old access code stops working, with a clear message. That way the app never quietly recreates a deleted account.
 **Rec:** yes, as a **fresh start**. You remove their old code and add a new one, and they come back as a new member with an empty profile. Their old changes in the kitchen still show "a former member".
