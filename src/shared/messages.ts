@@ -52,6 +52,7 @@ const TEMPLATES: Record<string, string> = {
   // errors
   INVALID_PROPOSAL: "I couldn't understand that change, so nothing changed",
   SAVE_FAILED: "I couldn't save that, so nothing changed",
+  RATE_LIMITED: "That's a lot of messages for now. Try again in {minutes} min.",
 };
 
 export function msg(code: string, params: Params = {}): Msg {

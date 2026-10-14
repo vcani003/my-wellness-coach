@@ -16,10 +16,12 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/db-migrate.ts",
-    "db:seed": "tsx scripts/db-seed.ts"
+    "db:seed": "tsx scripts/db-seed.ts",
+    "db:bootstrap": "tsx scripts/db-bootstrap.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.9",
+    "@neondatabase/serverless": "1.2.0",
     "drizzle-orm": "0.45.4",
     "next": "16.4.0",
     "react": "19.3.0",
