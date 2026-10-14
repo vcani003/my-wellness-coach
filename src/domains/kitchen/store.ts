@@ -5,7 +5,7 @@
 import { and, eq } from "drizzle-orm";
 import { checklistTicks, items, meals, recipes, reviews, shoppingItems } from "@/db/schema";
 import type { Queryable } from "@/db/client";
-import type { MealStatus, ReviewKind, ShoppingSource } from "@/contracts/common";
+import type { MealStatus, ReviewKind, ReviewOrigin, ShoppingSource } from "@/contracts/common";
 import { compact, splitEntityKey } from "@/shared/events/types";
 import type { Item, KitchenEntities, Meal, Recipe, Review, ShoppingItem, ShoppingStatus, Tick } from "./state";
 import { tickId } from "./state";
@@ -80,14 +80,16 @@ export function tickFromRow(r: typeof checklistTicks.$inferSelect): Tick {
 }
 
 export function reviewFromRow(r: typeof reviews.$inferSelect): Review {
-  return {
+  return compact({
     id: r.id,
     kind: r.kind as ReviewKind,
-    mealId: r.mealId,
+    origin: r.origin as ReviewOrigin,
+    // '' = no meal: a shopping-list card (see the `reviews` table).
+    mealId: r.mealId || undefined,
     items: r.items,
     status: r.status as Review["status"],
     ...auditFrom(r),
-  };
+  });
 }
 
 export function shoppingFromRow(r: typeof shoppingItems.$inferSelect): ShoppingItem {
@@ -229,7 +231,8 @@ export async function persistKitchenEntities(
             id: e.id,
             kitchenId,
             kind: e.kind,
-            mealId: e.mealId,
+            origin: e.origin,
+            mealId: e.mealId ?? "",
             items: e.items,
             status: e.status,
             ...auditTo(e),

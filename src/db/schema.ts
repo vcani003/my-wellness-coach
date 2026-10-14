@@ -249,6 +249,12 @@ export const reviews = pgTable(
       .notNull()
       .references(() => kitchens.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
+    /** meal | shopping-list (0027). Added in 0004 with a default, so existing rows read as "meal". */
+    origin: text("origin").notNull().default("meal"),
+    /**
+     * The meal's ID; '' for a shopping-list card. Kept NOT NULL so migration 0004 stays additive
+     * only (0028); the store maps '' to "no meal".
+     */
     mealId: text("meal_id").notNull(),
     items: jsonb("items").$type<ReviewEntry[]>().notNull(),
     /** pending | done | skipped */

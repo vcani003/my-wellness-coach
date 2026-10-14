@@ -146,6 +146,7 @@
     "SHOPPING_REMOVED": "Took {name} off the shopping list",
     "SHOPPING_NOT_FOUND": "{name} isn't on the shopping list",
     "SHOPPING_DONE": "Put {count} things from the shopping list in your kitchen: {names}",
+    "SHOPPING_REVIEW_QUEUED": "Saved for later in To review: {names}",
     "NOT_ON_LIST": "{name} isn't on the shopping list any more",
     "NOT_TICKED": "{name} isn't ticked yet"
   },

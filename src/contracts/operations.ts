@@ -126,26 +126,51 @@ export const ChecklistTick = z.object({
   ticked: z.boolean(),
 });
 
-/** An entry in a To review card. `itemId` when it refers to a kitchen item. */
+/**
+ * An entry in a To review card. `itemId` when it refers to a kitchen item; `shoppingItemId` when
+ * it's waiting on the shopping list (the name is copied from the list).
+ */
 export const ReviewEntry = z.object({
   name: z.string().min(1).max(200),
   itemId: Id.optional(),
+  shoppingItemId: Id.optional(),
 });
 export type ReviewEntry = z.infer<typeof ReviewEntry>;
 
+/** A shopping-list entry to queue: the ID is enough, the backend takes the name from the list. */
+export const ReviewShoppingEntry = z.strictObject({ shoppingItemId: Id });
+
+/**
+ * "Do later" on a sheet. With `mealId`: a meal's card (0013). Without: the shopping list's
+ * "Done shopping" sheet (0027, ux.md §10), kind `add-to-kitchen`, every entry a list item.
+ * There's one shopping-list card at a time; queuing again adds to it.
+ */
 export const ReviewQueue = z.object({
   ...common,
   type: z.literal("review.queue"),
   kind: ReviewKind,
-  mealId: Id,
-  items: z.array(ReviewEntry).max(100),
+  mealId: Id.optional(),
+  items: z.array(z.union([ReviewShoppingEntry, ReviewEntry])).max(100),
 });
 
+/**
+ * A chosen shopping-list item for "Done shopping", with kitchen facts it may add (the name comes
+ * from the list). Declared before `ReviewResolve`, which reuses it.
+ */
+export const ShoppingDoneFields = ItemFields.pick({ quantity: true, location: true, frozen: true, opened: true }).partial();
+export const ShoppingDoneItem = z.strictObject({ shoppingItemId: Id, fields: ShoppingDoneFields.optional() });
+
+/**
+ * Close a To review card. For a meal's card, the kitchen changes are item.* ops in the same
+ * proposal. For a shopping-list card done, `items` are the chosen ones: they go through exactly
+ * `shopping.done`'s rules, and the card closes only if they all go in (all or nothing).
+ */
 export const ReviewResolve = z.object({
   ...common,
   type: z.literal("review.resolve"),
   target: z.strictObject({ reviewId: Id }),
   outcome: z.enum(["done", "skipped"]),
+  items: z.array(ShoppingDoneItem).min(1).max(100).optional(),
 });
 
 export const RestrictionFields = z.object({
@@ -247,9 +272,6 @@ export const ShoppingRemove = z.object({
   target: ShoppingTarget,
 });
 
-/** Kitchen facts a done-shopping entry may add to the new kitchen item (the name comes from the list). */
-export const ShoppingDoneFields = ItemFields.pick({ quantity: true, location: true, frozen: true, opened: true }).partial();
-
 /**
  * "Done shopping" (SL2). The chosen items must be open and ticked. Each one goes into the kitchen
  * with `item.add`'s rules (restocks a low/out item of the same name, else adds a new one; the
@@ -259,10 +281,7 @@ export const ShoppingDoneFields = ItemFields.pick({ quantity: true, location: tr
 export const ShoppingDone = z.object({
   ...common,
   type: z.literal("shopping.done"),
-  items: z
-    .array(z.strictObject({ shoppingItemId: Id, fields: ShoppingDoneFields.optional() }))
-    .min(1)
-    .max(100),
+  items: z.array(ShoppingDoneItem).min(1).max(100),
 });
 
 export const ChangesetRevert = z.object({

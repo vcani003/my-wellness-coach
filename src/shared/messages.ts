@@ -48,6 +48,7 @@ const TEMPLATES: Record<string, string> = {
   SHOPPING_REMOVED: "Took {name} off the shopping list",
   SHOPPING_NOT_FOUND: "{name} isn't on the shopping list",
   SHOPPING_DONE: "Put {count} things from the shopping list in your kitchen: {names}",
+  SHOPPING_REVIEW_QUEUED: "Saved for later in To review: {names}",
   // rejections
   UNKNOWN_ITEM: "That item isn't in this kitchen",
   AMBIGUOUS_ITEM: "More than one item matches {name}",

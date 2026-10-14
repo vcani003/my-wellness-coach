@@ -12,6 +12,7 @@ import {
   MealStatus,
   Quantity,
   ReviewKind,
+  ReviewOrigin,
   ShoppingSource,
   StockLevel,
   fact,
@@ -70,7 +71,11 @@ export type TickRow = z.infer<typeof TickRow>;
 export const ReviewRow = z.object({
   id: Id,
   kind: ReviewKind,
-  meal: MealRef,
+  /** Defaults to "meal" so a state saved by an older build (offline cache) still parses (0018). */
+  origin: ReviewOrigin.default("meal"),
+  /** Set for a meal's card; absent for a shopping-list one. */
+  meal: MealRef.optional(),
+  /** For a shopping-list card: only the entries still open on the list, named as on the list now. */
   items: z.array(ReviewEntry),
   status: z.enum(["pending", "done", "skipped"]),
   ...Audit,

@@ -20,7 +20,7 @@ import { computeAllergenFlags } from "@/shared/profile/allergens";
 import type { Restriction } from "@/shared/profile/state";
 import { resolveItem } from "./validate";
 import { ACTIVE_STATUSES } from "./lifecycle";
-import type { KitchenEntities, Meal, Recipe } from "./state";
+import type { KitchenEntities, Meal, Recipe, Review } from "./state";
 
 export interface ReadContext {
   kitchenId: string;
@@ -135,11 +135,32 @@ export function buildKitchenState(kitchen: KitchenEntities, ctx: ReadContext): K
     "tick",
   );
 
+  // A shopping-list card shows only what's still open on the list (named as on the list now), and
+  // drops out once nothing is: bought in chat, removed, or added with "Done shopping". An Undo
+  // that puts items back on the list brings them back here too.
+  const reviewItems = (r: Review) =>
+    r.origin !== "shopping-list"
+      ? r.items
+      : r.items.flatMap((e) => {
+          const entry = e.shoppingItemId ? kitchen.shopping[e.shoppingItemId] : undefined;
+          return entry?.status === "open" ? [{ ...e, name: entry.name.value }] : [];
+        });
   const toReview = checked(
     ReviewRow,
     safeMap(
-      Object.values(kitchen.reviews).filter((r) => r.status === "pending"),
-      (r) => ({ id: r.id, kind: r.kind, meal: mealRef(r.mealId, kitchen), items: r.items, status: r.status, ...audit(r, names) }),
+      Object.values(kitchen.reviews)
+        .filter((r) => r.status === "pending")
+        .map((r) => ({ r, items: reviewItems(r) }))
+        .filter(({ r, items }) => r.origin !== "shopping-list" || items.length > 0),
+      ({ r, items }) => ({
+        id: r.id,
+        kind: r.kind,
+        origin: r.origin,
+        ...(r.mealId !== undefined ? { meal: mealRef(r.mealId, kitchen) } : {}),
+        items,
+        status: r.status,
+        ...audit(r, names),
+      }),
       "review",
     ),
     "review",

@@ -12,6 +12,7 @@ import {
   PASTE_ALLOWED_OPERATION_TYPES,
   PROFILE_OPERATION_TYPES,
   type ItemTarget,
+  type ReviewEntry,
   type ShoppingTarget,
   type Operation,
   type OperationOf,
@@ -51,8 +52,10 @@ import {
   type MealNotedPayload,
   type MealTransitionedPayload,
   type RecipeSavedPayload,
+  type Review,
   type ReviewQueuedPayload,
   type ReviewResolvedPayload,
+  type ReviewUpdatedPayload,
   type ShoppingAddedPayload,
   type ShoppingItem,
   type ShoppingMovedPayload,
@@ -550,31 +553,106 @@ function checklistTick(op: OperationOf<"checklist.tick">, env: OpEnv): OpOutcome
   );
 }
 
+type QueueEntry = OperationOf<"review.queue">["items"][number];
+const listItemId = (e: QueueEntry) => ("shoppingItemId" in e ? e.shoppingItemId : undefined);
+
 function reviewQueue(op: OperationOf<"review.queue">, env: OpEnv): OpOutcome {
+  if (op.mealId === undefined) return queueShoppingReview(op, env);
   if (!env.kitchen.meals[op.mealId]) return reject("UNKNOWN_TARGET");
+  // A meal's card names its entries; list items belong on the shopping-list card.
+  if (op.items.some((i) => listItemId(i) !== undefined)) return reject("INVALID_OPERATION");
   const payload: ReviewQueuedPayload = {
     reviewId: env.ctx.newId(),
     kind: op.kind,
     mealId: op.mealId,
-    items: op.items.map((i) => compact(i)),
+    items: op.items.map((i) => compact(i as ReviewEntry)),
   };
   return ok([emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.reviewQueued, payload)], msg("REVIEW_QUEUED"), [
     { kind: "review", id: payload.reviewId, change: "added" },
   ]);
 }
 
+/** The shopping list's pending "Add to your kitchen?" card, if there is one. */
+const pendingShoppingReview = (kitchen: KitchenEntities): Review | undefined =>
+  Object.values(kitchen.reviews).find((r) => r.status === "pending" && r.origin === "shopping-list");
+
+const stillOnList = (e: ReviewEntry, kitchen: KitchenEntities) =>
+  e.shoppingItemId !== undefined && kitchen.shopping[e.shoppingItemId]?.status === "open";
+
+/**
+ * "Do later" on the Done-shopping sheet (ux.md §10): the chosen list items wait in To review as
+ * "N items to add · Shopping list". Nothing on the list changes (ticks stay). The items must be
+ * open on the list; ticking isn't needed yet, since the sheet lets you choose unticked ones.
+ * There's one such card: queuing again adds to it, so nothing queued earlier is lost.
+ */
+function queueShoppingReview(op: OperationOf<"review.queue">, env: OpEnv): OpOutcome {
+  if (op.kind !== "add-to-kitchen" || op.items.length === 0) return reject("INVALID_OPERATION");
+  const seen = new Set<string>();
+  const entries: ReviewEntry[] = [];
+  for (const i of op.items) {
+    const id = listItemId(i);
+    if (id === undefined || seen.has(id)) return reject("INVALID_OPERATION");
+    seen.add(id);
+    const entry = env.kitchen.shopping[id];
+    if (!entry) return reject("UNKNOWN_TARGET");
+    if (entry.status !== "open") return reject("NOT_ON_LIST", { name: entry.name.value });
+    entries.push({ name: entry.name.value, shoppingItemId: id });
+  }
+
+  const k = kitchenStream(env.ctx.kitchenId);
+  const card = pendingShoppingReview(env.kitchen);
+  if (!card) {
+    const payload: ReviewQueuedPayload = {
+      reviewId: env.ctx.newId(),
+      kind: "add-to-kitchen",
+      origin: "shopping-list",
+      items: entries,
+    };
+    return ok(
+      [emit(env, k, KITCHEN_EVENT.reviewQueued, payload)],
+      msg("SHOPPING_REVIEW_QUEUED", { names: entries.map((e) => e.name).join(", ") }),
+      [{ kind: "review", id: payload.reviewId, change: "added" }],
+    );
+  }
+  // Keep what's still waiting on the list, then add the new ones.
+  const kept = card.items.filter((e) => stillOnList(e, env.kitchen));
+  const added = entries.filter((e) => !kept.some((x) => x.shoppingItemId === e.shoppingItemId));
+  if (added.length === 0 && kept.length === card.items.length) return noChange();
+  const payload: ReviewUpdatedPayload = { reviewId: card.id, items: [...kept, ...added] };
+  return ok(
+    [emit(env, k, KITCHEN_EVENT.reviewUpdated, payload)],
+    msg("SHOPPING_REVIEW_QUEUED", { names: payload.items.map((e) => e.name).join(", ") }),
+    [{ kind: "review", id: card.id, change: "updated" }],
+  );
+}
+
+/**
+ * Close a To review card. A shopping-list card resolved `done` moves the chosen `items` into the
+ * kitchen with exactly "Done shopping"'s checks and events, and closes in the same operation, so
+ * the card only closes if they all went in, and one Undo restores the list, the kitchen and the card.
+ */
 function reviewResolve(op: OperationOf<"review.resolve">, env: OpEnv): OpOutcome {
   const review = env.kitchen.reviews[op.target.reviewId];
   if (!review) return reject("UNKNOWN_TARGET");
   if (review.status !== "pending") {
     return reject("INVALID_TRANSITION", { title: "To review", from: review.status, to: op.outcome });
   }
+  const k = kitchenStream(env.ctx.kitchenId);
+  const ref: ChangeRef = { kind: "review", id: review.id, change: "updated" };
   const payload: ReviewResolvedPayload = { reviewId: review.id, outcome: op.outcome };
-  return ok(
-    [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.reviewResolved, payload)],
-    msg("REVIEW_RESOLVED"),
-    [{ kind: "review", id: review.id, change: "updated" }],
-  );
+  if (review.origin !== "shopping-list" || op.outcome === "skipped") {
+    // `items` only means something when a shopping-list card is done.
+    if (op.items) return reject("INVALID_OPERATION");
+    return ok([emit(env, k, KITCHEN_EVENT.reviewResolved, payload)], msg("REVIEW_RESOLVED"), [ref]);
+  }
+
+  if (!op.items) return reject("INVALID_OPERATION");
+  const queued = new Set(review.items.map((e) => e.shoppingItemId));
+  if (op.items.some((i) => !queued.has(i.shoppingItemId))) return reject("INVALID_OPERATION");
+  const checked = checkDoneItems(op.items, env.kitchen);
+  if (!checked.ok) return checked.outcome;
+  const moved = moveToKitchen(checked.chosen, env);
+  return ok([...moved.events, emit(env, k, KITCHEN_EVENT.reviewResolved, payload)], moved.summary, [...moved.refs, ref]);
 }
 
 // ─── Shopping list (0027, SL1–SL3) ───────────────────────────────────────────────────
@@ -731,21 +809,39 @@ function shoppingRemove(op: OperationOf<"shopping.remove">, env: OpEnv): OpOutco
   );
 }
 
-/** "Done shopping" (SL2): chosen ticked items go into the kitchen and leave the list. All or nothing. */
-function shoppingDone(op: OperationOf<"shopping.done">, env: OpEnv): OpOutcome {
-  const k = kitchenStream(env.ctx.kitchenId);
+type DoneItem = OperationOf<"shopping.done">["items"][number];
+type ChosenItem = { entry: ShoppingItem; fields: DoneItem["fields"] };
+
+/** "Done shopping"'s checks: every chosen item open on the list and ticked, with no repeats. */
+function checkDoneItems(
+  items: DoneItem[],
+  kitchen: KitchenEntities,
+): { ok: true; chosen: ChosenItem[] } | { ok: false; outcome: OpOutcome } {
   const seen = new Set<string>();
-  const chosen: { entry: ShoppingItem; fields: (typeof op.items)[number]["fields"] }[] = [];
-  for (const { shoppingItemId, fields } of op.items) {
-    if (seen.has(shoppingItemId)) return reject("INVALID_OPERATION");
+  const chosen: ChosenItem[] = [];
+  for (const { shoppingItemId, fields } of items) {
+    if (seen.has(shoppingItemId)) return { ok: false, outcome: reject("INVALID_OPERATION") };
     seen.add(shoppingItemId);
-    const entry = env.kitchen.shopping[shoppingItemId];
-    if (!entry) return reject("UNKNOWN_TARGET");
-    if (entry.status !== "open") return reject("NOT_ON_LIST", { name: entry.name.value });
-    if (!entry.tickedAt) return reject("NOT_TICKED", { name: entry.name.value });
+    const entry = kitchen.shopping[shoppingItemId];
+    if (!entry) return { ok: false, outcome: reject("UNKNOWN_TARGET") };
+    if (entry.status !== "open") return { ok: false, outcome: reject("NOT_ON_LIST", { name: entry.name.value }) };
+    if (!entry.tickedAt) return { ok: false, outcome: reject("NOT_TICKED", { name: entry.name.value }) };
     chosen.push({ entry, fields });
   }
+  return { ok: true, chosen };
+}
 
+/** "Done shopping" (SL2): chosen ticked items go into the kitchen and leave the list. All or nothing. */
+function shoppingDone(op: OperationOf<"shopping.done">, env: OpEnv): OpOutcome {
+  const checked = checkDoneItems(op.items, env.kitchen);
+  if (!checked.ok) return checked.outcome;
+  const moved = moveToKitchen(checked.chosen, env);
+  return ok(moved.events, moved.summary, moved.refs);
+}
+
+/** Each chosen item goes in with `item.add`'s rules and leaves the list as moved, linked to its kitchen item. */
+function moveToKitchen(chosen: ChosenItem[], env: OpEnv): { events: EventEnvelope[]; summary: ReturnType<typeof msg>; refs: ChangeRef[] } {
+  const k = kitchenStream(env.ctx.kitchenId);
   let working = env.kitchen;
   const events: EventEnvelope[] = [];
   const refs: ChangeRef[] = [];
@@ -769,7 +865,7 @@ function shoppingDone(op: OperationOf<"shopping.done">, env: OpEnv): OpOutcome {
     );
   }
   const names = chosen.map((c) => c.entry.name.value);
-  return ok(events, msg("SHOPPING_DONE", { count: names.length, names: names.join(", ") }), refs);
+  return { events, summary: msg("SHOPPING_DONE", { count: names.length, names: names.join(", ") }), refs };
 }
 
 const REF_KIND: Record<string, RefKind> = {
@@ -822,7 +918,7 @@ function targetKeys(op: Operation): string[] {
     case "checklist.tick":
       return [`meal:${op.target.mealId}`];
     case "review.resolve":
-      return [`review:${op.target.reviewId}`];
+      return [`review:${op.target.reviewId}`, ...(op.items ?? []).map((i) => `shopping:${i.shoppingItemId}`)];
     case "shopping.update":
     case "shopping.tick":
     case "shopping.remove":

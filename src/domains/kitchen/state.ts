@@ -3,7 +3,7 @@
  * All kitchen state logic lives here. Undo, or a fix to this logic, rebuilds a kitchen by
  * replaying its events; projections are just this state written to tables.
  */
-import type { Fact, Location, MealStatus, Quantity, ReviewKind, ShoppingSource, StockLevel } from "@/contracts/common";
+import type { Fact, Location, MealStatus, Quantity, ReviewKind, ReviewOrigin, ShoppingSource, StockLevel } from "@/contracts/common";
 import type { RecipeIngredient, ReviewEntry } from "@/contracts/operations";
 import {
   CHANGESET_REVERTED,
@@ -62,7 +62,9 @@ export interface Tick extends AuditFields {
 export interface Review extends AuditFields {
   id: string;
   kind: ReviewKind;
-  mealId: string;
+  origin: ReviewOrigin;
+  /** Set for a meal's card; absent for a shopping-list one. */
+  mealId?: string;
   items: ReviewEntry[];
   status: "pending" | "done" | "skipped";
 }
@@ -122,6 +124,7 @@ export const KITCHEN_EVENT = {
   recipeSaved: "recipe.saved",
   checklistTicked: "checklist.ticked",
   reviewQueued: "review.queued",
+  reviewUpdated: "review.updated",
   reviewResolved: "review.resolved",
   shoppingAdded: "shopping.added",
   shoppingUpdated: "shopping.updated",
@@ -194,7 +197,14 @@ export interface ChecklistTickedPayload {
 export interface ReviewQueuedPayload {
   reviewId: string;
   kind: ReviewKind;
-  mealId: string;
+  /** Absent = "meal" (every event before the shopping-list card). */
+  origin?: "shopping-list";
+  mealId?: string;
+  items: ReviewEntry[];
+}
+/** The shopping-list card's entries after "Do later" again: the new list replaces the old (0027). */
+export interface ReviewUpdatedPayload {
+  reviewId: string;
   items: ReviewEntry[];
 }
 export interface ReviewResolvedPayload {
@@ -249,6 +259,7 @@ export function kitchenTouchedKeys(event: EventEnvelope): string[] {
     case KITCHEN_EVENT.checklistTicked:
       return [`tick:${tickId(p.mealId as string, p.ingredientKey as string)}`];
     case KITCHEN_EVENT.reviewQueued:
+    case KITCHEN_EVENT.reviewUpdated:
     case KITCHEN_EVENT.reviewResolved:
       return [`review:${p.reviewId as string}`];
     case KITCHEN_EVENT.shoppingAdded:
@@ -416,12 +427,19 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
       const review: Review = {
         id: p.reviewId,
         kind: p.kind,
+        origin: p.origin ?? "meal",
         mealId: p.mealId,
         items: p.items,
         status: "pending",
         ...created(event),
       };
       return put(state, "reviews", review.id, review);
+    }
+    case KITCHEN_EVENT.reviewUpdated: {
+      const p = event.payload as ReviewUpdatedPayload;
+      const prev = state.reviews[p.reviewId];
+      if (!prev) return state;
+      return put(state, "reviews", prev.id, { ...prev, items: p.items, ...stamp(event) });
     }
     case KITCHEN_EVENT.reviewResolved: {
       const p = event.payload as ReviewResolvedPayload;

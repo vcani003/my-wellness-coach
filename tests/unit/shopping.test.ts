@@ -308,3 +308,193 @@ describe("contract and apply", () => {
     for (const step of k.history) expect(k.replayKitchen(step.events)).toEqual(step.kitchen);
   });
 });
+
+describe("Do later → To review (shopping-list card)", () => {
+  /** Vero's list with garlic and ginger ticked; shallot chosen too, though not ticked. */
+  function queued() {
+    const { k } = phoKitchen();
+    for (const name of ["garlic", "ginger"]) k.tap([{ type: "shopping.tick", target: { name }, ticked: true }]);
+    const ids = ["garlic", "ginger", "shallot"].map((n) => entry(k, n).id);
+    const plan = k.tap([{ type: "review.queue", kind: "add-to-kitchen", items: ids.map((shoppingItemId) => ({ shoppingItemId })) }]);
+    const reviewId = plan.applied[0]?.refs[0]?.id;
+    return { k, plan, ids, reviewId };
+  }
+  const card = (k: MemoryKitchen) => k.state().toReview.find((r) => r.origin === "shopping-list");
+  const cardNames = (k: MemoryKitchen) => card(k)?.items.map((e) => e.name);
+
+  it("queues the chosen items as one card; the list doesn't change", () => {
+    const { k, plan, ids } = queued();
+    expect(plan.rejected).toEqual([]);
+    expect(plan.applied[0].summary).toMatchObject({ code: "SHOPPING_REVIEW_QUEUED", params: { names: "garlic, ginger, shallot" } });
+    expect(plan.applied[0].refs).toEqual([{ kind: "review", id: expect.any(String), change: "added" }]);
+    expect(plan.events.map((e) => e.type)).toEqual(["review.queued"]);
+    const r = card(k)!;
+    expect(r).toMatchObject({ kind: "add-to-kitchen", origin: "shopping-list", status: "pending" });
+    expect(r.meal).toBeUndefined();
+    expect(r.items).toEqual(ids.map((shoppingItemId, i) => ({ name: ["garlic", "ginger", "shallot"][i], shoppingItemId })));
+    // Still on the list, ticks as they were; nothing in the kitchen yet.
+    expect(k.state().shoppingList).toHaveLength(9);
+    expect(k.state().shoppingList.filter((e) => e.ticked).map((e) => e.name.value)).toEqual(["garlic", "ginger"]);
+    expect(k.state().items).toEqual([]);
+  });
+
+  it("refuses a card that isn't a set of open list items", () => {
+    const { k } = phoKitchen();
+    const garlic = entry(k, "garlic").id;
+    k.tap([{ type: "shopping.remove", target: { name: "shallot" } }]);
+    const shallot = Object.values(k.kitchen.shopping).find((e) => e.name.value === "shallot")!.id;
+    const q = (items: OpInput extends never ? never : unknown[], kind: "add-to-kitchen" | "after-cooking" = "add-to-kitchen") =>
+      codes(k.tap([{ type: "review.queue", kind, items } as OpInput]));
+    expect(q([])).toEqual(["INVALID_OPERATION"]);
+    expect(q([{ shoppingItemId: garlic }], "after-cooking")).toEqual(["INVALID_OPERATION"]);
+    expect(q([{ shoppingItemId: garlic }, { shoppingItemId: garlic }])).toEqual(["INVALID_OPERATION"]);
+    expect(q([{ name: "garlic" }])).toEqual(["INVALID_OPERATION"]); // no meal, no list item
+    expect(q([{ shoppingItemId: "nope" }])).toEqual(["UNKNOWN_TARGET"]);
+    expect(q([{ shoppingItemId: shallot }])).toEqual(["NOT_ON_LIST"]);
+    // A meal's card can't carry list items.
+    k.ideas.set("idea-1", { name: "Beef pho" });
+    const mealId = k.tap([{ type: "meal.choose", target: { ideaId: "idea-1" } }]).applied[0].refs[0].id;
+    expect(codes(k.tap([{ type: "review.queue", kind: "add-to-kitchen", mealId, items: [{ shoppingItemId: garlic }] }]))).toEqual([
+      "INVALID_OPERATION",
+    ]);
+    expect(k.state().toReview).toEqual([]);
+  });
+
+  it("Do later again adds to the same card; the same items again change nothing", () => {
+    const { k, reviewId } = queued();
+    const oatmilk = entry(k, "oatmilk").id;
+    const again = k.tap([
+      { type: "review.queue", kind: "add-to-kitchen", items: [{ shoppingItemId: entry(k, "ginger").id }, { shoppingItemId: oatmilk }] },
+    ]);
+    expect(again.applied[0].refs).toEqual([{ kind: "review", id: reviewId, change: "updated" }]);
+    expect(again.events.map((e) => e.type)).toEqual(["review.updated"]);
+    expect(k.state().toReview).toHaveLength(1);
+    expect(cardNames(k)).toEqual(["garlic", "ginger", "shallot", "oatmilk"]);
+
+    const same = k.tap([{ type: "review.queue", kind: "add-to-kitchen", items: [{ shoppingItemId: oatmilk }] }]);
+    expect(same.applied[0].summary.code).toBe("NO_CHANGE");
+    expect(same.events).toEqual([]);
+  });
+
+  it("Add runs the same path as Done shopping: same kitchen and list, one change set, card closed", () => {
+    const { k, reviewId } = queued();
+    const garlic = entry(k, "garlic").id;
+    const ginger = entry(k, "ginger").id;
+    const resolved = k.tap([
+      {
+        type: "review.resolve",
+        target: { reviewId },
+        outcome: "done",
+        items: [{ shoppingItemId: garlic }, { shoppingItemId: ginger, fields: { location: said("fridge") } }],
+      },
+    ]);
+    expect(resolved.rejected).toEqual([]);
+    expect(resolved.applied[0].summary).toMatchObject({ code: "SHOPPING_DONE", params: { count: 2, names: "garlic, ginger" } });
+    expect(resolved.events.map((e) => e.type)).toEqual(["item.added", "shopping.moved", "item.added", "shopping.moved", "review.resolved"]);
+    expect(new Set(resolved.events.map((e) => e.changeSetId)).size).toBe(1);
+    expect(resolved.applied[0].refs.at(-1)).toEqual({ kind: "review", id: reviewId, change: "updated" });
+    expect(k.kitchen.reviews[reviewId].status).toBe("done");
+    expect(k.state().toReview).toEqual([]);
+
+    // A twin kitchen that used "Done shopping" directly ends up with the same kitchen and list.
+    const twin = phoKitchen().k;
+    for (const name of ["garlic", "ginger"]) twin.tap([{ type: "shopping.tick", target: { name }, ticked: true }]);
+    twin.tap([
+      {
+        type: "shopping.done",
+        items: [{ shoppingItemId: entry(twin, "garlic").id }, { shoppingItemId: entry(twin, "ginger").id, fields: { location: said("fridge") } }],
+      },
+    ]);
+    const facts = (m: MemoryKitchen) => m.state().items.map((i) => [i.name.value, i.location?.value, i.quantity?.value.asSaid]);
+    expect(facts(k)).toEqual(facts(twin));
+    expect(listOf(k)).toEqual(listOf(twin));
+    // Shallot was queued but not chosen at Add: it stays on the list.
+    expect(listOf(k).map(([n]) => n)).toContain("shallot");
+  });
+
+  it("Add is all or nothing: an unticked item, an item not on the card or no items refuse it, and the card stays", () => {
+    const { k, reviewId } = queued();
+    const shallot = entry(k, "shallot").id; // queued but not ticked
+    const oatmilk = entry(k, "oatmilk").id; // not on the card
+    const garlic = entry(k, "garlic").id;
+    const resolve = (extra: Record<string, unknown>) =>
+      codes(k.tap([{ type: "review.resolve", target: { reviewId }, outcome: "done", ...extra } as OpInput]));
+    expect(resolve({ items: [{ shoppingItemId: garlic }, { shoppingItemId: shallot }] })).toEqual(["NOT_TICKED"]);
+    k.tap([{ type: "shopping.tick", target: { name: "oatmilk" }, ticked: true }]);
+    expect(resolve({ items: [{ shoppingItemId: oatmilk }] })).toEqual(["INVALID_OPERATION"]);
+    expect(resolve({})).toEqual(["INVALID_OPERATION"]);
+    expect(codes(k.tap([{ type: "review.resolve", target: { reviewId }, outcome: "skipped", items: [{ shoppingItemId: garlic }] }]))).toEqual([
+      "INVALID_OPERATION",
+    ]);
+    expect(k.state().items).toEqual([]);
+    expect(cardNames(k)).toEqual(["garlic", "ginger", "shallot"]);
+    // A list item changed since the version on screen: STALE_TARGET, like Done shopping.
+    const stale = k.tap([{ type: "review.resolve", target: { reviewId }, outcome: "done", items: [{ shoppingItemId: garlic }] }], {
+      staleKeys: new Set([`shopping:${garlic}`]),
+    });
+    expect(codes(stale)).toEqual(["STALE_TARGET"]);
+  });
+
+  it("Skip closes the card and changes nothing else; it can't be resolved twice", () => {
+    const { k, reviewId } = queued();
+    const before = k.state().shoppingList;
+    const skipped = k.tap([{ type: "review.resolve", target: { reviewId }, outcome: "skipped" }]);
+    expect(skipped.events.map((e) => e.type)).toEqual(["review.resolved"]);
+    expect(k.state().toReview).toEqual([]);
+    expect(k.state().shoppingList).toEqual(before);
+    expect(codes(k.tap([{ type: "review.resolve", target: { reviewId }, outcome: "skipped" }]))).toEqual(["INVALID_TRANSITION"]);
+  });
+
+  it("one Undo of Add takes the items out of the kitchen, puts them back on the list and the card back in To review", () => {
+    const { k, reviewId, ids } = queued();
+    const listBefore = k.state().shoppingList;
+    const resolved = k.tap([
+      { type: "review.resolve", target: { reviewId }, outcome: "done", items: ids.slice(0, 2).map((shoppingItemId) => ({ shoppingItemId })) },
+    ]);
+    const undone = undo(k, resolved);
+    expect(undone.rejected).toEqual([]);
+    expect(k.state().items).toEqual([]);
+    expect(k.state().shoppingList.map((e) => [e.id, Boolean(e.ticked)])).toEqual(listBefore.map((e) => [e.id, Boolean(e.ticked)]));
+    expect(card(k)?.id).toBe(reviewId);
+    expect(cardNames(k)).toEqual(["garlic", "ginger", "shallot"]);
+  });
+
+  it("the card shows only what's still on the list and drops out when nothing is; Undo brings it back", () => {
+    const { k, reviewId } = queued();
+    k.tap([{ type: "shopping.update", target: { name: "shallot" }, fields: { name: said("shallots") } }]);
+    k.tap([{ type: "shopping.remove", target: { name: "ginger" } }]);
+    expect(cardNames(k)).toEqual(["garlic", "shallots"]); // named as on the list now
+    k.say("I bought garlic", [{ type: "item.add", fields: { name: said("garlic") } }]); // SL5
+    const last = k.tap([{ type: "shopping.remove", target: { name: "shallots" } }]);
+    expect(k.state().toReview).toEqual([]);
+    expect(k.kitchen.reviews[reviewId].status).toBe("pending");
+    undo(k, last);
+    expect(cardNames(k)).toEqual(["shallots"]);
+    // Do later again after that prunes what left the list and adds the new choice.
+    k.tap([{ type: "review.queue", kind: "add-to-kitchen", items: [{ shoppingItemId: entry(k, "culantro").id }] }]);
+    expect(k.kitchen.reviews[reviewId].items.map((e) => e.name)).toEqual(["shallot", "culantro"]);
+  });
+
+  it("replay equals the step-by-step state; old review events and cached states still read as meal cards", () => {
+    const { k, reviewId, ids } = queued();
+    k.tap([{ type: "review.queue", kind: "add-to-kitchen", items: [{ shoppingItemId: entry(k, "oatmilk").id }] }]);
+    const resolved = k.tap([{ type: "review.resolve", target: { reviewId }, outcome: "done", items: [{ shoppingItemId: ids[0] }] }]);
+    undo(k, resolved);
+    for (const step of k.history) expect(k.replayKitchen(step.events)).toEqual(step.kitchen);
+
+    const oldEvent = {
+      id: "e", stream: "kitchen:k1", seq: 1, type: "review.queued", v: 1, actor: "vero", via: "button" as const,
+      recordedAt: "2026-10-14T18:00:00.000Z", occurredAt: null, changeSetId: "cs", sourceMessageId: null,
+      reverses: null, corrects: null, payload: { reviewId: "r1", kind: "after-cooking", mealId: "m1", items: [{ name: "eggs" }] },
+    };
+    expect(apply(emptyKitchen(), oldEvent).reviews.r1).toMatchObject({ origin: "meal", mealId: "m1" });
+    expect(apply(emptyKitchen(), { ...oldEvent, type: "review.updated", payload: { reviewId: "x", items: [] } })).toEqual(emptyKitchen());
+    const cached = KitchenState.parse({
+      kitchenId: "k", version: 1, items: [], meals: [], plan: [], ticks: [], shoppingList: [],
+      toReview: [{ id: "r1", kind: "after-cooking", meal: { id: "m1", title: "Pho" }, items: [], status: "pending",
+        createdAt: "2026-10-14T18:00:00.000Z", createdBy: { id: "v", name: "Vero" }, updatedAt: "2026-10-14T18:00:00.000Z", updatedBy: { id: "v", name: "Vero" } }],
+    });
+    expect(cached.toReview[0].origin).toBe("meal");
+    expect(Operation.safeParse({ opId: "1", type: "review.resolve", target: { reviewId: "r" }, outcome: "done", items: [] }).success).toBe(false);
+  });
+});

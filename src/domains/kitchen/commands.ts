@@ -325,6 +325,41 @@ export function doneShopping(
   return tap(db, scope, args, "shopping.done", [{ opId: "done", type: "shopping.done", items: args.items }]);
 }
 
+/**
+ * "Do later" on the Done-shopping sheet (ux.md §10): the chosen list items wait in To review as one
+ * "N items to add · Shopping list" card. The list itself doesn't change.
+ */
+export function queueShoppingReview(db: Db, scope: KitchenScope, args: TapArgs & { shoppingItemIds: string[] }) {
+  return tap(db, scope, args, "review.queue", [
+    {
+      opId: "queue",
+      type: "review.queue",
+      kind: "add-to-kitchen",
+      items: args.shoppingItemIds.map((shoppingItemId) => ({ shoppingItemId })),
+    },
+  ]);
+}
+
+/**
+ * Close a To review card from its sheet. For a shopping-list card, Add (`done`) moves the chosen
+ * items into the kitchen with "Done shopping"'s rules, in one change set (one Undo); Skip changes nothing else.
+ */
+export function resolveReview(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { reviewId: string; outcome: "done" | "skipped"; shoppingItemIds?: string[] },
+) {
+  return tap(db, scope, args, "review.resolve", [
+    {
+      opId: "resolve",
+      type: "review.resolve",
+      target: { reviewId: args.reviewId },
+      outcome: args.outcome,
+      ...(args.shoppingItemIds ? { items: args.shoppingItemIds.map((shoppingItemId) => ({ shoppingItemId })) } : {}),
+    },
+  ]);
+}
+
 export interface NewMealIdea {
   ideaId?: string;
   name: string;

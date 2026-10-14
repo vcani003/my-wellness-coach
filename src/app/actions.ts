@@ -12,7 +12,9 @@ import { ShoppingDoneFields } from "@/contracts/operations";
 import {
   addShoppingItems,
   doneShopping,
+  queueShoppingReview,
   removeShoppingItem,
+  resolveReview,
   tickShoppingItem,
   undo,
 } from "@/domains/kitchen/commands";
@@ -49,6 +51,15 @@ const AddShoppingInput = z.object({
 const DoneShoppingInput = z.object({
   ...Tap,
   items: z.array(z.object({ shoppingItemId: Id, fields: ShoppingDoneFields.optional() })).min(1).max(100),
+});
+
+const ShoppingIds = z.array(Id).min(1).max(100);
+const QueueShoppingInput = z.object({ ...Tap, shoppingItemIds: ShoppingIds });
+const ResolveReviewInput = z.object({
+  ...Tap,
+  reviewId: Id,
+  outcome: z.enum(["done", "skipped"]),
+  shoppingItemIds: ShoppingIds.optional(),
 });
 
 /** Parse, re-check membership, run the command; never throws to the UI (0018). */
@@ -91,6 +102,16 @@ export async function removeShoppingListItem(input: z.input<typeof ShoppingItemI
 /** "Done shopping" (SL2): the chosen ticked items go into the kitchen in one change set (one Undo). */
 export async function finishShopping(input: z.input<typeof DoneShoppingInput>): Promise<ActionResult> {
   return run(DoneShoppingInput, input, (ctx, d) => doneShopping(ctx.db, ctx.scope, d));
+}
+
+/** "Do later" on the Done-shopping sheet: the chosen items wait in the Kitchen's To review. */
+export async function queueShoppingForLater(input: z.input<typeof QueueShoppingInput>): Promise<ActionResult> {
+  return run(QueueShoppingInput, input, (ctx, d) => queueShoppingReview(ctx.db, ctx.scope, d));
+}
+
+/** Add or Skip on a To review card's sheet. A shopping-list card's Add is "Done shopping" for its items. */
+export async function resolveToReview(input: z.input<typeof ResolveReviewInput>): Promise<ActionResult> {
+  return run(ResolveReviewInput, input, (ctx, d) => resolveReview(ctx.db, ctx.scope, d));
 }
 
 /** DEV ONLY: switch who you're acting as (Vero or Levi in the demo kitchen). */

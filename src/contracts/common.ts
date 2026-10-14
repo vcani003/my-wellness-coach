@@ -60,6 +60,10 @@ export type RestrictionKind = z.infer<typeof RestrictionKind>;
 export const ReviewKind = z.enum(["add-to-kitchen", "after-cooking"]);
 export type ReviewKind = z.infer<typeof ReviewKind>;
 
+/** Where a To review card came from: a meal's sheet, or the shopping list's "Done shopping" sheet (0027). */
+export const ReviewOrigin = z.enum(["meal", "shopping-list"]);
+export type ReviewOrigin = z.infer<typeof ReviewOrigin>;
+
 /**
  * How a shopping-list item got on the list (0027): said in chat, a staples answer, a recipe's
  * "Need" items, or the "Add to shopping list" offer after marking something Out or Low (SL3).

@@ -11,7 +11,19 @@
 
 ## Outstanding
 
-*Nothing waiting on you right now (2026-10-14).*
+### GH1. 🟡 Make the GitHub repo public?
+It's **private** for now: [github.com/vcani003/my-wellness-coach](https://github.com/vcani003/my-wellness-coach). There are no secrets anywhere in its history (checked). But it does contain personal details: **Levi's seafood allergy and medicine note** (used as a test case), your names, your stores, and your Gmail address on every commit.
+**Rec:** keep it private. If you want it public later (for a portfolio, say), first replace those details with made-up ones and use a GitHub "noreply" commit email. Going public can't be fully undone.
+
+> Answer:
+
+### CL1. 🟡 Chatting with me on the go
+- **(a) Remote Control:** this session, steered from the Claude phone app. Works right away and can still deploy. Your Mac must stay on with the Claude app open.
+- **(b) Move this session to the cloud:** runs on Anthropic's servers with the GitHub repo, and works with your Mac closed. To keep deploying from there, first connect Vercel to GitHub (Vercel → Project → Settings → Git → Connect → GitHub → `my-wellness-coach`). After that, every push to `main` deploys automatically, and the cloud session never needs your keys.
+
+**Rec:** (a) for today. (b) once you've connected Vercel to GitHub (about 2 minutes).
+
+> Answer:
 
 ## Setup tasks (S1–S3 done 2026-10-14; S4 later for email sign-in)
 These need **your** accounts. Keep every key and code private: you paste them yourself, and I'll never ask you to send them in chat.
