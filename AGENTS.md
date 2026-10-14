@@ -3,7 +3,7 @@
 Instructions for any AI agent working in this repo.
 
 ## Current phase
-**Product discovery and architecture planning. Do not write application code** until Vero approves the MVP scope and architecture.
+**Building MVP 1, one milestone at a time** (architecture approved, decision 0023). Build only the milestone the orchestrator assigns; Vero sets the order (OPEN-QUESTIONS P-questions). Specialist briefs are in `.claude/agents/`.
 
 ## Who decides
 - **Vero is the Product Owner.** She owns product decisions, MVP boundaries, and accepting or rejecting recommendations.

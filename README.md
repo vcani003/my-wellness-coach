@@ -8,9 +8,7 @@ The first MVP is the **Kitchen-Aware Assistant**.
 
 It is a chat-first experience that maintains persistent kitchen context and uses adaptive widgets to help the user understand what they have and decide what to make.
 
-This repository is currently in product discovery and architecture planning.
-
-**Do not begin implementation until the Kitchen-Aware Assistant MVP scope and architecture have been approved.**
+The MVP scope and architecture are approved, and MVP 1 is being built one milestone at a time.
 
 ## Start here
 
