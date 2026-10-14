@@ -10,6 +10,7 @@
 ## Policies and tester data (B12)
 - The account has a **Settings** section with **standard web policy boilerplate** (privacy policy and terms).
 - Testers can **see and delete** their data from Settings.
+- **Deleting your data (D1, 2026-10-14):** your account, chats and profile are removed. Items you added to a shared kitchen **stay**, shown as added by "a former member". A kitchen is deleted only when its last member deletes.
 - The boilerplate is a placeholder, not legal review. That's fine for 3 invited users, but it needs real review before any public launch.
 
 ## Rough effort to add more languages later (Vero asked)

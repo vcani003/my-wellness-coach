@@ -11,72 +11,30 @@
 
 ## Outstanding
 
-### K3. 🟡 Older and newer batches of the same item (you asked for a rec)
-Your two scenarios:
-1. **You ran out but didn't tell the app.** The new eggs are really the only eggs.
-2. **You bought more while still having some.** Now there are older eggs and newer eggs.
+### T1. ⛔ Today's grocery test: how to run it
+Today's test needs the **real AI**. The stand-in can't answer "what staples do I need?". Two ways to run it:
+- **(a) At home on your Wi-Fi, today.** The app runs on your Mac, and you and Levi open it on your phones over your home Wi-Fi.
+  - **Needs from you:** only an **Anthropic API key** (S1).
+  - **Limits:** it doesn't work at the store. Before you leave, ask Kitchen for the list and take a screenshot. When you're home, tell it what you bought.
+  - **Security:** anyone on your Wi-Fi could open the page while it's running, so we stop it after the test.
+- **(b) Online, usable anywhere** (at the store, Levi at work).
+  - **Needs:** sign-in, a deploy, four accounts (S1–S4), and your go-ahead to publish.
+  - **Timing:** realistically **not today** without rushing security.
 
-The app can't tell these apart on its own, so the design has to handle both without interrogating you.
-**Rec, in scope for MVP 1 in a small form:**
-- **Each item can have batches.** "Eggs" stays **one row** on the Kitchen list, showing "2 batches · oldest 12 days" when there's more than one. Tapping it shows the batches (date added, frozen or defrosted, Low). It's view-only, like the rest of See all.
-- **Buying something you already have adds a new batch.** The receipt makes it a one-tap choice, never a question you must answer: *"Added eggs (new batch). You also had eggs from Oct 2: **Still have them** · **Those are gone**."* Ignoring it keeps both (scenario 2). Tapping "Those are gone" closes the old batch (scenario 1).
-- **"Use the eggs" uses the oldest batch first** by default, which also feeds the use-it-up idea (AI8). You can say "the new eggs" to pick.
-- **Why now rather than later:** it changes the core data shape, which costs little now (only the backend exists) and a lot after the screens and AI are built on top.
-- **Kept out of MVP 1:** editing batches by hand, splitting or merging them, and expiry dates.
-
-> Answer:
-
-### AI8. 🟡 "Use it up" priority in meal ideas (from your AI6 note)
-Here's how I read your note; please correct me if it's wrong:
-- **Meal ideas should favour food that needs using up**, such as things in the fridge longest, or something defrosted.
-- **If that food is an allergen** (say, defrosted shrimp, given Levi's allergy), **it should still be suggested**, clearly flagged, instead of being left out under AI6.
-
-**Rec, in scope for MVP 1 in a simple form:**
-- Rank ideas using what we already store: days since added, oldest batch (K3), defrosted (a new "defrosted on" date when you say you defrosted something), and Low.
-- The idea's "why" line says so: "Uses the chicken you defrosted yesterday."
-- **No shelf-life prediction** ("milk lasts 7 days"). That's "advanced freshness prediction", which is out of scope (spec §10).
-- A use-it-up allergen item can appear in unprompted ideas, flagged as always.
+**Rec:** (a) today, and (b) as the next milestones. What you enter today will carry over when we go online.
 
 > Answer:
 
-### C10. 🟡 Cheaper models for some tasks: how and when to decide (you asked)
-**Feasible in MVP 1?** Yes. It's already built in: the model is a **per-task server setting** (0020), so interpreting, meal ideas and recipes can each use a different model, changed without code.
-**Your concern is right.** Going live on Opus and later quietly downgrading would mean Levi and you get worse answers before anyone notices. So the decision should **never be made on you two.**
-- **Decide with tests, before you see it.** When the real AI is built (milestone b), every task's test set runs on **both Opus and Sonnet** on staging, at about $2–4 a run. A task can move to Sonnet only if it scores **as well as Opus**, with **zero allergy misses**.
-- **Taste needs you.** For recipes and meal ideas, "good" is partly subjective, so you get a **blind side-by-side** of 5–10 examples (you don't know which is which) and you pick.
-- **No "try the better model" button in the app.** It's confusing, and it means you'd be living with the worse answer first.
-- **Which tasks, honestly:**
-  - **Interpreting** (turning "I used the rest of the spinach" into the right change) is where mistakes damage trust, and allergy handling runs through it. **Keep Opus.**
-  - **Meal ideas and recipes** are the realistic Sonnet candidates.
-  - **Haiku** is too weak for anything you'd read.
-- **The money:** the Opus estimate (~$15–18) already meets your $20 target. Moving ideas and recipes to Sonnet saves maybe **$4–7 a month**. Worth testing, but don't expect big savings at this scale.
-
-**Rec:** Opus for interpreting throughout MVP 1. Run the Opus vs Sonnet test plus your blind taste test for ideas and recipes when the real AI is built. Switch only tasks that pass.
+### T2. 🟡 Staples and a shopping list
+"What staples do I need?" has two parts: knowing your **usual staples**, and keeping a **shopping list**.
+- **Today, Rec:** Kitchen answers in chat. It uses what's in your kitchen, that you made pho, where you shop, and common staples for the dishes you make. When you mention a staple, it offers "Want me to remember fish sauce as one of your staples?". That uses the preferences design you already approved (0012), so it's not new scope.
+- **Later, a choice for you:** a **Shopping list widget** (tick-off, shared with Levi). It's genuinely useful, but it's **new scope**: a 5th widget, beyond the spec's MVP set. **Rec:** decide after today's test, based on whether you missed it.
 
 > Answer:
-
-### C11. ⚪ Cheaper models for the build agents too?
-Separate from the app's AI: the **specialist agents building the app** can also run on different models. This uses your Claude plan, not the $40 API budget.
-**Rec:** keep Opus for agents writing core code (a subtle bug costs more than the tokens saved). Use **Sonnet for mechanical jobs** like syncing docs or simple edits. I'll choose per task when I launch them, and note which model each used.
-
-> Answer:
-
-### D1. ⚪ Deleting your data: what happens to items you added to the shared kitchen?
-*(From the Backend specialist, extending decision 0015)*
-**Rec:** the items stay in the kitchen, shown as added by "a former member". The kitchen itself is deleted only when its last member deletes their data.
-
-> Answer:
-
-### B15. ⚪ How we judge MVP 1 a success (the remaining half of B14)
-**Rec:** MVP 1 succeeds when (1) both tester agents pass (0021), and (2) you and your husband use it for real for **2 weeks** and still find it useful. Your judgment is the verdict, plus a short note on what worked and what didn't.
-
-> Answer:
-
----
 
 ## Setup tasks for you (not blocking local building)
 These need **your** accounts, so I won't create them for you. They're needed before the real AI (b) or going online.
-- **S1. Anthropic Console:** create an API workspace for **production** and one for **staging**, set spend limits of **$30** and **$10** (0020), and create a key for each. Keep the keys private, and I'll tell you where to paste them (a local file that's never committed).
+- **S1. Anthropic Console (needed for today's test):** create an API workspace for **production** and one for **staging**, set spend limits of **$30** and **$10** (0020), and create a key for each. Keep the keys private, and I'll tell you where to paste them (a local file that's never committed).
 - **S2. Neon:** a free account (two projects later: production and staging).
 - **S3. Vercel:** a free account (only when we go online, with your go-ahead).
 - **S4. Resend:** a free account, plus the email address sign-in emails come from.
@@ -138,5 +96,10 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | K2, K4 | "Out" items; auto-Out | [0011](decisions/0011-visible-changes-and-kitchen-fields.md): Out drops off list; auto-Out with Undo |
 | AI6, AI7 | Allergen ideas; Levi's allergy | [0019](decisions/0019-allergies-with-nuance-and-basics.md): left out unless asked; added by Vero, verified by Levi |
 | UX4, FE1, FE2 | Chat button; sessions; offline | [0017](decisions/0017-shared-kitchen-and-layout.md): not draggable; 1-year rolling; read-only offline |
+| K3 | Older and newer batches | [0025](decisions/0025-batches-and-use-it-up.md): up to 3 per item, oldest closes |
+| AI8 | Use-it-up priority | [0025](decisions/0025-batches-and-use-it-up.md): yes; shelf-life prediction later |
+| C10, C11 | Cheaper models | [0020](decisions/0020-ai-cost-and-model.md): decided by tests; interpreting stays Opus; back to Opus after misses |
+| D1 | Deleting data in a shared kitchen | [0015](decisions/0015-language-units-policies-data.md): items stay as "former member" |
+| B15 | Success criteria | [0026](decisions/0026-success-criteria-and-first-real-test.md): testers + 2 weeks; grocery test today |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |

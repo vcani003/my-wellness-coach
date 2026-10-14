@@ -22,9 +22,11 @@ One line per decision. Read the full record only when it's relevant to your task
 | [0016](0016-team-and-technical-delegation.md) | Accessibility folded into Frontend; technical decisions delegated to specialists; Next.js preferred |
 | [0017](0017-shared-kitchen-and-layout.md) | Private chats; Undo own changes only; See all view-only; docked chat + minimize button (not draggable); link + code sign-in; 1-year rolling session; read-only offline; design tokens |
 | [0018](0018-never-crash-fallbacks.md) | Never crash: isolated widgets, safe fallbacks, plain errors |
-| [0019](0019-allergies-with-nuance-and-basics.md) | Every member's allergies always considered, with nuance notes; allergen dishes left out of unprompted ideas; others can add, owner verifies; no medical advice; assumed basics |
+| [0019](0019-allergies-with-nuance-and-basics.md) | Every member's allergies always considered, with nuance notes; allergen dishes left out of unprompted ideas; others can add, owner verifies; no medical advice; assumed basics; allergen badge computed by code |
 | [0020](0020-ai-cost-and-model.md) | $40 cap, $20 target; Opus 5.5; model is a per-task server setting; name "Kitchen" |
 | [0021](0021-tester-agents.md) | Two tester agents on staging; single-person and household test kitchens; tests gate hand-off |
 | [0022](0022-ux-owns-look-and-feel.md) | UX owns visual design (tone, mood, tokens); start calm |
 | [0023](0023-saved-specialist-agents.md) | Architecture approved; specialists saved in `.claude/agents/`; build order decided with Vero per milestone |
 | [0024](0024-visual-direction-clay-and-honey.md) | Visual direction C, Clay & Honey; plum reserved for allergy flags |
+| [0025](0025-batches-and-use-it-up.md) | Up to 3 batches per item (oldest closes); oldest used first; "use it up" ranking; shelf-life prediction later |
+| [0026](0026-success-criteria-and-first-real-test.md) | Success = testers pass + 2 weeks of real use; first real test is a grocery trip |
