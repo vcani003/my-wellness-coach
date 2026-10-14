@@ -11,6 +11,12 @@
 
 ## Outstanding
 
+### AI9. 🟡 Does a "Low" item bring allergen dishes back into meal ideas?
+Decision 0025 lets a *use-it-up* allergen item (say, defrosted shrimp) still appear in unprompted ideas, flagged. "Use it up" currently also counts **Low**. But Low means *running out*, not *going off*, so a "fish sauce is low" note could bring seafood dishes back for Levi.
+**Rec (AI):** no. Only items that need using before they spoil count (the oldest batch, defrosted, sitting long). Low still nudges ordinary ideas, just not allergen ones.
+
+> Answer:
+
 ### GH1. 🟡 Make the GitHub repo public?
 It's **private** for now: [github.com/vcani003/my-wellness-coach](https://github.com/vcani003/my-wellness-coach). There are no secrets anywhere in its history (checked). But it does contain personal details: **Levi's seafood allergy and medicine note** (used as a test case), your names, your stores, and your Gmail address on every commit.
 **Rec:** keep it private. If you want it public later (for a portfolio, say), first replace those details with made-up ones and use a GitHub "noreply" commit email. Going public can't be fully undone.
