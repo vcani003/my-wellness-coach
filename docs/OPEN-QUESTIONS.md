@@ -58,6 +58,11 @@ These need **your** accounts. Keep every key and code private: you paste them yo
   - `DATABASE_URL='<neon string>' npm run db:migrate`
   - `DATABASE_URL='<neon string>' npm run db:bootstrap`
 - **Then tell me "ready".** I'll link the Vercel project, you add the five settings above in the dashboard, and on your **"go"** I deploy and check it.
+- **For the test copy ("staging") and the two tester agents (P2 e, decision 0021):** about 10 minutes, whenever suits you. Not urgent.
+  - **S5. Neon:** in the same Neon account, create a **second project** called `wellness-coach-staging`. Copy its connection string and keep it private.
+  - **S6. Anthropic:** create a workspace called `wellness-coach-staging` with a **$5 monthly limit**, and create a key in it (30-day expiry, like the other).
+  - **S7. Vercel:** Claude gives you the exact `npx vercel env add … preview` commands, so the test copy uses the staging database and key, never your real kitchen.
+  - Until then, the tester agents run against the local copy on your Mac, using the stand-in AI.
 - **S4. Resend:** not needed today. It's for email sign-in later.
 
 ---
