@@ -122,8 +122,8 @@ async function isMember(db: Queryable, kitchenId: string, userId: string): Promi
   return Boolean(row);
 }
 
-/** Real accounts in the app (0006's cap). */
-async function countAccounts(db: Queryable): Promise<number> {
+/** Real accounts in the app (0006's cap). Settings uses it to say when inviting is full. */
+export async function countAccounts(db: Queryable): Promise<number> {
   const [row] = await db.select({ n: count() }).from(users).where(eq(users.isTest, false));
   return Number(row?.n ?? 0);
 }

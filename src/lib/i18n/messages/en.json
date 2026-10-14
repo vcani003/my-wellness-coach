@@ -234,6 +234,70 @@
       "notConfigured": "Access codes aren't set up on this server yet.",
       "wrong": "That code didn't work. Check it and try again.",
       "deleted": "That code belonged to data that's been deleted, so it no longer opens the kitchen. Ask for a new code to start fresh."
+    },
+    "introPassphrase": "Welcome in. Sign in with your name and passphrase.",
+    "nameLabel": "Your name",
+    "passphraseLabel": "Passphrase",
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "useCode": "Use an access code instead",
+    "usePassphrase": "Use your name and passphrase instead",
+    "passphraseErrors": {
+      "empty": "Enter your name and passphrase.",
+      "wrong": "That name and passphrase didn't match. Check them and try again.",
+      "tooMany": "Too many tries. Please wait {minutes} min and try again.",
+      "notConfigured": "Sign-in isn't set up on this server yet.",
+      "failed": "Something went wrong. Please try again."
+    }
+  },
+  "auth": {
+    "show": "Show",
+    "hide": "Hide",
+    "showPassphrase": "Show passphrase",
+    "hidePassphrase": "Hide passphrase",
+    "strength": {
+      "start": "At least 12 characters. A few everyday words work well.",
+      "more": "{count, plural, one {# more character} other {# more characters}} to go.",
+      "ok": "That works. Another word would make it even stronger.",
+      "strong": "That's a strong passphrase."
+    },
+    "errors": {
+      "invalidLink": "This link no longer works. Ask Vero for a new link.",
+      "full": "The app already has 4 accounts, the most it allows.",
+      "nameTaken": "Someone already uses that name. Try another, like adding an initial.",
+      "nameInvalid": "Use letters, numbers and spaces, up to 40 characters.",
+      "nameEmpty": "Enter the name you'd like to use.",
+      "passphraseTooShort": "Use at least 12 characters.",
+      "passphraseTooLong": "That's more than 256 characters. Try a shorter one.",
+      "wrong": "That didn't match. Check it and try again.",
+      "tooMany": "Too many tries. Please wait {minutes} min and try again.",
+      "notAllowed": "This account can't do that.",
+      "notConfigured": "Sign-in isn't set up on this server yet.",
+      "failed": "Something went wrong. Please try again."
+    },
+    "join": {
+      "pageTitle": "Join · Kitchen",
+      "title": "Join {name}'s kitchen",
+      "intro": "Choose the name you'll sign in with, and a passphrase only you know.",
+      "nameLabel": "Your name",
+      "passphraseLabel": "Passphrase",
+      "submit": "Join the kitchen",
+      "busy": "Joining…"
+    },
+    "reset": {
+      "pageTitle": "Set your passphrase · Kitchen",
+      "title": "Set your passphrase",
+      "intro": "Hi {name}. Choose a passphrase only you know. You'll sign in with your name, {name}, and this passphrase.",
+      "passphraseLabel": "New passphrase",
+      "submit": "Save and sign in",
+      "busy": "Saving…"
+    },
+    "staySignedIn": "You'll stay signed in on this device.",
+    "gone": {
+      "pageTitle": "Link no longer works · Kitchen",
+      "title": "This link no longer works",
+      "body": "Links work once and last 24 hours. Ask Vero for a new link.",
+      "signIn": "Go to sign in"
     }
   },
   "shopping": {
@@ -412,10 +476,36 @@
       "signingOut": "Signing out…",
       "confirm": {
         "title": "Sign out everywhere?",
-        "body": "You'll be signed out on this device and on every other phone or computer. To come back, enter your access code again.",
+        "body": "You'll be signed out on this device and on every other phone or computer. To come back, sign in again.",
         "confirm": "Sign out everywhere",
         "cancel": "Cancel",
         "failed": "I couldn't sign you out just now. Try again."
+      },
+      "setPassphrase": "Set your passphrase",
+      "setPassphraseHint": "Then you can sign in with your name and a passphrase, instead of the access code.",
+      "changePassphrase": "Change passphrase",
+      "changePassphraseHint": "You sign in with your name, {name}, and your passphrase.",
+      "passphraseSaved": "Passphrase saved. Use it with your name next time you sign in.",
+      "passphraseSheet": {
+        "setTitle": "Set your passphrase",
+        "changeTitle": "Change passphrase",
+        "codeLabel": "Your access code",
+        "currentLabel": "Current passphrase",
+        "showCode": "Show access code",
+        "hideCode": "Hide access code",
+        "showCurrent": "Show current passphrase",
+        "hideCurrent": "Hide current passphrase",
+        "newLabel": "New passphrase",
+        "showNew": "Show new passphrase",
+        "hideNew": "Hide new passphrase",
+        "otherDevices": "Your other devices will be signed out. This one stays signed in.",
+        "save": "Save passphrase",
+        "saving": "Saving…",
+        "cancel": "Cancel",
+        "emptyCurrent": "Enter your current passphrase.",
+        "emptyCode": "Enter your access code.",
+        "wrongCurrent": "That didn't match your current passphrase.",
+        "wrongCode": "That access code didn't match."
       }
     },
     "kitchen": {
@@ -424,7 +514,41 @@
       "justYou": "Just you for now.",
       "membersLabel": "Members",
       "you": "{name} (you)",
-      "none": "You're not in a kitchen yet."
+      "none": "You're not in a kitchen yet.",
+      "noPassphrase": "{name} still signs in with an access code.",
+      "sendSetup": "Send sign-in setup link",
+      "sendSetupLabel": "Send sign-in setup link to {name}",
+      "sendReset": "Send passphrase reset link",
+      "sendResetLabel": "Send passphrase reset link to {name}",
+      "invite": "Invite someone new",
+      "inviteHint": "For someone who isn't in the app yet. They choose their own name and passphrase.",
+      "full": "The app has 4 accounts, the most it allows, so there's no room to invite someone new.",
+      "testKitchen": "Sign-in links aren't available in test kitchens.",
+      "sheet": {
+        "setupTitle": "Sign-in setup link for {name}",
+        "setupBody": "Send this to {name}. Opening it lets {name} choose a passphrase and keep this account.",
+        "resetTitle": "Passphrase reset link for {name}",
+        "resetBody": "Send this to {name}. Opening it sets a new passphrase and signs {name} out on other devices.",
+        "inviteTitle": "Invite someone new",
+        "inviteBody": "Send this to the person you're inviting. They'll choose a name and passphrase and join this kitchen.",
+        "making": "Making the link…",
+        "linkLabel": "Link",
+        "validity": "Valid for 24 hours, works once.",
+        "private": "Anyone with this link can use it, so send it only to them.",
+        "copy": "Copy link",
+        "copied": "Copied.",
+        "copyFailed": "Couldn't copy. Press and hold the link to copy it.",
+        "share": "Share…",
+        "shareText": "Your link to Kitchen. It works once, for 24 hours.",
+        "done": "Done",
+        "retry": "Try again",
+        "errors": {
+          "full": "The app has 4 accounts, the most it allows.",
+          "tooMany": "That's a lot of links for one day. Try again tomorrow.",
+          "notAllowed": "This account can't make links for this kitchen.",
+          "failed": "I couldn't make a link just now. Try again."
+        }
+      }
     },
     "remember": {
       "heading": "Allergies and preferences",

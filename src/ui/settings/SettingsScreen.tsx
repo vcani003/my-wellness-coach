@@ -2,8 +2,13 @@
 /**
  * Settings (ux.md §7; 0015, 0017, 0019) at `/settings`, inside the main layout so the chat dock
  * stays (Edit note is fixed in chat, 0007). Sections:
- * - **Account:** your name, **Sign out** (this device), **Sign out everywhere** (confirm sheet).
- * - **Kitchen:** "Shared with Levi".
+ * - **Account:** your name; **Set your passphrase** / **Change passphrase** (SU1 Rec, a sheet);
+ *   **Sign out** (this device), **Sign out everywhere** (confirm sheet).
+ * - **Kitchen:** "Shared with Levi". For each other member without a passphrase, **Send sign-in
+ *   setup link** (a reset link, so they keep their account and what's saved to it); with one,
+ *   **Send passphrase reset link**. **Invite someone new** (a join link) for people not in the app
+ *   yet, replaced by the reason at the 4-account cap (0006). Each opens `LinkSheet`. Test kitchens
+ *   can't make links (0021), so they say so instead.
  * - **Allergies and preferences:** yours with provenance (AI7). One another member added for you
  *   reads "Added by Vero, needs you to confirm" with **Confirm / Edit note / Remove**; only you can
  *   change yours (the server checks too). Other members' allergies and diets are read-only.
@@ -24,6 +29,8 @@ import { BackIcon, UndoIcon } from "@/ui/primitives/icons";
 import { useKitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { useConfirmPrompt } from "./ConfirmPrompt";
 import { ConfirmSheet } from "./ConfirmSheet";
+import { LinkSheet } from "./LinkSheet";
+import { PassphraseSheet } from "./PassphraseSheet";
 import { clearDeviceData, pendingConfirms, REMEMBER_HEADING_ID, type MemberRestrictions, type SettingsActions } from "./model";
 
 export const SETTINGS_HEADING_ID = "settings-heading";
@@ -94,8 +101,8 @@ export function SettingsScreen({ initial, others, actions }: { initial: Settings
 
       {view ? (
         <>
-          <AccountSection view={view} actions={actions} />
-          <KitchenSection view={view} />
+          <AccountSection view={view} actions={actions} onView={setView} />
+          <KitchenSection view={view} actions={actions} />
           <RememberSection view={view} others={others} actions={actions} onView={setView} />
           <DataSection view={view} />
         </>
@@ -117,9 +124,24 @@ export function SettingsScreen({ initial, others, actions }: { initial: Settings
   );
 }
 
-function AccountSection({ view, actions }: { view: SettingsView; actions: SettingsActions }) {
+function AccountSection({ view, actions, onView }: { view: SettingsView; actions: SettingsActions; onView: (view: SettingsView) => void }) {
   const t = useTranslations("settings.account");
   const [confirming, setConfirming] = useState(false);
+  const [settingPassphrase, setSettingPassphrase] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const hasPassphrase = view.members.find((m) => m.isYou)?.hasPassphrase ?? false;
+
+  const passphraseSaved = async () => {
+    setSaved(true);
+    // Flip "Set your passphrase" to "Change passphrase" now; refresh from the server after.
+    onView({ ...view, members: view.members.map((m) => (m.isYou ? { ...m, hasPassphrase: true } : m)) });
+    try {
+      const fresh = await actions.load();
+      if (fresh) onView(fresh);
+    } catch {
+      // The optimistic view is right; the next visit reads it again.
+    }
+  };
   const [signingOut, setSigningOut] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -144,6 +166,33 @@ function AccountSection({ view, actions }: { view: SettingsView; actions: Settin
         <dt className="text-caption font-strong text-text-muted">{t("name")}</dt>
         <dd className="text-body">{view.me.name}</dd>
       </dl>
+      <div className="flex flex-col gap-1">
+        <button
+          type="button"
+          onClick={() => {
+            setSaved(false);
+            setSettingPassphrase(true);
+          }}
+          aria-describedby="settings-passphrase-hint"
+          className={`${secondaryButton} self-start`}
+        >
+          {hasPassphrase ? t("changePassphrase") : t("setPassphrase")}
+        </button>
+        <p id="settings-passphrase-hint" className="text-caption text-text-muted">
+          {hasPassphrase ? t("changePassphraseHint", { name: view.me.name }) : t("setPassphraseHint")}
+        </p>
+        <p role="status" className="text-small text-success-text empty:hidden">
+          {saved ? t("passphraseSaved") : ""}
+        </p>
+      </div>
+      <PassphraseSheet
+        open={settingPassphrase}
+        onOpenChange={setSettingPassphrase}
+        hasPassphrase={hasPassphrase}
+        userName={view.me.name}
+        change={actions.changePassphrase}
+        onSaved={() => void passphraseSaved()}
+      />
       <div className="flex flex-col gap-1">
         <button type="button" onClick={() => void signOut()} disabled={signingOut} aria-describedby="settings-signout-hint" className={`${secondaryButton} self-start`}>
           {signingOut ? t("signingOut") : t("signOut")}
@@ -185,10 +234,26 @@ function AccountSection({ view, actions }: { view: SettingsView; actions: Settin
   );
 }
 
-function KitchenSection({ view }: { view: SettingsView }) {
+type LinkFor = { kind: "setup" | "reset"; member: { id: string; name: string } } | { kind: "invite" } | null;
+
+function KitchenSection({ view, actions }: { view: SettingsView; actions: SettingsActions }) {
   const t = useTranslations("settings.kitchen");
   const locale = useLocale();
-  const others = view.members.filter((m) => !m.isYou).map((m) => m.name);
+  const [linkFor, setLinkFor] = useState<LinkFor>(null);
+  const othersList = view.members.filter((m) => !m.isYou);
+  const others = othersList.map((m) => m.name);
+  const canLink = view.kitchen !== null && !view.kitchen.isTest;
+
+  const sheet = (() => {
+    if (!linkFor) return { title: "", body: "", create: async () => ({ ok: false as const, error: { key: "failed" as const } }) };
+    if (linkFor.kind === "invite") return { title: t("sheet.inviteTitle"), body: t("sheet.inviteBody"), create: () => actions.createInvite({ purpose: "join" }) };
+    const name = linkFor.member.name;
+    const userId = linkFor.member.id;
+    return linkFor.kind === "setup"
+      ? { title: t("sheet.setupTitle", { name }), body: t("sheet.setupBody", { name }), create: () => actions.createResetLink({ userId }) }
+      : { title: t("sheet.resetTitle", { name }), body: t("sheet.resetBody", { name }), create: () => actions.createResetLink({ userId }) };
+  })();
+
   return (
     <section aria-labelledby="settings-kitchen" className={card}>
       <h3 id="settings-kitchen" className="text-title font-strong">
@@ -204,6 +269,38 @@ function KitchenSection({ view }: { view: SettingsView }) {
       ) : (
         <p className="text-body text-text-muted">{t("none")}</p>
       )}
+      {canLink && othersList.length > 0 && (
+        <ul className="flex flex-col divide-y divide-border-default">
+          {othersList.map((m) => (
+            <li key={m.id} data-member-access={m.id} className="flex flex-col gap-1 py-3 first:pt-0">
+              {!m.hasPassphrase && <p className="text-small text-text-muted">{t("noPassphrase", { name: m.name })}</p>}
+              <button
+                type="button"
+                onClick={() => setLinkFor({ kind: m.hasPassphrase ? "reset" : "setup", member: { id: m.id, name: m.name } })}
+                aria-label={m.hasPassphrase ? t("sendResetLabel", { name: m.name }) : t("sendSetupLabel", { name: m.name })}
+                className={m.hasPassphrase ? `${linkButton} self-start px-0` : `${secondaryButton} self-start`}
+              >
+                {m.hasPassphrase ? t("sendReset") : t("sendSetup")}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {canLink &&
+        (view.accountsFull ? (
+          <p className="text-small text-text-muted">{t("full")}</p>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <button type="button" onClick={() => setLinkFor({ kind: "invite" })} aria-describedby="settings-invite-hint" className={`${secondaryButton} self-start`}>
+              {t("invite")}
+            </button>
+            <p id="settings-invite-hint" className="text-caption text-text-muted">
+              {t("inviteHint")}
+            </p>
+          </div>
+        ))}
+      {view.kitchen?.isTest && <p className="text-caption text-text-muted">{t("testKitchen")}</p>}
+      <LinkSheet open={linkFor !== null} onOpenChange={(open) => !open && setLinkFor(null)} title={sheet.title} body={sheet.body} create={sheet.create} />
     </section>
   );
 }

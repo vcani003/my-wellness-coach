@@ -38,8 +38,14 @@ export const SettingsView = z.object({
   me: z.object({ id: Id, name: z.string() }),
   /** Your kitchen (MVP 1: one per person, 0006); null if you're in none. */
   kitchen: z.object({ id: Id, name: z.string(), isTest: z.boolean(), version: z.number().int().nonnegative() }).nullable(),
-  /** Everyone in that kitchen, you included, in the order they joined. */
-  members: z.array(z.object({ id: Id, name: z.string(), isYou: z.boolean() })),
+  /**
+   * Everyone in that kitchen, you included, in the order they joined. `hasPassphrase` (SU1 Rec):
+   * false = they still sign in with an access code, so Settings offers "Send sign-in setup link"
+   * (a reset link, so they keep their account). Never the passphrase itself.
+   */
+  members: z.array(z.object({ id: Id, name: z.string(), isYou: z.boolean(), hasPassphrase: z.boolean() })),
+  /** The app already has its 4 real accounts (0006), so "Invite someone new" can't make a link. */
+  accountsFull: z.boolean(),
   /** Allergies first, then diets; oldest first within each. */
   restrictions: z.array(SettingsRestriction),
   preferences: z.array(SettingsPreference),

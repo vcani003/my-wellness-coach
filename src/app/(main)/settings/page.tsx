@@ -10,6 +10,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { changePassphrase, createInvite, createResetLink } from "@/app/settings/access-actions";
 import { loadSettings, removeRestriction, signOut, signOutEverywhere, verifyRestriction } from "@/app/settings/actions";
 import type { SettingsView } from "@/contracts/settings";
 import { getMessages } from "@/lib/i18n";
@@ -49,7 +50,16 @@ async function Settings() {
     <SettingsScreen
       initial={view}
       others={others}
-      actions={{ load: loadSettings, verify: verifyRestriction, remove: removeRestriction, signOut, signOutEverywhere }}
+      actions={{
+        load: loadSettings,
+        verify: verifyRestriction,
+        remove: removeRestriction,
+        signOut,
+        signOutEverywhere,
+        createInvite,
+        createResetLink,
+        changePassphrase,
+      }}
     />
   );
 }

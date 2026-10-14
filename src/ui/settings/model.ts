@@ -5,6 +5,7 @@
 import type { ApplyResult } from "@/contracts/apply-result";
 import type { ActorRef, Msg } from "@/contracts/common";
 import type { SettingsRestriction, SettingsView } from "@/contracts/settings";
+import type { AuthFailure, CreateLinkResult } from "@/lib/auth/invites";
 
 /** The Allergies and preferences heading: the home banner links straight to it. */
 export const REMEMBER_HEADING_ID = "settings-remember";
@@ -65,6 +66,10 @@ export interface SettingsActions {
   remove(input: { tapId: string; restrictionId: string }): Promise<SettingsTapResult>;
   signOut(): Promise<void>;
   signOutEverywhere(): Promise<void>;
+  /** Sign-in links and your passphrase (SU1 Rec; `src/app/settings/access-actions.ts`). */
+  createInvite(input: { purpose: "join" }): Promise<CreateLinkResult>;
+  createResetLink(input: { userId: string }): Promise<CreateLinkResult>;
+  changePassphrase(input: { current: string; next: string }): Promise<{ ok: true } | AuthFailure>;
 }
 
 export type SettingsTapResult =

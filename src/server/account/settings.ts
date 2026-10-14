@@ -8,11 +8,12 @@
  *   ProposedChange and go through the one write path, so they're receipts with Undo like any tap.
  */
 import "server-only";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import type { Db, Queryable } from "@/db/client";
 import { kitchens, memberships, users } from "@/db/schema";
 import type { SettingsRestriction, SettingsView } from "@/contracts/settings";
 import { applyProposedChange, type ApplyOutcome } from "@/domains/kitchen/commands";
+import { countAccounts, MAX_ACCOUNTS } from "@/lib/auth/invites";
 import { actorRef, loadNames } from "@/shared/identity";
 import { listMembers, type KitchenScope } from "@/shared/membership";
 import { msg } from "@/shared/messages";
@@ -44,6 +45,19 @@ export async function getSettingsView(db: Queryable, userId: string): Promise<Se
         .limit(1)
     : [];
   const members = kitchen ? await listMembers(db, kitchen.id) : [];
+  // Who has set a passphrase (SU1 Rec): only whether, never the hash.
+  const withPassphrase = members.length
+    ? new Set(
+        (
+          await db
+            .select({ id: users.id, hash: users.passphraseHash })
+            .from(users)
+            .where(inArray(users.id, members.map((m) => m.userId)))
+        )
+          .filter((u) => u.hash !== null)
+          .map((u) => u.id),
+      )
+    : new Set<string>();
 
   const profile = await loadProfiles(db, [userId]);
   const restrictions = Object.values(profile.restrictions).sort(
@@ -54,7 +68,8 @@ export async function getSettingsView(db: Queryable, userId: string): Promise<Se
   return {
     me,
     kitchen: kitchen ?? null,
-    members: members.map((m) => ({ id: m.userId, name: m.displayName, isYou: m.userId === userId })),
+    members: members.map((m) => ({ id: m.userId, name: m.displayName, isYou: m.userId === userId, hasPassphrase: withPassphrase.has(m.userId) })),
+    accountsFull: (await countAccounts(db)) >= MAX_ACCOUNTS,
     restrictions: restrictions.map(
       (r): SettingsRestriction => ({
         id: r.id,

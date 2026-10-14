@@ -35,7 +35,9 @@ export function ConfirmSheet(props: ConfirmSheetProps) {
     <Dialog.Root open={props.open} onOpenChange={(open) => props.onOpenChange(open)}>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-40 bg-text-default/30" />
-        {props.open && <SheetBody {...props} />}
+        {/* Always rendered: unmounting the Popup ourselves left Base UI's backdrop stuck closing,
+            blocking every tap after Cancel. A new key on each open gives a fresh, empty sheet. */}
+        <SheetBody key={props.open ? "open" : "closed"} {...props} />
       </Dialog.Portal>
     </Dialog.Root>
   );

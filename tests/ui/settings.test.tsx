@@ -47,8 +47,8 @@ function leviView(overrides: Partial<SettingsView> = {}): SettingsView {
     me: { id: LEVI.id, name: "Levi" },
     kitchen: { id: "k1", name: "Our kitchen", isTest: false, version: 3 },
     members: [
-      { id: VERO.id, name: "Vero", isYou: false },
-      { id: LEVI.id, name: "Levi", isYou: true },
+      { id: VERO.id, name: "Vero", isYou: false, hasPassphrase: false },
+      { id: LEVI.id, name: "Levi", isYou: true, hasPassphrase: false },
     ],
     restrictions: [
       {
@@ -64,6 +64,7 @@ function leviView(overrides: Partial<SettingsView> = {}): SettingsView {
       { id: "r-veg", kind: "diet", subject: "vegetarian", addedBy: LEVI, addedAt: T0, addedByYou: true, verified: true, verifiedAt: T0 },
     ],
     preferences: [{ id: "p1", statement: "likes it spicy", savedAt: T0 }],
+    accountsFull: false,
     ...overrides,
   };
 }
@@ -74,8 +75,8 @@ function veroView(): SettingsView {
     ...leviView(),
     me: { id: VERO.id, name: "Vero" },
     members: [
-      { id: VERO.id, name: "Vero", isYou: true },
-      { id: LEVI.id, name: "Levi", isYou: false },
+      { id: VERO.id, name: "Vero", isYou: true, hasPassphrase: false },
+      { id: LEVI.id, name: "Levi", isYou: false, hasPassphrase: false },
     ],
     restrictions: [],
     preferences: [],
@@ -100,6 +101,9 @@ function fakeSettings(overrides: Partial<SettingsActions> = {}): SettingsActions
     remove: vi.fn(async () => ({ ok: false as const, reason: { code: "SAVE_FAILED", params: {}, text: "x" }, retryable: true })),
     signOut: vi.fn(async () => {}),
     signOutEverywhere: vi.fn(async () => {}),
+    createInvite: vi.fn(async () => ({ ok: true as const, path: "/join/invite-token", expiresAt: T0 })),
+    createResetLink: vi.fn(async () => ({ ok: true as const, path: "/reset/reset-token", expiresAt: T0 })),
+    changePassphrase: vi.fn(async () => ({ ok: true as const })),
     ...overrides,
   };
 }
@@ -268,7 +272,7 @@ describe("Sign out and Delete my data", () => {
   it("a deleted account goes to /unlock; the last member is told the kitchen goes too", async () => {
     const user = userEvent.setup();
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
-    show(leviView({ members: [{ id: LEVI.id, name: "Levi", isYou: true }] }));
+    show(leviView({ members: [{ id: LEVI.id, name: "Levi", isYou: true, hasPassphrase: false }] }));
     await user.click(screen.getByRole("button", { name: "Delete my data" }));
     const sheet = await screen.findByRole("dialog", { name: "Delete your data?" });
     expect(sheet).toHaveTextContent("You're the kitchen's only member, so the kitchen is deleted too.");

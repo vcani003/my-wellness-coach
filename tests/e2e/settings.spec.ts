@@ -137,7 +137,11 @@ test("Vero: Sign out everywhere asks first, then goes to /unlock", async ({ page
   const sheet = page.getByRole("dialog", { name: "Sign out everywhere?" });
   await expect(sheet.getByRole("button", { name: "Cancel" })).toBeFocused();
   await expectAccessible(page, "sign out everywhere sheet");
+  // Regression: Cancel used to leave the sheet's backdrop behind, blocking every tap after it.
+  await sheet.getByRole("button", { name: "Cancel" }).click();
+  await expect(sheet).toHaveCount(0);
+  await page.getByRole("button", { name: "Sign out everywhere" }).click({ timeout: 5_000 });
   await sheet.getByRole("button", { name: "Sign out everywhere" }).click();
   await expect(page).toHaveURL(/\/unlock$/);
-  await expect(page.getByLabel("Access code", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Your name")).toBeVisible();
 });
