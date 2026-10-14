@@ -3,9 +3,11 @@
  * (e.g. Fitness) reads Kitchen only through this file, never through its tables or prompts.
  * The UI and AI code use `commands` and `queries` instead.
  */
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { Queryable } from "@/db/client";
 import { changeSets, itemBatches } from "@/db/schema";
+import type { ActorRef } from "@/contracts/common";
+import { actorRef, loadNames } from "@/shared/identity";
 import type { KitchenScope } from "@/shared/membership";
 import { readKitchenState } from "./queries";
 
@@ -29,27 +31,61 @@ export async function getSummary(db: Queryable, scope: KitchenScope): Promise<Ki
   };
 }
 
+/** How a saved receipt's change set stands now (P2 a): computed on every read, never stored. */
+export interface UndoStatus {
+  /** The person in `scope` could still undo it: their own, saved, not an undo, not undone since. */
+  undoable: boolean;
+  /**
+   * Set once anyone has undone it: who and when (from the undo's own change set). `by`/`at` are
+   * left out only if that undo can't be found; it still counts as undone.
+   */
+  undone: { by?: ActorRef; at?: string } | null;
+}
+
 /**
- * Of these change sets, the ones the person in `scope` could still undo: their own, saved, not
- * an undo, and not undone since. Used to redraw saved chat receipts (P2 a). A later change to
- * the same items can still block the Undo when it's tapped (`UNDO_CONFLICT`).
+ * The undo status of each of these change sets, by ID. Used to redraw saved chat receipts, so an
+ * undone one reads as undone after a reload. IDs from another kitchen are simply absent. A later
+ * change to the same items can still block the Undo when it's tapped (`UNDO_CONFLICT`).
  */
-export async function getStillUndoable(db: Queryable, scope: KitchenScope, changeSetIds: string[]): Promise<Set<string>> {
-  if (changeSetIds.length === 0) return new Set();
+export async function getUndoStatus(
+  db: Queryable,
+  scope: KitchenScope,
+  changeSetIds: string[],
+): Promise<Map<string, UndoStatus>> {
+  const out = new Map<string, UndoStatus>();
+  if (changeSetIds.length === 0) return out;
   const rows = await db
-    .select({ id: changeSets.id })
+    .select({
+      id: changeSets.id,
+      actorId: changeSets.actorId,
+      version: changeSets.version,
+      revertsChangeSetId: changeSets.revertsChangeSetId,
+      revertedByChangeSetId: changeSets.revertedByChangeSetId,
+    })
     .from(changeSets)
-    .where(
-      and(
-        eq(changeSets.kitchenId, scope.kitchenId),
-        eq(changeSets.actorId, scope.userId),
-        inArray(changeSets.id, changeSetIds),
-        isNotNull(changeSets.version),
-        isNull(changeSets.revertsChangeSetId),
-        isNull(changeSets.revertedByChangeSetId),
-      ),
-    );
-  return new Set(rows.map((r) => r.id));
+    .where(and(eq(changeSets.kitchenId, scope.kitchenId), inArray(changeSets.id, [...new Set(changeSetIds)])));
+  const undoIds = rows.flatMap((r) => (r.revertedByChangeSetId ? [r.revertedByChangeSetId] : []));
+  const undos = undoIds.length
+    ? await db
+        .select({ id: changeSets.id, actorId: changeSets.actorId, createdAt: changeSets.createdAt })
+        .from(changeSets)
+        .where(and(eq(changeSets.kitchenId, scope.kitchenId), inArray(changeSets.id, undoIds)))
+    : [];
+  const undoById = new Map(undos.map((u) => [u.id, u]));
+  const names = await loadNames(
+    db,
+    undos.map((u) => u.actorId),
+  );
+  for (const r of rows) {
+    const undo = r.revertedByChangeSetId ? undoById.get(r.revertedByChangeSetId) : undefined;
+    const undone = r.revertedByChangeSetId !== null;
+    out.set(r.id, {
+      undoable: r.actorId === scope.userId && r.version !== null && r.revertsChangeSetId === null && !undone,
+      // An undo row we can't find still counts as undone; it just can't say who (0018).
+      undone: undone ? (undo ? { by: actorRef(undo.actorId, names), at: undo.createdAt.toISOString() } : {}) : null,
+    });
+  }
+  return out;
 }
 
 /**

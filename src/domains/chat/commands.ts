@@ -11,7 +11,7 @@ import { and, eq } from "drizzle-orm";
 import type { Queryable } from "@/db/client";
 import { chatMessages } from "@/db/schema";
 import type { ApplyResult } from "@/contracts/apply-result";
-import type { ChatReceipt } from "@/contracts/chat-history";
+import type { StoredReceipt } from "@/contracts/chat-history";
 import type { KitchenScope } from "@/shared/membership";
 
 export interface SaveMessageArgs {
@@ -45,7 +45,7 @@ export async function saveAssistantMessage(
   scope: KitchenScope,
   args: SaveMessageArgs & { id: string; result: ApplyResult | null },
 ): Promise<string> {
-  const receipt: ChatReceipt | null = args.result ? withoutState(args.result) : null;
+  const receipt: StoredReceipt | null = args.result ? withoutState(args.result) : null;
   const inserted = await db
     .insert(chatMessages)
     .values({
@@ -76,7 +76,7 @@ export async function saveAssistantMessage(
   return existing?.id ?? args.id;
 }
 
-function withoutState(result: ApplyResult): ChatReceipt {
+function withoutState(result: ApplyResult): StoredReceipt {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { state, ...rest } = result;
   return rest;

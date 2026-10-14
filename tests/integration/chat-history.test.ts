@@ -163,6 +163,27 @@ describe("saved chat", () => {
     expect(receipts[1].undoBlockedReason?.code).toBe("UNDO_OF_UNDO");
   });
 
+  it("an undone receipt reads as undone after a reload, with who and when", async () => {
+    const k = await newKitchen(db, ["Vero"]);
+    const vero = await k.scope("Vero");
+    await turn(vero, "I bought eggs");
+    const before = (await listChatHistory(db, vero)).messages.find((m) => m.receipt)!.receipt!;
+    expect(before).toMatchObject({ undone: false, undoable: true });
+    expect(before).not.toHaveProperty("undoneBy");
+
+    await turn(vero, "undo");
+    const page = await listChatHistory(db, vero);
+    expect(ChatHistoryPage.safeParse(page).success).toBe(true);
+    const [bought, undid] = page.messages.flatMap((m) => (m.receipt ? [m.receipt] : []));
+    expect(bought.changeSetId).toBe(before.changeSetId);
+    expect(bought.undone).toBe(true);
+    expect(bought.undoable).toBe(false);
+    expect(bought.undoneBy).toEqual({ id: vero.userId, name: "Vero" });
+    expect(Date.parse(bought.undoneAt!)).not.toBeNaN();
+    // The undo's own receipt is not itself undone.
+    expect(undid.undone).toBe(false);
+  });
+
   it("if the chat can't be saved or read, the turn still applies and finishes (0018)", async () => {
     const broken = await openLocalDb();
     const errors = console.error;

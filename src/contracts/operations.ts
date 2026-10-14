@@ -137,13 +137,20 @@ export const ItemBatchKeep = z.object({
 /**
  * "I defrosted the chicken" (0025, AI8). Sets the batch's "defrosted on" date (when the user said
  * it happened, else now) and `frozen: false`. Without a batch: the oldest frozen open batch,
- * else the oldest open one.
+ * else the oldest open one. It also moves the batch to the fridge (inferred) unless `location`
+ * carries a place the user said (DF1 Rec, `locationAfterDefrost` in the kitchen domain).
  */
 export const ItemDefrost = z.object({
   ...common,
   type: z.literal("item.defrost"),
   target: ItemBatchTarget,
-  fields: z.object({ defrostedOn: optionalFact(z.iso.datetime({ offset: true })) }).optional(),
+  fields: z
+    .object({
+      defrostedOn: optionalFact(z.iso.datetime({ offset: true })),
+      /** Where it's defrosting, when the user said ("thawing in the pantry"). */
+      location: optionalFact(Location),
+    })
+    .optional(),
 });
 
 /**

@@ -6,8 +6,8 @@
 import { and, desc, eq, lt } from "drizzle-orm";
 import type { Queryable } from "@/db/client";
 import { chatMessages } from "@/db/schema";
-import { ChatHistoryMessage, ChatReceipt, type ChatHistoryPage } from "@/contracts/chat-history";
-import { getStillUndoable, getUnansweredBatchIds } from "@/domains/kitchen/public";
+import { ChatHistoryMessage, StoredReceipt, type ChatHistoryPage, type ChatReceipt } from "@/contracts/chat-history";
+import { getUndoStatus, getUnansweredBatchIds, type UndoStatus } from "@/domains/kitchen/public";
 import type { KitchenScope } from "@/shared/membership";
 
 export const HISTORY_PAGE_DEFAULT = 30;
@@ -47,7 +47,7 @@ export async function listChatHistory(
   const hasMore = rows.length > limit;
 
   const changeSetIds = page.flatMap((r) => (r.changeSetId ? [r.changeSetId] : []));
-  const undoable = await getStillUndoable(db, scope, changeSetIds);
+  const undo = await getUndoStatus(db, scope, changeSetIds);
   const unanswered = await getUnansweredBatchIds(db, scope, offeredBatchIds(page)).catch((error) => {
     // Never crash (0018): without this, saved batch choices are just not redrawn.
     console.error("chat.read: couldn't check batch choices", { error });
@@ -56,7 +56,7 @@ export async function listChatHistory(
 
   const messages: ChatHistoryMessage[] = [];
   for (const r of page.reverse()) {
-    const parsed = ChatHistoryMessage.safeParse(toMessage(r, undoable, unanswered));
+    const parsed = ChatHistoryMessage.safeParse(toMessage(r, undo, unanswered));
     if (parsed.success) messages.push(parsed.data);
     else console.error("chat.read: dropped a message", { id: r.id, issues: parsed.error.issues });
   }
@@ -68,7 +68,7 @@ export async function listChatHistory(
 function offeredBatchIds(rows: Row[]): string[] {
   const ids = new Set<string>();
   for (const r of rows) {
-    const parsed = r.receipt ? ChatReceipt.safeParse(r.receipt) : null;
+    const parsed = r.receipt ? StoredReceipt.safeParse(r.receipt) : null;
     for (const a of parsed?.success ? parsed.data.applied : []) {
       for (const o of a.batchOffers ?? []) for (const b of o.older) ids.add(b.batchId);
     }
@@ -76,13 +76,15 @@ function offeredBatchIds(rows: Row[]): string[] {
   return [...ids];
 }
 
-function toMessage(r: Row, undoable: Set<string>, unanswered: Set<string>) {
+function toMessage(r: Row, undo: Map<string, UndoStatus>, unanswered: Set<string>) {
   let receipt: ChatReceipt | null = null;
   if (r.receipt) {
-    const parsed = ChatReceipt.safeParse(r.receipt);
+    const parsed = StoredReceipt.safeParse(r.receipt);
     if (parsed.success) {
       const { undoBlockedReason, ...rest } = parsed.data;
-      const still = undoable.has(parsed.data.changeSetId);
+      const status = undo.get(parsed.data.changeSetId);
+      const still = status?.undoable ?? false;
+      const undone = status?.undone ?? null;
       // A batch choice is redrawn only while one of its older batches is open and unanswered.
       const applied = rest.applied.map((a) => {
         if (!a.batchOffers) return a;
@@ -92,7 +94,15 @@ function toMessage(r: Row, undoable: Set<string>, unanswered: Set<string>) {
           .filter((o) => o.older.length > 0);
         return open.length ? { ...op, batchOffers: open } : op;
       });
-      receipt = { ...rest, applied, undoable: still, ...(undoBlockedReason && !still ? { undoBlockedReason } : {}) };
+      receipt = {
+        ...rest,
+        applied,
+        undoable: still,
+        ...(undoBlockedReason && !still ? { undoBlockedReason } : {}),
+        undone: undone !== null,
+        ...(undone?.by ? { undoneBy: undone.by } : {}),
+        ...(undone?.at ? { undoneAt: undone.at } : {}),
+      };
     } else {
       // A receipt we can't read: show the message without it rather than drop the reply.
       console.error("chat.read: unreadable receipt", { id: r.id, issues: parsed.error.issues });

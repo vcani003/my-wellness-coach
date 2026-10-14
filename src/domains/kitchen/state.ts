@@ -211,6 +211,8 @@ export interface BatchDefrostedPayload {
   batchId: string;
   defrostedOn: Fact<string>;
   frozen: Fact<boolean>;
+  /** Where it is after defrosting (DF1 Rec). Absent on older events, which leave the place as it was. */
+  location?: Fact<Location>;
 }
 export interface ItemRemovedPayload {
   itemId: string;
@@ -495,6 +497,7 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
       } else {
         b.defrostedOn = p.defrostedOn;
         if (p.frozen) b.frozen = p.frozen;
+        if (p.location) b.location = p.location;
       }
       return put(state, "items", item.id, withBatch(item, b));
     }

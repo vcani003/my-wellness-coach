@@ -3,16 +3,29 @@
  * Only ever the caller's own messages in that kitchen (H2, 0017).
  */
 import { z } from "zod";
-import { Id } from "./common";
+import { ActorRef, Id } from "./common";
 import { ApplyResult } from "./apply-result";
 
+/** A receipt as saved with the message: the ApplyResult without `state`. Server-side only. */
+export const StoredReceipt = ApplyResult.omit({ state: true });
+export type StoredReceipt = z.infer<typeof StoredReceipt>;
+
 /**
- * A saved turn's receipt: the ApplyResult without `state` (the current state comes from
- * `/state`). `undoable` is worked out again on every read: true only for your own change set
- * that saved something, isn't an undo, and hasn't been undone since. An Undo that a later change
- * blocks is still refused when tapped (`UNDO_CONFLICT`), as everywhere else.
+ * A saved turn's receipt: the stored one, with its undo status worked out again on every read
+ * (never trusted from the saved copy).
+ * - `undoable`: true only for your own change set that saved something, isn't an undo, and hasn't
+ *   been undone since. An Undo that a later change blocks is still refused when tapped
+ *   (`UNDO_CONFLICT`), as everywhere else.
+ * - `undone`: true once anyone has undone this change set. Draw it as undone (struck through,
+ *   "Undone"), with no Undo button.
+ * - `undoneBy` / `undoneAt`: who undid it and when; present when `undone` (left out only if that
+ *   undo can't be found, 0018).
  */
-export const ChatReceipt = ApplyResult.omit({ state: true });
+export const ChatReceipt = StoredReceipt.extend({
+  undone: z.boolean(),
+  undoneBy: ActorRef.optional(),
+  undoneAt: z.iso.datetime({ offset: true }).optional(),
+});
 export type ChatReceipt = z.infer<typeof ChatReceipt>;
 
 export const ChatHistoryMessage = z.object({

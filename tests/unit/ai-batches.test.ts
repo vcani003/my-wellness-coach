@@ -98,7 +98,8 @@ describe("what the model sees (0025)", () => {
     k.say("defrosted the chicken", [{ type: "item.defrost", target: { name: "chicken thighs" } }]);
     const { interpreter, calls } = respond([]);
     await interpreter.interpret(requestFor(k, "what do I have?"));
-    expect(calls[0].messages[0].content as string).toContain("i2: chicken thighs · freezer · defrosted today");
+    // Defrosting moves it to the fridge (DF1 Rec).
+    expect(calls[0].messages[0].content as string).toContain("i2: chicken thighs · fridge · defrosted today");
   });
 });
 

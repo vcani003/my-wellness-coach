@@ -203,6 +203,22 @@ describe("batches on Postgres", () => {
     expect(signal).toMatchObject({ name: "chicken", oldestDays: 13, defrostedDays: 1, batchCount: 1, low: false });
   });
 
+  it("defrosting moves it from the freezer to the fridge (inferred), saved and rebuilt the same (DF1 Rec)", async () => {
+    const t = await newKitchen(db);
+    const vero = await t.scope("Vero");
+    await ok(db, vero, [{ type: "item.add", fields: { name: said("chicken"), location: said("freezer"), frozen: said(true) } }], { text: "chicken in the freezer" });
+    await ok(db, vero, [{ type: "item.defrost", target: { name: "chicken" } }], { text: "I defrosted the chicken" });
+    const fridge = { value: "fridge", basis: "inferred", confidence: "high" };
+    const read = async () => (await getKitchenState(db, vero)).items.find((i) => i.name.value === "chicken")!;
+    const chicken = await read();
+    expect(chicken.location).toEqual(fridge);
+    expect(chicken.frozen?.value).toBe(false);
+    expect(chicken.defrostedOn).toBeDefined();
+    expect(chicken.batches?.[0].location).toEqual(fridge);
+    await rebuildProjections(db, vero);
+    expect((await read()).location).toEqual(fridge);
+  });
+
   it("refuses a batch of another kitchen's item", async () => {
     const { offer } = await twoEggBatches();
     const other = await newKitchen(db);

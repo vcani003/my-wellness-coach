@@ -9,7 +9,7 @@ import { KitchenState } from "@/contracts/kitchen-state";
 import { ensureBatches, openBatches } from "@/domains/kitchen/batches";
 import { getKitchenEntity, kitchenTouchedKeys, replay } from "@/domains/kitchen/state";
 import { computeUseItUpSignals } from "@/domains/kitchen/use-it-up";
-import type { Plan, RevertPlan } from "@/domains/kitchen/validate";
+import { locationAfterDefrost, type Plan, type RevertPlan } from "@/domains/kitchen/validate";
 import type { EventEnvelope } from "@/shared/events/types";
 import { MemoryKitchen, said } from "../support/memory-kitchen";
 
@@ -281,6 +281,42 @@ describe("defrosted (0025, AI8)", () => {
     expect(k.item("chicken")!.batches[1].defrostedOn).toEqual(said(yesterday));
     const [signal] = computeUseItUpSignals(k.state(), new Date(Date.UTC(2026, 9, 14, 20)));
     expect(signal).toMatchObject({ name: "chicken", batchCount: 2, defrostedOn: yesterday, defrostedDays: 1, low: false });
+  });
+});
+
+describe("defrosted food leaves the freezer (DF1 Rec)", () => {
+  const inferredFridge = { value: "fridge", basis: "inferred", confidence: "high" };
+
+  it("moves the defrosted batch to the fridge, inferred, with frozen: false and the date", () => {
+    const k = new MemoryKitchen();
+    k.say("chicken in the freezer", [
+      { type: "item.add", fields: { name: said("chicken"), location: said("freezer"), frozen: said(true) } },
+    ]);
+    const out = k.say("I defrosted the chicken", [{ type: "item.defrost", target: { name: "chicken" } }]);
+    expect(out.rejected).toEqual([]);
+    const b = k.item("chicken")!.batches[0];
+    expect(b.location).toEqual(inferredFridge);
+    expect(b.frozen?.value).toBe(false);
+    expect(b.defrostedOn).toBeDefined();
+    expect(row(k, "chicken")!.location).toEqual(inferredFridge);
+  });
+
+  it("keeps a place the user said in the same operation", () => {
+    const k = new MemoryKitchen();
+    k.say("chicken in the freezer", [
+      { type: "item.add", fields: { name: said("chicken"), location: said("freezer"), frozen: said(true) } },
+    ]);
+    k.say("thawing the chicken in the pantry", [
+      { type: "item.defrost", target: { name: "chicken" }, fields: { location: said("pantry") } },
+    ]);
+    expect(row(k, "chicken")!.location).toEqual(said("pantry"));
+    expect(row(k, "chicken")!.frozen?.value).toBe(false);
+  });
+
+  it("the rule: a said place wins; anything else is the fridge, inferred", () => {
+    expect(locationAfterDefrost(undefined)).toEqual(inferredFridge);
+    expect(locationAfterDefrost(said("pantry"))).toEqual(said("pantry"));
+    expect(locationAfterDefrost({ value: "freezer", basis: "inferred", confidence: "low" })).toEqual(inferredFridge);
   });
 });
 

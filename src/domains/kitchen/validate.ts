@@ -7,7 +7,7 @@
  * guess doesn't sink "I bought 4 things."
  */
 import type { AppliedOp, BatchOffer, ChangeRef, RefKind, RejectedOp } from "@/contracts/apply-result";
-import { MAX_OPEN_BATCHES, type BatchWhich, type Fact, type Msg, type Quantity, type StockLevel } from "@/contracts/common";
+import { MAX_OPEN_BATCHES, type BatchWhich, type Fact, type Location, type Msg, type Quantity, type StockLevel } from "@/contracts/common";
 import {
   PASTE_ALLOWED_OPERATION_TYPES,
   PROFILE_OPERATION_TYPES,
@@ -621,8 +621,18 @@ function batchKeep(op: OperationOf<"item.batch.keep">, env: OpEnv): OpOutcome {
 }
 
 /**
- * "I defrosted the chicken" (0025, AI8): the batch's "defrosted on" date (said, else now) and
- * `frozen: false`. Without a batch: the oldest frozen open batch, else the oldest open one. An
+ * DF1 Rec (OPEN-QUESTIONS, not yet answered): defrosted food is in the fridge, since that's where
+ * people defrost, so it's marked *inferred*. A place the user said in the same operation wins.
+ * The one place this rule lives; change it here if Vero answers differently.
+ */
+export function locationAfterDefrost(said: Fact<Location> | undefined): Fact<Location> {
+  if (said?.basis === "said") return said;
+  return { value: "fridge", basis: "inferred", confidence: "high" };
+}
+
+/**
+ * "I defrosted the chicken" (0025, AI8): the batch's "defrosted on" date (said, else now),
+ * `frozen: false` and its place after defrosting (`locationAfterDefrost`). Without a batch: the oldest frozen open batch, else the oldest open one. An
  * item the kitchen never heard about is recorded first (0011).
  */
 function itemDefrost(op: OperationOf<"item.defrost">, env: OpEnv): OpOutcome {
@@ -661,6 +671,7 @@ function itemDefrost(op: OperationOf<"item.defrost">, env: OpEnv): OpOutcome {
     batchId: batch.id,
     defrostedOn,
     frozen: { value: false, basis: "inferred", confidence: "high" },
+    location: locationAfterDefrost(nn(op.fields?.location)),
   };
   events.push(emit(env, k, KITCHEN_EVENT.batchDefrosted, payload, said?.value));
   return ok(events, msg("ITEM_DEFROSTED", { name: item.name.value }), [
