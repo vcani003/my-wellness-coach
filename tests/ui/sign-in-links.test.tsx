@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SettingsView } from "@/contracts/settings";
 import { AnnouncerProvider } from "@/ui/a11y/Announcer";
+import { LinkGone } from "@/ui/auth/LinkGone";
 import { SetPassphraseForm, type LinkSubmitResult } from "@/ui/auth/SetPassphraseForm";
 import { ConfirmPromptProvider } from "@/ui/settings/ConfirmPrompt";
 import type { SettingsActions } from "@/ui/settings/model";
@@ -93,9 +94,33 @@ describe("/join/<token>", () => {
     await userEvent.type(passField(), "olive lemon window");
     await userEvent.click(screen.getByRole("button", { name: "Join the kitchen" }));
     expect(await screen.findByRole("heading", { level: 1, name: "This link no longer works" })).toBeInTheDocument();
+    // Names whoever made this link (here Vero, from the link's own data).
     expect(screen.getByText("Links work once and last 24 hours. Ask Vero for a new link.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to sign in" })).toHaveAttribute("href", "/unlock");
     await waitFor(() => expect(document.activeElement).toContainElement(screen.getByRole("heading", { level: 1 })));
+  });
+});
+
+describe("This link no longer works", () => {
+  it("names whoever made the link when it's known, never a fixed person", () => {
+    renderWithIntl(<LinkGone invitedBy="Levi" />);
+    expect(screen.getByRole("heading", { level: 1, name: "This link no longer works" })).toBeInTheDocument();
+    expect(screen.getByText("Links work once and last 24 hours. Ask Levi for a new link.")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("Vero");
+  });
+
+  it("otherwise asks the person who sent it", () => {
+    renderWithIntl(<LinkGone />);
+    expect(screen.getByText("Links work once and last 24 hours. Ask the person who sent it for a new link.")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("Vero");
+  });
+
+  it("a reset link made by Levi that stops working mid-form names Levi", async () => {
+    const submit = vi.fn(async () => ({ ok: false as const, error: { key: "invalidLink" as const } }));
+    renderWithIntl(<SetPassphraseForm mode="reset" token={TOKEN} forName="Vero" invitedBy="Levi" submit={submit} />);
+    await userEvent.type(passField("New passphrase"), "olive lemon window");
+    await userEvent.click(screen.getByRole("button", { name: "Save and sign in" }));
+    expect(await screen.findByText("Links work once and last 24 hours. Ask Levi for a new link.")).toBeInTheDocument();
   });
 });
 

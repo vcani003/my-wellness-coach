@@ -33,6 +33,8 @@ export type SetPassphraseFormProps =
       mode: "reset";
       token: string;
       forName: string;
+      /** Who made the link: named if it stops working meanwhile. */
+      invitedBy?: string;
       submit(input: { token: string; passphrase: string }): Promise<LinkSubmitResult>;
     };
 
@@ -86,7 +88,7 @@ export function SetPassphraseForm(props: SetPassphraseFormProps) {
     });
   };
 
-  if (gone) return <LinkGone focusHeading />;
+  if (gone) return <LinkGone invitedBy={props.invitedBy} focusHeading />;
 
   const hint = passphraseHint(passphrase);
   const hintText = hint.key === "more" ? t("strength.more", { count: hint.count }) : t(`strength.${hint.key}`);

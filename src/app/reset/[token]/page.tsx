@@ -28,6 +28,6 @@ async function Reset({ params }: { params: Promise<{ token: string }> }) {
   await connection();
   const { token } = await params;
   const info = await checkResetLink({ token });
-  if (!info.ok) return <LinkGone />;
-  return <SetPassphraseForm mode="reset" token={token} forName={info.forName ?? ""} submit={acceptReset} />;
+  if (!info.ok) return <LinkGone invitedBy={info.invitedBy} />;
+  return <SetPassphraseForm mode="reset" token={token} forName={info.forName ?? ""} invitedBy={info.invitedBy} submit={acceptReset} />;
 }

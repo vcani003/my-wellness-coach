@@ -243,12 +243,31 @@ export async function createLink(
 
 export type LinkInfo =
   | { ok: true; purpose: InvitePurpose; kitchenName: string; invitedBy: string; forName?: string; expiresAt: string }
-  | { ok: false };
+  /** `invitedBy`: who made it, only when the token is a real link of this purpose (used, expired…). */
+  | { ok: false; invitedBy?: string };
+
+/**
+ * Who made this link (display name only), for "Ask Levi for a new link" once it no longer works.
+ * Only for a token that hashes to a real link of this purpose; anything else → undefined.
+ */
+async function linkMaker(db: Queryable, token: string, purpose: InvitePurpose): Promise<string | undefined> {
+  if (!TOKEN_SHAPE.test(token)) return undefined;
+  const [row] = await db
+    .select({ displayName: users.displayName })
+    .from(invites)
+    .innerJoin(users, eq(users.id, invites.createdBy))
+    .where(and(eq(invites.tokenHash, hashInviteToken(token)), eq(invites.purpose, purpose)))
+    .limit(1);
+  return row?.displayName;
+}
 
 /** What the `/join/<token>` or `/reset/<token>` page shows. `{ok: false}` = "This link no longer works". */
 export async function getLinkInfo(db: Db, token: string, purpose: InvitePurpose, now: Date = new Date()): Promise<LinkInfo> {
   const row = await findLiveInvite(db, token, purpose, now);
-  if (!row) return { ok: false };
+  if (!row) {
+    const invitedBy = await linkMaker(db, token, purpose);
+    return invitedBy ? { ok: false, invitedBy } : { ok: false };
+  }
   const ids = [row.createdBy, ...(row.targetUserId ? [row.targetUserId] : [])];
   const people = await db
     .select({ id: users.id, displayName: users.displayName })

@@ -28,6 +28,6 @@ async function Join({ params }: { params: Promise<{ token: string }> }) {
   await connection();
   const { token } = await params;
   const info = await checkJoinLink({ token });
-  if (!info.ok) return <LinkGone />;
+  if (!info.ok) return <LinkGone invitedBy={info.invitedBy} />;
   return <SetPassphraseForm mode="join" token={token} invitedBy={info.invitedBy} submit={acceptJoin} />;
 }

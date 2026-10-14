@@ -103,13 +103,14 @@ describe("invites (join)", () => {
     const token = await invite(db);
     expect((await join(db, token, "Robin")).ok).toBe(true);
     expect(await join(db, token, "Robin Two")).toEqual({ ok: false, error: { key: "invalidLink" } });
-    expect(await getLinkInfo(db, token, "join", T0)).toEqual({ ok: false });
+    // Still says who made it, so the page can say "Ask Vero for a new link".
+    expect(await getLinkInfo(db, token, "join", T0)).toEqual({ ok: false, invitedBy: "Vero" });
   });
 
   it("expires after 24 hours", async () => {
     const token = await invite(db);
     expect(await join(db, token, "Late", at(INVITE_TTL_MS))).toEqual({ ok: false, error: { key: "invalidLink" } });
-    expect(await getLinkInfo(db, token, "join", at(INVITE_TTL_MS + 1))).toEqual({ ok: false });
+    expect(await getLinkInfo(db, token, "join", at(INVITE_TTL_MS + 1))).toEqual({ ok: false, invitedBy: "Vero" });
   });
 
   it("refuses an unknown or malformed token, or a reset token used as an invite", async () => {
@@ -118,6 +119,10 @@ describe("invites (join)", () => {
     const reset = await createLink(db, E, { userId: "vero", kitchenId: "home", purpose: "reset", targetUserId: "vero" }, T0);
     if (!reset.ok) throw new Error(reset.error.key);
     expect(await join(db, tokenOf(reset.path), "Sneaky")).toEqual({ ok: false, error: { key: "invalidLink" } });
+    // Who made a link is told only for a real link of the asked purpose.
+    expect(await getLinkInfo(db, tokenOf(reset.path), "join", T0)).toEqual({ ok: false });
+    expect(await getLinkInfo(db, "x".repeat(43), "join", T0)).toEqual({ ok: false });
+    expect(await getLinkInfo(db, "../../etc", "join", T0)).toEqual({ ok: false });
   });
 
   it("checks name and passphrase first, leaving the link usable", async () => {

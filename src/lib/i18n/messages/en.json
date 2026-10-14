@@ -262,7 +262,7 @@
       "strong": "That's a strong passphrase."
     },
     "errors": {
-      "invalidLink": "This link no longer works. Ask Vero for a new link.",
+      "invalidLink": "This link no longer works.",
       "full": "The app already has 4 accounts, the most it allows.",
       "nameTaken": "Someone already uses that name. Try another, like adding an initial.",
       "nameInvalid": "Use letters, numbers and spaces, up to 40 characters.",
@@ -296,8 +296,9 @@
     "gone": {
       "pageTitle": "Link no longer works · Kitchen",
       "title": "This link no longer works",
-      "body": "Links work once and last 24 hours. Ask Vero for a new link.",
-      "signIn": "Go to sign in"
+      "body": "Links work once and last 24 hours. Ask {name} for a new link.",
+      "signIn": "Go to sign in",
+      "bodyUnknown": "Links work once and last 24 hours. Ask the person who sent it for a new link."
     }
   },
   "shopping": {

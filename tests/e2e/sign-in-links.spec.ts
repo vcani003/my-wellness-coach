@@ -145,7 +145,7 @@ test("Levi: a setup link from Vero → his own passphrase → the shared kitchen
   await expect(levi).toHaveURL(/\/$/);
   await expect(settingsLink(levi, "Levi")).toBeVisible();
 
-  // The link worked once.
+  // The link worked once; the message names who made it.
   await levi.goto(link);
   await expect(levi.getByRole("heading", { level: 1, name: "This link no longer works" })).toBeVisible();
   await expect(levi.getByText("Links work once and last 24 hours. Ask Vero for a new link.")).toBeVisible();
@@ -200,7 +200,8 @@ test("an unknown or expired link: a calm message and a way to sign in", async ({
     const res = await page.goto(path);
     expect(res?.headers()["referrer-policy"]).toBe("no-referrer");
     await expect(page.getByRole("heading", { level: 1, name: "This link no longer works" })).toBeVisible();
-    await expect(page.getByText("Ask Vero for a new link.", { exact: false })).toBeVisible();
+    // Nobody made this link, so nobody is named.
+    await expect(page.getByText("Links work once and last 24 hours. Ask the person who sent it for a new link.")).toBeVisible();
     await expectAccessible(page, `unknown link ${path.split("/")[1]}`);
   }
   await page.getByRole("link", { name: "Go to sign in" }).click();
