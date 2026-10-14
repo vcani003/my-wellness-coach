@@ -21,11 +21,13 @@ import {
   undoChange,
   untickShoppingListItem,
 } from "@/app/actions";
+import { closeBatch, keepOlderBatch } from "@/app/batches/actions";
 import type { ApplyResult } from "@/contracts/apply-result";
 import type { ChatHistoryPage } from "@/contracts/chat-history";
 import type { KitchenState } from "@/contracts/kitchen-state";
 import { AnnouncerProvider, useAnnounce } from "@/ui/a11y/Announcer";
 import { Composer, type ComposerHandle } from "@/ui/chat/Composer";
+import { offersOf, openOlder, useBatchOfferWords } from "@/ui/chat/BatchOffers";
 import { useFormatMsg } from "@/ui/chat/format-msg";
 import { MessageList } from "@/ui/chat/MessageList";
 import { useChat } from "@/ui/chat/useChat";
@@ -116,6 +118,7 @@ function KitchenScreen({
   const locale = useLocale();
   const announce = useAnnounce();
   const formatMsg = useFormatMsg();
+  const batchWords = useBatchOfferWords();
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
   const now = useNow({ updateInterval: 60_000 });
   useKeyboardInset();
@@ -204,6 +207,13 @@ function KitchenScreen({
         const parts = [reply];
         if (error) parts.push(t("chat.errorNothingChanged"));
         else if (result?.applied.some((a) => a.refs.length)) parts.push(t("chat.announceKitchenUpdated"));
+        // A batch choice waits in the receipt (0025): say so, since nothing else points to it.
+        if (result && !error) {
+          for (const offer of offersOf(result.applied)) {
+            const older = openOlder(offer, result.state);
+            if (older.length) parts.push(batchWords(offer, older).question);
+          }
+        }
         announce(parts.filter(Boolean).join(" "));
         if (dockNow.current === "minimized") setNewReply(true);
       },
@@ -255,6 +265,8 @@ function KitchenScreen({
       resolveReview: (reviewId, outcome, shoppingItemIds) =>
         resolveToReview({ ...tap(), reviewId, outcome, ...(shoppingItemIds ? { shoppingItemIds } : {}) }),
       undo: (changeSetId) => undoChange({ ...tap(), changeSetId }),
+      closeBatch: (itemId, batchIds) => closeBatch({ ...tap(), itemId, batchIds }),
+      keepOlderBatch: (itemId, batchIds) => keepOlderBatch({ ...tap(), itemId, batchIds }),
       showOwn(result, opts) {
         sync.applyOwn(result.state);
         if (opts?.highlight) setMarks(marksFrom(result));

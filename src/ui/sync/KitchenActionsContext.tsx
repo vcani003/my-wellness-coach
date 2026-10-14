@@ -18,6 +18,10 @@ export interface KitchenActions {
   /** Add (`done`, with the chosen list items) or Skip on a To review card. */
   resolveReview(reviewId: string, outcome: "done" | "skipped", shoppingItemIds?: string[]): Promise<ActionResult>;
   undo(changeSetId: string): Promise<ActionResult>;
+  /** The receipt's batch choice (0025): "Those are gone" closes the older batches; undoable. */
+  closeBatch(itemId: string, batchIds: string[]): Promise<ActionResult>;
+  /** "Still have them": the older batches stay and the choice goes away (a soft change, no Undo). */
+  keepOlderBatch(itemId: string, batchIds: string[]): Promise<ActionResult>;
   /** Show a saved button change now; `highlight` marks its rows New / Updated. */
   showOwn(result: ApplyResult, opts?: { highlight?: boolean }): void;
   /** Remember that you used this widget, so a phone reopens with it on top (ux.md §10). */

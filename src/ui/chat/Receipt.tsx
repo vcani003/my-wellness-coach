@@ -6,6 +6,7 @@
  */
 import { useTranslations } from "next-intl";
 import { CheckIcon, UndoIcon } from "@/ui/primitives/icons";
+import { BatchOffers, offersOf } from "./BatchOffers";
 import type { Receipt as ReceiptModel } from "./chat-reducer";
 import { useFormatMsg } from "./format-msg";
 import { receiptLines, SHOPPING_GROUP } from "./receipt-lines";
@@ -29,6 +30,7 @@ export function Receipt({
   const undone = receipt.undo === "done";
   const savedSomething = receipt.applied.some((a) => a.refs.length > 0);
   const plainChanges = lines.map((l) => formatMsg(l.summary, "plain")).join(", ");
+  const offers = offersOf(receipt.applied);
   const canUndo = Boolean(onUndo) && receipt.undoable && savedSomething && !undone && receipt.undo !== "refused";
 
   return (
@@ -62,6 +64,9 @@ export function Receipt({
           </li>
         ))}
       </ul>
+
+      {/* "You also had eggs from Oct 2: Still have them · Those are gone" (0025); gone once the purchase is undone. */}
+      {offers.length > 0 && !undone && <BatchOffers offers={offers} />}
 
       {(canUndo || undone || receipt.undo === "refused" || onView) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">

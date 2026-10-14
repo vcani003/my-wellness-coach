@@ -33,3 +33,18 @@ export function calendarDaysSince(iso: string, now: Date): number {
   const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   return Math.max(0, Math.round((startOf(now) - startOf(then)) / 86_400_000));
 }
+
+/** An item's open batches, oldest first (0025). An item from an older cached state counts as one. */
+export function batchesOf(item: ItemRow): NonNullable<ItemRow["batches"]> {
+  return item.batches ?? [];
+}
+
+/**
+ * The "Defrosted" label (0025): some open batch was defrosted and hasn't gone back in the
+ * freezer since. Without batches (an older cached state), the row's own fields decide.
+ */
+export function isDefrosted(item: ItemRow): boolean {
+  const batches = batchesOf(item);
+  if (batches.length === 0) return Boolean(item.defrostedOn) && !item.frozen?.value;
+  return batches.some((b) => Boolean(b.defrostedOn) && !b.frozen?.value);
+}

@@ -52,6 +52,16 @@
     "low": "Running low",
     "opened": "Opened",
     "frozen": "Frozen",
+    "defrosted": "Defrosted",
+    "batches": {
+      "summary": "{count} batches · oldest {days, plural, =0 {added today} =1 {1 day} other {# days}}",
+      "listLabel": "{name}: batches, oldest first",
+      "added": "Added {date}",
+      "defrostedOn": "Defrosted {date}",
+      "addedBy": "Added by {name}",
+      "addedByYou": "Added by you",
+      "viewOnly": "To change these, tell me in chat."
+    },
     "new": "New",
     "updated": "Updated",
     "byPerson": "{name} · {when}",
@@ -114,7 +124,17 @@
     "viewLabel": "View in Kitchen",
     "notChanged": "Not changed: {reason}",
     "announceUndone": "Undone: {changes}",
-    "shoppingGroup": "On your list, {store}: {names}"
+    "shoppingGroup": "On your list, {store}: {names}",
+    "batch": {
+      "question": "You also had {name} from {dates}.",
+      "which": "{name} from {dates}",
+      "keep": "Still have them",
+      "gone": "Those are gone",
+      "keepLabel": "Still have them: {which}",
+      "goneLabel": "Those are gone: {which}",
+      "saving": "Saving…",
+      "failed": "I couldn't save that, so nothing changed. Try again."
+    }
   },
   "fallback": {
     "unknownItem": "Unknown item",
@@ -139,6 +159,11 @@
     "ITEM_USED_RECORDED": "{name} wasn't in your kitchen; noted it as used",
     "ITEM_REMOVED": "Removed {name}",
     "ITEM_REMOVE_NOT_FOUND": "{name} wasn't in your kitchen",
+    "ITEM_BATCH_ADDED": "Added {name} ({batches} batches)",
+    "ITEM_BATCH_USED_UP": "{name}: finished a batch ({left} left)",
+    "ITEM_BATCH_GONE": "{name}: those are gone ({left} left)",
+    "ITEM_BATCH_KEPT": "Kept the older {name}",
+    "ITEM_DEFROSTED": "{name}: defrosted",
     "NO_CHANGE": "Nothing to change",
     "UNDONE": "Undid that change",
     "UNKNOWN_ITEM": "That item isn't in this kitchen",
@@ -186,6 +211,9 @@
   "msgPlain": {
     "ITEM_MOVED": "{name} moved to the {location}",
     "SHOPPING_STORE": "{name} moved to {store} on your list"
+  },
+  "msgIcu": {
+    "ITEM_BATCH_ADDED": "Added {name} ({batches} batches){closedOldest, select, true {; the oldest batch is closed} other {}}{fromList, select, true { and took it off the shopping list} other {}}"
   },
   "unlock": {
     "pageTitle": "Unlock · Kitchen",

@@ -1,0 +1,248 @@
+// @vitest-environment jsdom
+/**
+ * Older and newer batches in the UI (0025): the Kitchen row ("2 batches · oldest 3 days",
+ * Defrosted, the view-only batch list) and the receipt's one-tap choice
+ * ("You also had eggs from Oct 2: Still have them · Those are gone") with its result and Undo.
+ */
+import "@testing-library/jest-dom/vitest";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useState } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ActionResult } from "@/app/actions";
+import type { ApplyResult, BatchOffer } from "@/contracts/apply-result";
+import type { BatchRow, ItemRow, KitchenState } from "@/contracts/kitchen-state";
+import { AnnouncerProvider } from "@/ui/a11y/Announcer";
+import type { Receipt as ReceiptModel } from "@/ui/chat/chat-reducer";
+import { useFormatMsg } from "@/ui/chat/format-msg";
+import { Receipt } from "@/ui/chat/Receipt";
+import { KitchenActionsProvider, type KitchenActions } from "@/ui/sync/KitchenActionsContext";
+import { KitchenDataProvider } from "@/ui/sync/KitchenDataContext";
+import { KitchenWidget } from "@/ui/widgets/kitchen/KitchenWidget";
+import { fakeActions } from "../support/fake-actions";
+import { item, kitchen, LEVI, said, VERO } from "../support/kitchen-rows";
+import { renderWithIntl } from "../support/intl";
+
+afterEach(cleanup);
+const NOW = new Date("2026-10-14T12:00:00.000Z");
+const OCT2 = "2026-10-02T10:00:00.000Z";
+const OCT11 = "2026-10-11T10:00:00.000Z";
+const OCT14 = "2026-10-14T10:00:00.000Z";
+
+const batch = (id: string, addedAt: string, extra: Partial<BatchRow> = {}): BatchRow => ({
+  id,
+  addedAt,
+  createdAt: addedAt,
+  createdBy: VERO,
+  updatedAt: addedAt,
+  updatedBy: VERO,
+  ...extra,
+});
+const eggs = (batches: BatchRow[], extra: Partial<ItemRow> = {}) =>
+  item("eggs", "eggs", { addedAt: batches[0]?.addedAt ?? OCT14, location: said("fridge" as const), batches, ...extra });
+
+const m = (code: string, params: Record<string, string | number | boolean> = {}) => ({ code, params, text: code });
+const offer: BatchOffer = { itemId: "eggs", name: "eggs", newBatchId: "b2", older: [{ batchId: "b1", addedAt: OCT2 }] };
+const purchase: ReceiptModel = {
+  changeSetId: "cs-buy",
+  newVersion: 2,
+  undoable: true,
+  applied: [
+    {
+      opId: "1",
+      summary: m("ITEM_BATCH_ADDED", { name: "eggs", batches: 2, closedOldest: false, fromList: false }),
+      refs: [{ kind: "item", id: "eggs", change: "updated", batchId: "b2" }],
+      batchOffers: [offer],
+    },
+  ],
+  rejected: [],
+  undo: "idle",
+};
+const twoBatches = kitchen([eggs([batch("b1", OCT2), batch("b2", OCT14)])], 2);
+const result = (state: KitchenState, code: string, params: Record<string, string | number> = {}, undoable = true): ApplyResult => ({
+  changeSetId: `cs-${code}`,
+  newVersion: state.version,
+  undoable,
+  applied: [{ opId: "op", summary: m(code, params), refs: [{ kind: "item", id: "eggs", change: "updated" }] }],
+  rejected: [],
+  state,
+});
+const ok = (r: ApplyResult): ActionResult => ({ ok: true, result: r });
+
+/** A receipt next to the live kitchen state, which the fake actions' `showOwn` updates. */
+function Harness({ initial, actions, receipt = purchase }: { initial: KitchenState; actions: Partial<KitchenActions>; receipt?: ReceiptModel }) {
+  const [state, setState] = useState(initial);
+  const value = fakeActions({ ...actions, showOwn: (r) => setState(r.state) });
+  return (
+    <AnnouncerProvider>
+      <KitchenActionsProvider value={value}>
+        <KitchenDataProvider value={{ me: VERO, snapshot: { state, status: "ok", syncedAt: 0 }, marks: {}, remoteIds: new Set(), now: NOW }}>
+          <Receipt receipt={receipt} onUndo={() => {}} />
+          <KitchenWidget onRetry={() => {}} />
+        </KitchenDataProvider>
+      </KitchenActionsProvider>
+    </AnnouncerProvider>
+  );
+}
+
+const announcer = () => screen.getByTestId("announcer");
+const choice = () => screen.getByRole("group", { name: "You also had eggs from Oct 2." });
+
+describe("Kitchen row with batches", () => {
+  it("shows '2 batches · oldest 12 days' and lists the batches, view-only, when tapped", async () => {
+    const state = kitchen([
+      eggs([
+        batch("b1", OCT2, { location: said("fridge" as const), stock: said("low" as const) }),
+        batch("b2", OCT14, { createdBy: LEVI, quantity: said({ asSaid: "a dozen" }) }),
+      ]),
+    ]);
+    renderWithIntl(<Harness initial={state} actions={{}} receipt={{ ...purchase, applied: [] }} />);
+    const row = screen.getByRole("button", { name: /^Eggs/ });
+    expect(row).toHaveTextContent("2 batches · oldest 12 days");
+    expect(row).toHaveAttribute("aria-expanded", "false");
+
+    await userEvent.click(row);
+    expect(row).toHaveAttribute("aria-expanded", "true");
+    const list = screen.getByRole("list", { name: "Eggs: batches, oldest first" });
+    const [older, newer] = within(list).getAllByRole("listitem");
+    expect(older).toHaveTextContent("Added Oct 2");
+    expect(older).toHaveTextContent("Fridge");
+    expect(older).toHaveTextContent("Running low");
+    expect(older).toHaveTextContent("Added by you");
+    expect(newer).toHaveTextContent("Added Oct 14");
+    expect(newer).toHaveTextContent("a dozen");
+    expect(newer).toHaveTextContent("Added by Levi");
+    // View-only (K1): no buttons inside, just a pointer to chat.
+    expect(within(list).queryByRole("button")).toBeNull();
+    expect(screen.getByText("To change these, tell me in chat.")).toBeInTheDocument();
+  });
+
+  it("a one-batch item stays a plain row with 'added X days ago'", () => {
+    renderWithIntl(<Harness initial={kitchen([eggs([batch("b1", OCT11)])])} actions={{}} receipt={{ ...purchase, applied: [] }} />);
+    expect(screen.queryByRole("button", { name: /^Eggs/ })).toBeNull();
+    expect(screen.getByText("added 3 days ago")).toBeInTheDocument();
+  });
+
+  it("labels a defrosted batch Defrosted, on the row and in the list (with its date)", async () => {
+    const chicken = item("ch", "chicken thighs", {
+      location: said("fridge" as const),
+      defrostedOn: said(OCT11),
+      batches: [batch("c1", OCT2, { defrostedOn: said(OCT11), frozen: said(false) }), batch("c2", OCT11, { frozen: said(true) })],
+    });
+    renderWithIntl(<Harness initial={kitchen([chicken])} actions={{}} receipt={{ ...purchase, applied: [] }} />);
+    const row = screen.getByRole("button", { name: /^Chicken thighs/ });
+    expect(row).toHaveTextContent("Defrosted");
+    await userEvent.click(row);
+    const [first, second] = within(screen.getByRole("list", { name: /Chicken thighs: batches/ })).getAllByRole("listitem");
+    expect(first).toHaveTextContent("Defrosted Oct 11");
+    expect(second).toHaveTextContent("Frozen");
+    expect(second).not.toHaveTextContent("Defrosted");
+  });
+
+  it("an item from an older cached state (no batches) still shows Defrosted from the row", () => {
+    const chicken = item("ch", "chicken thighs", { defrostedOn: said(OCT11) });
+    renderWithIntl(<Harness initial={kitchen([chicken])} actions={{}} receipt={{ ...purchase, applied: [] }} />);
+    expect(screen.getByText("Defrosted")).toBeInTheDocument();
+  });
+});
+
+describe("Receipt batch choice", () => {
+  it("asks once, with buttons named for the batch", () => {
+    renderWithIntl(<Harness initial={twoBatches} actions={{}} />);
+    expect(screen.getByRole("region", { name: "What changed" })).toHaveTextContent("Added eggs (2 batches)");
+    expect(within(choice()).getByRole("button", { name: "Still have them: eggs from Oct 2" })).toBeInTheDocument();
+    expect(within(choice()).getByRole("button", { name: "Those are gone: eggs from Oct 2" })).toBeInTheDocument();
+  });
+
+  it("Those are gone → closeBatch, the result with Undo (focused, announced); Undo brings the choice back", async () => {
+    const oneLeft = kitchen([eggs([batch("b2", OCT14)])], 3);
+    const closeBatch = vi.fn(async () => ok(result(oneLeft, "ITEM_BATCH_GONE", { name: "eggs", left: 1 })));
+    const undo = vi.fn(async () => ok(result(kitchen([eggs([batch("b1", OCT2), batch("b2", OCT14)])], 4), "UNDONE")));
+    renderWithIntl(<Harness initial={twoBatches} actions={{ closeBatch, undo }} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Those are gone: eggs from Oct 2" }));
+    expect(closeBatch).toHaveBeenCalledWith("eggs", ["b1"]);
+    const undoButton = await screen.findByRole("button", { name: "Undo: Eggs: those are gone (1 left)" });
+    await waitFor(() => expect(undoButton).toHaveFocus());
+    await waitFor(() => expect(announcer()).toHaveTextContent("Eggs: those are gone (1 left)"));
+    expect(screen.queryByRole("group", { name: /You also had eggs/ })).toBeNull();
+    // The Kitchen row is a plain one-batch row again.
+    expect(screen.queryByRole("button", { name: /^Eggs/ })).toBeNull();
+
+    await userEvent.click(undoButton);
+    expect(undo).toHaveBeenCalledWith("cs-ITEM_BATCH_GONE");
+    const gone = await screen.findByRole("button", { name: "Those are gone: eggs from Oct 2" });
+    await waitFor(() => expect(gone).toHaveFocus());
+    await waitFor(() => expect(announcer()).toHaveTextContent("Undone: Eggs: those are gone (1 left)"));
+    expect(screen.getByRole("button", { name: /^Eggs/ })).toHaveTextContent("2 batches");
+  });
+
+  it("Still have them → keepOlderBatch; the result is focused, with no Undo (a soft change)", async () => {
+    const kept = kitchen([eggs([batch("b1", OCT2, { keptAt: OCT14 }), batch("b2", OCT14)])], 3);
+    const keepOlderBatch = vi.fn(async () => ok(result(kept, "ITEM_BATCH_KEPT", { name: "eggs" }, false)));
+    renderWithIntl(<Harness initial={twoBatches} actions={{ keepOlderBatch }} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Still have them: eggs from Oct 2" }));
+    expect(keepOlderBatch).toHaveBeenCalledWith("eggs", ["b1"]);
+    const line = await screen.findByText("Kept the older eggs", { selector: "p" });
+    await waitFor(() => expect(line).toHaveFocus());
+    expect(screen.queryByRole("button", { name: /^Undo: Kept/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Eggs/ })).toHaveTextContent("2 batches");
+  });
+
+  it("a failed tap says nothing changed and keeps the buttons, focus on the choice", async () => {
+    renderWithIntl(<Harness initial={twoBatches} actions={{}} />);
+    const gone = screen.getByRole("button", { name: "Those are gone: eggs from Oct 2" });
+    await userEvent.click(gone);
+    expect(await screen.findByText("I couldn't save that, so nothing changed. Try again.", { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Those are gone: eggs from Oct 2" })).toHaveFocus();
+  });
+
+  it("is hidden once answered elsewhere, and after the purchase is undone", () => {
+    const kept = kitchen([eggs([batch("b1", OCT2, { keptAt: OCT14 }), batch("b2", OCT14)])]);
+    const { unmount } = renderWithIntl(<Harness initial={kept} actions={{}} />);
+    expect(screen.queryByRole("group", { name: /You also had eggs/ })).toBeNull();
+    unmount();
+
+    const closed = kitchen([eggs([batch("b2", OCT14)])]);
+    const second = renderWithIntl(<Harness initial={closed} actions={{}} />);
+    expect(screen.queryByRole("group", { name: /You also had eggs/ })).toBeNull();
+    second.unmount();
+
+    // The purchase undone: the new batch is gone, so there's nothing to compare.
+    renderWithIntl(<Harness initial={kitchen([eggs([batch("b1", OCT2)])])} actions={{}} receipt={{ ...purchase, undo: "done" }} />);
+    expect(screen.queryByRole("group", { name: /You also had eggs/ })).toBeNull();
+  });
+
+  it("names both dates when two older batches are open", () => {
+    const three = kitchen([eggs([batch("b0", "2026-09-28T10:00:00.000Z"), batch("b1", OCT2), batch("b2", OCT14)])]);
+    const both: ReceiptModel = {
+      ...purchase,
+      applied: [{ ...purchase.applied[0], batchOffers: [{ ...offer, older: [{ batchId: "b0", addedAt: "2026-09-28T10:00:00.000Z" }, ...offer.older] }] }],
+    };
+    renderWithIntl(<Harness initial={three} actions={{}} receipt={both} />);
+    expect(screen.getByRole("group", { name: "You also had eggs from Sep 28 and Oct 2." })).toBeInTheDocument();
+  });
+});
+
+describe("batch message codes (en.json)", () => {
+  function Line({ code, params }: { code: string; params: Record<string, string | number | boolean> }) {
+    const format = useFormatMsg();
+    return <p>{format(m(code, params))}</p>;
+  }
+  it.each([
+    ["ITEM_BATCH_ADDED", { name: "eggs", batches: 2, closedOldest: false, fromList: false }, "Added eggs (2 batches)"],
+    [
+      "ITEM_BATCH_ADDED",
+      { name: "eggs", batches: 3, closedOldest: true, fromList: true },
+      "Added eggs (3 batches); the oldest batch is closed and took it off the shopping list",
+    ],
+    ["ITEM_BATCH_USED_UP", { name: "eggs", left: 1 }, "Eggs: finished a batch (1 left)"],
+    ["ITEM_BATCH_GONE", { name: "eggs", left: 2 }, "Eggs: those are gone (2 left)"],
+    ["ITEM_BATCH_KEPT", { name: "eggs" }, "Kept the older eggs"],
+    ["ITEM_DEFROSTED", { name: "chicken" }, "Chicken: defrosted"],
+  ])("%s", (code, params, text) => {
+    renderWithIntl(<Line code={code} params={params} />);
+    expect(screen.getByText(text)).toBeInTheDocument();
+  });
+});

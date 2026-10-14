@@ -29,6 +29,8 @@ export function fakeActions(overrides: Partial<KitchenActions> = {}): KitchenAct
     queueShoppingForLater: vi.fn(refused),
     resolveReview: vi.fn(refused),
     undo: vi.fn(refused),
+    closeBatch: vi.fn(refused),
+    keepOlderBatch: vi.fn(refused),
     showOwn: vi.fn(),
     touched: vi.fn(),
     ...overrides,
