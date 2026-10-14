@@ -11,24 +11,6 @@
 
 ## Outstanding
 
-### GH2. ⛔ OK to push the "Do later" work to GitHub? (no deploy)
-Two of my pushes accidentally carried the "Do later" session's unfinished files, so the code on GitHub is incomplete right now. **The live app is unaffected**, because nothing was deployed. That session's finished commit, "Do later on Done shopping queues items in To review", completes it. I re-checked it on a clean copy: typecheck and lint clean, 309 tests pass.
-**Rec:** yes, push it. It's GitHub only; nothing goes live until a later deploy.
-
-> Answer:
-
-### P2. ⛔ What to build next (no deploys today; progress shown on localhost)
-What MVP 1 still lacks, roughly smallest first. Pick, or put them in order:
-- **(a) Chat history survives a reload.** Right now the conversation disappears if you reload or reopen the app, and Kitchen loses the context of what you just said. Small, and it matters for today's test.
-- **(b) Settings:** the privacy and terms pages, "Sign out everywhere", and see/delete your data (0015, 0017). Small, and required for MVP 1.
-- **(c) Older/newer batches (K3, 0025),** e.g. "Eggs · 2 batches". Medium.
-- **(d) Meal ideas → recipe → meal plan → cooking → "Update your kitchen"** (journey steps 5–7, 0005/0013/0025), including allergy badges. The biggest piece, and the heart of the original spec.
-- **(e) Staging and the two tester agents (0021),** so every change gets tested on a safe copy before it reaches you. Medium.
-
-**Rec:** (a) now, since it's small and helps today. Then (d), the core spec journey. Then (b), (e), (c). "Do later" for the shopping list is already being built in its own session.
-
-> Answer:
-
 ### GH1. 🟡 Make the GitHub repo public?
 It's **private** for now: [github.com/vcani003/my-wellness-coach](https://github.com/vcani003/my-wellness-coach). There are no secrets anywhere in its history (checked). But it does contain personal details: **Levi's seafood allergy and medicine note** (used as a test case), your names, your stores, and your Gmail address on every commit.
 **Rec:** keep it private. If you want it public later (for a portfolio, say), first replace those details with made-up ones and use a GitHub "noreply" commit email. Going public can't be fully undone.
@@ -136,5 +118,7 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | T1, S1–S3 | First deploy for the grocery trip | Done 2026-10-14: Anthropic (dedicated workspace, $10 limit), Neon and Vercel set up; live at https://my-wellness-coach-mu.vercel.app |
 | SL4, SL5 | Offline ticks; "I bought X" clears the list | [0027](decisions/0027-shopping-list-in-mvp.md): both Recs approved and live |
 | N1 | Budget-exhausted notice | [0020](decisions/0020-ai-cost-and-model.md): calm message now; 80% heads-up later |
+| GH2 | Push the Do-later fix | Approved 2026-10-14; pushed after a clean-copy check (317 tests) |
+| P2 | Next builds | Order: (a) chat history → (d) meal ideas to cooking → (b) Settings → (e) staging + testers → (c) batches |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |
