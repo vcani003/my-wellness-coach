@@ -16,6 +16,10 @@ import { mealOperations } from "../real/meal-ops";
 import type { ModelOutput } from "../real/model-output";
 import { matchIntent, type Segment } from "./patterns";
 
+/**
+ * Replies use verb-first wording ("moved the chicken thighs to the freezer"), never "the X is/are",
+ * because a name's number can't be told from the count of names ("chicken thighs" is one target).
+ */
 const said = <T>(value: T) => ({ value, basis: "said" as const, confidence: "high" as const });
 const list = (names: string[]) => new Intl.ListFormat("en", { type: "conjunction" }).format(names);
 
@@ -53,7 +57,7 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
           break;
         case "froze":
           operations = itemOps(intent.targets, "item.update", { location: said("freezer"), frozen: said(true) });
-          reply = `All set: the ${names(intent.targets)} ${intent.targets.length > 1 ? "are" : "is"} in the freezer now.`;
+          reply = `All set: moved the ${names(intent.targets)} to the freezer.`;
           break;
         case "usedUp":
           operations = itemOps(intent.targets, "item.use", { stock: said("out") });
@@ -67,15 +71,15 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
             evidence: s.raw,
             target: { name: s.name, which: "oldest" },
           }));
-          reply = `Got it: the older ${names(intent.targets)} ${intent.targets.length > 1 ? "are" : "is"} gone.`;
+          reply = `Got it: marked the older ${names(intent.targets)} as gone.`;
           break;
         case "defrosted":
           operations = intent.targets.map((s) => ({ opId: "", type: "item.defrost", evidence: s.raw, target: { name: s.name } }));
-          reply = `Noted: the ${names(intent.targets)} ${intent.targets.length > 1 ? "are" : "is"} defrosted.`;
+          reply = `Noted: marked the ${names(intent.targets)} as defrosted.`;
           break;
         case "low":
           operations = itemOps(intent.targets, "item.use", { stock: said("low") });
-          reply = `Noted: the ${names(intent.targets)} running low.`;
+          reply = `Noted: marked the ${names(intent.targets)} as running low.`;
           break;
         case "toList":
           operations = intent.items.map((s) => ({

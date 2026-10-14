@@ -20,12 +20,14 @@ vi.mock("@/app/actions", () => ({ undoChange: vi.fn() }));
 
 const T = "2026-10-14T10:00:00.000Z";
 const m = (code: string, params: Record<string, string>, text: string) => ({ code, params, text });
-const receipt = (changeSetId: string, name: string, undoable: boolean): ChatReceipt => ({
+const receipt = (changeSetId: string, name: string, undoable: boolean, undone = false): ChatReceipt => ({
   changeSetId,
   newVersion: 2,
   undoable,
   applied: [{ opId: "1", summary: m("ITEM_ADDED", { name }, `Added ${name}`), refs: [{ kind: "item", id: name, change: "added" }] }],
   rejected: [],
+  undone,
+  ...(undone ? { undoneBy: { id: "u-vero", name: "Vero" }, undoneAt: T } : {}),
 });
 /** One saved turn: the user's message and the reply (with an optional receipt). */
 const turn = (id: string, said: string, reply: string, r: ChatReceipt | null = null): ChatHistoryMessage[] => [
@@ -105,6 +107,26 @@ describe("saved chat", () => {
     expect(screen.queryByText("Welcome")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Show earlier messages" })).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("a saved receipt that was undone shows as Undone (struck through, no Undo, no View), like a live Undo", () => {
+    renderWithIntl(
+      <Harness
+        initial={{
+          messages: [
+            ...turn("t1", "I froze the chicken thighs", "Moved the chicken thighs to the freezer.", receipt("cs-1", "chicken thighs", false, true)),
+            ...turn("t2", "I bought spinach", "Added spinach.", receipt("cs-2", "spinach", true)),
+          ],
+          nextCursor: null,
+        }}
+      />,
+    );
+    const [undone, live] = within(log()).getAllByRole("region", { name: "What changed" });
+    expect(undone).toHaveTextContent("Undone");
+    expect(within(undone).getByText("Added chicken thighs").closest("li")).toHaveClass("line-through");
+    expect(within(undone).queryByRole("button")).not.toBeInTheDocument();
+    expect(live).not.toHaveTextContent("Undone");
+    expect(within(live).getByText("Added spinach").closest("li")).not.toHaveClass("line-through");
   });
 
   it("no saved chat → the welcome; the server's read failed → loading, then error with Try again", async () => {
@@ -204,5 +226,10 @@ describe("chat reducer: saved pages", () => {
     expect(s.history).toEqual({ status: "ready", nextCursor: "5", older: "idle" });
     const undone = chatReducer(s, { type: "undoDone", changeSetId: "cs-1" });
     expect(undone.messages[1]).toMatchObject({ receipt: { undo: "done" } });
+  });
+
+  it("a saved receipt that was undone since loads as undo: done", () => {
+    const s = chatReducer(initialChatState, { type: "historyLoaded", which: "latest", messages: turn("t1", "x", "y.", receipt("cs-1", "eggs", false, true)), nextCursor: null });
+    expect(s.messages[1]).toMatchObject({ receipt: { changeSetId: "cs-1", undoable: false, undo: "done" } });
   });
 });

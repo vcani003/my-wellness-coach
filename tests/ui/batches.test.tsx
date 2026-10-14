@@ -162,9 +162,12 @@ describe("Receipt batch choice", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Those are gone: eggs from Oct 2" }));
     expect(closeBatch).toHaveBeenCalledWith("eggs", ["b1"]);
-    const undoButton = await screen.findByRole("button", { name: "Undo: Eggs: those are gone (1 left)" });
+    const undoButton = await screen.findByRole("button", { name: "Undo: Eggs: those are gone (1 batch left)" });
     await waitFor(() => expect(undoButton).toHaveFocus());
-    await waitFor(() => expect(announcer()).toHaveTextContent("Eggs: those are gone (1 left)"));
+    // One Undo per receipt (tester run 2026-10-14 saw two stacked): it steps back the newest change.
+    const card = screen.getByRole("region", { name: "What changed" });
+    expect(within(card).getAllByRole("button", { name: /^Undo/ })).toHaveLength(1);
+    await waitFor(() => expect(announcer()).toHaveTextContent("Eggs: those are gone (1 batch left)"));
     expect(screen.queryByRole("group", { name: /You also had eggs/ })).toBeNull();
     // The Kitchen row is a plain one-batch row again.
     expect(screen.queryByRole("button", { name: /^Eggs/ })).toBeNull();
@@ -173,8 +176,11 @@ describe("Receipt batch choice", () => {
     expect(undo).toHaveBeenCalledWith("cs-ITEM_BATCH_GONE");
     const gone = await screen.findByRole("button", { name: "Those are gone: eggs from Oct 2" });
     await waitFor(() => expect(gone).toHaveFocus());
-    await waitFor(() => expect(announcer()).toHaveTextContent("Undone: Eggs: those are gone (1 left)"));
+    await waitFor(() => expect(announcer()).toHaveTextContent("Undone: Eggs: those are gone (1 batch left)"));
     expect(screen.getByRole("button", { name: /^Eggs/ })).toHaveTextContent("2 batches");
+    // With the answer stepped back, the same one Undo is for the purchase again.
+    expect(within(card).getAllByRole("button", { name: /^Undo/ })).toHaveLength(1);
+    expect(within(card).getByRole("button", { name: /^Undo/ })).toHaveAccessibleName("Undo: Added eggs (2 batches)");
   });
 
   it("Still have them → keepOlderBatch; the result is focused, with no Undo (a soft change)", async () => {
@@ -237,8 +243,11 @@ describe("batch message codes (en.json)", () => {
       { name: "eggs", batches: 3, closedOldest: true, fromList: true },
       "Added eggs (3 batches); the oldest batch is closed and took it off the shopping list",
     ],
-    ["ITEM_BATCH_USED_UP", { name: "eggs", left: 1 }, "Eggs: finished a batch (1 left)"],
-    ["ITEM_BATCH_GONE", { name: "eggs", left: 2 }, "Eggs: those are gone (2 left)"],
+    // "(1 left)" read as one egg (tester run 2026-10-14): it says batches, pluralised.
+    ["ITEM_BATCH_USED_UP", { name: "eggs", left: 1 }, "Eggs: finished a batch (1 batch left)"],
+    ["ITEM_BATCH_USED_UP", { name: "eggs", left: 3 }, "Eggs: finished a batch (3 batches left)"],
+    ["ITEM_BATCH_GONE", { name: "eggs", left: 1 }, "Eggs: those are gone (1 batch left)"],
+    ["ITEM_BATCH_GONE", { name: "eggs", left: 2 }, "Eggs: those are gone (2 batches left)"],
     ["ITEM_BATCH_KEPT", { name: "eggs" }, "Kept the older eggs"],
     ["ITEM_DEFROSTED", { name: "chicken" }, "Chicken: defrosted"],
   ])("%s", (code, params, text) => {

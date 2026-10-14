@@ -46,6 +46,8 @@ interface Ghost {
 interface Notice {
   text: string;
   undo?: { changeSetId: string; label: string };
+  /** The notice already says "Your list is clear", so the empty state doesn't say it again. */
+  listClear?: boolean;
   turn: number;
 }
 
@@ -156,7 +158,7 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
     actions.touched(SHOPPING_WIDGET_ID);
     const added = await addFromList(ids);
     if (!added) return false;
-    setNotice({ text: added.text, undo: { changeSetId: added.changeSetId, label: added.undoLabel }, turn });
+    setNotice({ text: added.text, undo: { changeSetId: added.changeSetId, label: added.undoLabel }, listClear: added.listClear, turn });
     announce(added.text);
     return true;
   };
@@ -211,7 +213,7 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
       )}
 
       {list.length === 0 && liveGhosts.length === 0 ? (
-        <p className="text-body text-text-muted">{t("shopping.empty")}</p>
+        !currentNotice?.listClear && <p className="text-body text-text-muted">{t("shopping.empty")}</p>
       ) : (
         groups.map((group, gi) => {
           const store = group.key === ANYWHERE ? t("shopping.anywhere") : group.key;

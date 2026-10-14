@@ -16,6 +16,8 @@ export interface AddedFromList {
   text: string;
   /** "Undo: added garlic and ginger to your kitchen" */
   undoLabel: string;
+  /** Nothing is left on the list, so `text` already says "Your list is clear." */
+  listClear: boolean;
 }
 
 export function useAddFromList() {
@@ -48,6 +50,7 @@ export function useAddFromList() {
         changeSetId: res.result.changeSetId,
         text: t("shopping.done", { count: ids.length, left: res.result.state.shoppingList.length }),
         undoLabel: t("shopping.doneUndoLabel", { names }),
+        listClear: res.result.state.shoppingList.length === 0,
       };
     } catch {
       return null;

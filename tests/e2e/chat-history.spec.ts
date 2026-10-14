@@ -70,6 +70,30 @@ test("chat survives a reload: message, reply and receipt are back, and Undo stil
   if (phone) await page.getByRole("button", { name: "Show chat" }).click();
   await expect(receipts(page)).toHaveCount(2);
   await expect(receipts(page).first()).toContainText("Added eggs");
+  await expect(receipts(page).first()).toContainText("Undone");
   await expect(page.getByRole("button", { name: UNDO })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Undo: Added yogurt" })).toBeVisible();
+});
+
+test("an undone receipt still reads Undone after a reload (struck through, no Undo)", async ({ page, baseURL }, testInfo) => {
+  const reset = await page.request.post("/api/dev/reset", { headers: { origin: baseURL! } });
+  expect(reset.ok()).toBe(true);
+  await page.context().addCookies([{ name: COOKIE, value: "demo-vero", url: baseURL! }]);
+  await page.goto("/");
+  const phone = testInfo.project.name === "phone";
+  const undo = page.getByRole("button", { name: "Undo: Added eggs" });
+
+  await say(page, "I bought eggs");
+  await expect(undo).toBeVisible();
+  await undo.click();
+  await expect(receipts(page)).toContainText("Undone");
+
+  await page.reload();
+  if (phone) await page.getByRole("button", { name: "Show chat" }).click();
+  await expect(receipts(page)).toHaveCount(1);
+  await expect(receipts(page)).toContainText("Undone");
+  await expect(receipts(page).getByRole("listitem").filter({ hasText: "Added eggs" })).toHaveClass(/line-through/);
+  await expect(undo).toHaveCount(0);
+  await expect(receipts(page).getByRole("button")).toHaveCount(0);
+  await expectAccessible(page, "undone receipt after reload");
 });

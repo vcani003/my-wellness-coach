@@ -1,6 +1,8 @@
 /** The FAKE interpreter's message patterns (milestone 2 stand-in, not the real AI). */
 import { describe, expect, it } from "vitest";
+import { createFakeInterpreter } from "@/ai/fake";
 import { matchIntent, splitList } from "@/ai/fake/patterns";
+import { request } from "@/ai/eval/fixtures";
 
 describe("fake interpreter patterns", () => {
   it("splits shopping lists, keeping each piece exactly as typed (it's the evidence)", () => {
@@ -53,5 +55,20 @@ describe("fake interpreter patterns", () => {
     expect(matchIntent("add that to my meal plan")).toEqual({ kind: "meal", action: "meal_plan", label: "last_chosen" });
     expect(matchIntent("start cooking")).toEqual({ kind: "meal", action: "meal_start_cooking", label: "last_chosen" });
     expect(matchIntent("I made it!")).toEqual({ kind: "meal", action: "meal_done", label: "last_chosen" });
+  });
+});
+
+describe("fake interpreter replies", () => {
+  // Tester run 2026-10-14: "the chicken thighs is in the freezer now". A plural name is one target,
+  // so the reply never picks "is"/"are" from the count; it uses verb-first wording instead.
+  it.each([
+    ["I froze the chicken thighs", "All set: moved the chicken thighs to the freezer."],
+    ["The old eggs are gone", "Got it: marked the older eggs as gone."],
+    ["I defrosted the chicken thighs", "Noted: marked the chicken thighs as defrosted."],
+    ["The yogurt is running low", "Noted: marked the yogurt as running low."],
+  ])("%s → %s", async (text, reply) => {
+    const result = await createFakeInterpreter().interpret(request(text));
+    expect(result.reply).toBe(reply);
+    expect(result.reply).not.toMatch(/\b(is|are)\b/);
   });
 });

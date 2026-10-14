@@ -213,6 +213,8 @@
     "SHOPPING_STORE": "{name} moved to {store} on your list"
   },
   "msgIcu": {
+    "ITEM_BATCH_USED_UP": "{name}: finished a batch ({left, plural, one {# batch left} other {# batches left}})",
+    "ITEM_BATCH_GONE": "{name}: those are gone ({left, plural, one {# batch left} other {# batches left}})",
     "ITEM_BATCH_ADDED": "Added {name} ({batches} batches){closedOldest, select, true {; the oldest batch is closed} other {}}{fromList, select, true { and took it off the shopping list} other {}}"
   },
   "unlock": {

@@ -5,7 +5,9 @@
  * required question: ignoring it keeps both batches.
  * - Shown only while the older batches are still open and unanswered in the CURRENT kitchen
  *   (`isBatchOfferOpen`), so answering in chat ("the old eggs are gone") or on another receipt hides it.
- * - "Those are gone" → `closeBatch`, then the result in place with Undo (focus moves to Undo).
+ * - "Those are gone" → `closeBatch`, then the result in place. Its Undo is the receipt's one Undo
+ *   (`onUndoStep`): one Undo per receipt, which steps back the newest change first, like Cmd-Z
+ *   (tester run 2026-10-14 found two stacked Undo buttons). Focus moves to that Undo.
  *   "Still have them" → `keepOlderBatch`, a soft change with no Undo (focus moves to the result).
  * - Results and failures are announced through the one polite live region; nothing crashes (0018).
  */
@@ -15,7 +17,6 @@ import type { ApplyResult, AppliedOp, BatchOffer } from "@/contracts/apply-resul
 import type { Msg } from "@/contracts/common";
 import type { KitchenState } from "@/contracts/kitchen-state";
 import { useAnnounce } from "@/ui/a11y/Announcer";
-import { UndoIcon } from "@/ui/primitives/icons";
 import { useKitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { useKitchenData } from "@/ui/sync/KitchenDataContext";
 import { useFormatMsg } from "./format-msg";
@@ -59,11 +60,24 @@ export function useBatchOfferWords() {
   );
 }
 
-export function BatchOffers({ offers }: { offers: BatchOffer[] }) {
+/**
+ * An answer the receipt's Undo can step back ("Those are gone"). `run` is kept out of state by the
+ * receipt, so re-registering the same step never re-renders it.
+ */
+export interface UndoStep {
+  key: string;
+  /** What it undoes, in plain words, for the Undo button's name. */
+  plain: string;
+  pending: boolean;
+  run: () => void;
+}
+export type OnUndoStep = (key: string, step: UndoStep | null) => void;
+
+export function BatchOffers({ offers, onUndoStep }: { offers: BatchOffer[]; onUndoStep: OnUndoStep }) {
   return (
     <>
       {offers.map((offer) => (
-        <BatchOfferChoice key={`${offer.itemId}:${offer.newBatchId}`} offer={offer} />
+        <BatchOfferChoice key={`${offer.itemId}:${offer.newBatchId}`} offer={offer} onUndoStep={onUndoStep} />
       ))}
     </>
   );
@@ -74,7 +88,7 @@ type Phase =
   | { kind: "pending"; choice: "keep" | "gone" }
   | { kind: "answered"; choice: "keep" | "gone"; result: ApplyResult; undo: "idle" | "pending" | "refused" };
 
-function BatchOfferChoice({ offer }: { offer: BatchOffer }) {
+function BatchOfferChoice({ offer, onUndoStep }: { offer: BatchOffer; onUndoStep: OnUndoStep }) {
   const t = useTranslations("receipt");
   const formatMsg = useFormatMsg();
   const words = useBatchOfferWords();
@@ -82,8 +96,7 @@ function BatchOfferChoice({ offer }: { offer: BatchOffer }) {
   const actions = useKitchenActions();
   const { snapshot } = useKitchenData();
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
-  const focusNext = useRef<"undo" | "result" | "gone" | null>(null);
-  const undoRef = useRef<HTMLButtonElement>(null);
+  const focusNext = useRef<"result" | "gone" | null>(null);
   const resultRef = useRef<HTMLParagraphElement>(null);
   const goneRef = useRef<HTMLButtonElement>(null);
 
@@ -91,35 +104,49 @@ function BatchOfferChoice({ offer }: { offer: BatchOffer }) {
   useEffect(() => {
     const target = focusNext.current;
     focusNext.current = null;
-    if (target === "undo") undoRef.current?.focus();
     if (target === "result") resultRef.current?.focus();
     if (target === "gone") goneRef.current?.focus();
   }, [phase]);
+
+  const undo = async (answered: Extract<Phase, { kind: "answered" }>) => {
+    if (answered.undo === "pending") return;
+    setPhase({ ...answered, undo: "pending" });
+    const outcome = await actions.undo(answered.result.changeSetId).catch(() => null);
+    if (!outcome?.ok) {
+      setPhase({ ...answered, undo: "refused" });
+      focusNext.current = "result";
+      announce(t("cantUndo"));
+      return;
+    }
+    actions.showOwn(outcome.result, { highlight: true });
+    // The older batches are open again, so the choice comes back; focus returns to it.
+    focusNext.current = "gone";
+    setPhase({ kind: "idle" });
+    announce(t("announceUndone", { changes: answered.result.applied.map((a) => formatMsg(a.summary, "plain")).join(", ") }));
+   };
+
+  // "Those are gone" hands its Undo to the receipt's one Undo button while it can be undone.
+  const stepKey = `${offer.itemId}:${offer.newBatchId}`;
+  useEffect(() => {
+    const answered = phase.kind === "answered" ? phase : null;
+    if (answered && answered.choice === "gone" && answered.result.undoable && answered.undo !== "refused") {
+      const plain = answered.result.applied.map((a) => formatMsg(a.summary, "plain")).join(", ");
+      onUndoStep(stepKey, { key: stepKey, plain, pending: answered.undo === "pending", run: () => void undo(answered) });
+    } else {
+      onUndoStep(stepKey, null);
+    }
+  });
+  useEffect(() => () => onUndoStep(stepKey, null), [onUndoStep, stepKey]);
 
   const older = openOlder(offer, snapshot.state);
 
   if (phase.kind === "answered") {
     const lines = phase.result.applied.map((a) => formatMsg(a.summary));
-    const plain = phase.result.applied.map((a) => formatMsg(a.summary, "plain")).join(", ");
-    const canUndo = phase.choice === "gone" && phase.result.undoable && phase.undo !== "refused";
     return (
       <div data-batch-offer={offer.itemId} data-batch-answer={phase.choice} className="mt-2 flex flex-wrap items-center gap-2 border-t border-border-default pt-2">
         <p ref={resultRef} tabIndex={-1} className="text-small outline-none">
           {lines.join(" · ")}
         </p>
-        {canUndo && (
-          <button
-            ref={undoRef}
-            type="button"
-            aria-label={t("undoLabel", { changes: plain })}
-            aria-disabled={phase.undo === "pending" || undefined}
-            onClick={() => void undo(phase)}
-            className="flex min-h-tap items-center gap-1 rounded-button px-3 text-small font-strong text-accent-text aria-disabled:opacity-60"
-          >
-            <UndoIcon aria-hidden="true" className="size-icon-sm" />
-            {phase.undo === "pending" ? t("undoing") : t("undo")}
-          </button>
-        )}
         {phase.undo === "refused" && (
           <p className="rounded-sm bg-warning-bg px-3 py-2 text-small text-warning-text">{t("cantUndo")}</p>
         )}
@@ -147,27 +174,11 @@ function BatchOfferChoice({ offer }: { offer: BatchOffer }) {
       announce(t("batch.failed"));
       return;
     }
-    focusNext.current = choice === "gone" && outcome.result.undoable ? "undo" : "result";
+    // An undoable "gone" moves focus to the receipt's Undo (Receipt does that); otherwise to the result.
+    focusNext.current = choice === "gone" && outcome.result.undoable ? null : "result";
     setPhase({ kind: "answered", choice, result: outcome.result, undo: "idle" });
     actions.showOwn(outcome.result, { highlight: choice === "gone" });
     announce(outcome.result.applied.map((a) => formatMsg(a.summary, "plain")).join(", "));
-  }
-
-  async function undo(answered: Extract<Phase, { kind: "answered" }>) {
-    if (answered.undo === "pending") return;
-    setPhase({ ...answered, undo: "pending" });
-    const outcome = await actions.undo(answered.result.changeSetId).catch(() => null);
-    if (!outcome?.ok) {
-      setPhase({ ...answered, undo: "refused" });
-      focusNext.current = "result";
-      announce(t("cantUndo"));
-      return;
-    }
-    actions.showOwn(outcome.result, { highlight: true });
-    // The older batches are open again, so the choice comes back; focus returns to it.
-    focusNext.current = "gone";
-    setPhase({ kind: "idle" });
-    announce(t("announceUndone", { changes: answered.result.applied.map((a) => formatMsg(a.summary, "plain")).join(", ") }));
   }
 
   const button = "min-h-tap rounded-button border border-border-strong bg-surface-raised px-4 text-small font-medium aria-disabled:opacity-60";

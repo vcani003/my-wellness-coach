@@ -61,7 +61,7 @@ describe("chat turn with the fake interpreter", () => {
     expect(undone.result?.undoable).toBe(false);
     expect((await where(vero))["chicken thighs"]).toBe("unknown");
     expect(undone.reply).toBe("No problem, that's undone.");
-    expect(froze.reply).toBe("All set: the chicken is in the freezer now.");
+    expect(froze.reply).toBe("All set: moved the chicken to the freezer.");
   });
 
   it("used up and running low go through apply; out items leave the list (0011)", async () => {

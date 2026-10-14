@@ -3,10 +3,13 @@
  * The "What changed" receipt (0007, 0011, ux.md §4): one line per saved change, rejected parts
  * shown in place, and one Undo for the card, named for what it undoes. Undo appears only on your
  * own receipts (0017). After Undo the lines are struck through with "Undone".
+ * Never two Undo buttons: an answer given on the receipt ("Those are gone") becomes the newest
+ * step, and the one Undo steps that back first, then the purchase (newest first, like Cmd-Z).
  */
 import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon, UndoIcon } from "@/ui/primitives/icons";
-import { BatchOffers, offersOf } from "./BatchOffers";
+import { BatchOffers, offersOf, type OnUndoStep, type UndoStep } from "./BatchOffers";
 import type { Receipt as ReceiptModel } from "./chat-reducer";
 import { useFormatMsg } from "./format-msg";
 import { receiptLines, SHOPPING_GROUP } from "./receipt-lines";
@@ -32,6 +35,41 @@ export function Receipt({
   const plainChanges = lines.map((l) => formatMsg(l.summary, "plain")).join(", ");
   const offers = offersOf(receipt.applied);
   const canUndo = Boolean(onUndo) && receipt.undoable && savedSomething && !undone && receipt.undo !== "refused";
+
+  // Answers on this receipt that can be undone, oldest first; the newest is what Undo steps back.
+  const [steps, setSteps] = useState<Omit<UndoStep, "run">[]>([]);
+  const runs = useRef(new Map<string, () => void>());
+  const onUndoStep = useCallback<OnUndoStep>((key, step) => {
+    if (step) runs.current.set(key, step.run);
+    else runs.current.delete(key);
+    setSteps((prev) => {
+      const at = prev.findIndex((s) => s.key === key);
+      if (!step) return at === -1 ? prev : prev.filter((s) => s.key !== key);
+      const next = { key, plain: step.plain, pending: step.pending };
+      if (at === -1) return [...prev, next];
+      const old = prev[at];
+      if (old.plain === next.plain && old.pending === next.pending) return prev;
+      return prev.map((s, i) => (i === at ? next : s));
+    });
+  }, []);
+  const step = undone ? undefined : steps.at(-1);
+
+  // A new answer to step back: focus moves to the Undo that now undoes it.
+  const undoRef = useRef<HTMLButtonElement>(null);
+  const focusedStep = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (step && step.key !== focusedStep.current) undoRef.current?.focus();
+    focusedStep.current = step?.key;
+  }, [step]);
+
+  const showUndo = Boolean(step) || canUndo;
+  const undoPending = step ? step.pending : receipt.undo === "pending";
+  const undoName = t("undoLabel", { changes: step ? step.plain : plainChanges });
+  const runUndo = () => {
+    if (undoPending) return;
+    if (step) runs.current.get(step.key)?.();
+    else onUndo?.(receipt.changeSetId);
+  };
 
   return (
     <section
@@ -66,24 +104,25 @@ export function Receipt({
       </ul>
 
       {/* "You also had eggs from Oct 2: Still have them · Those are gone" (0025); gone once the purchase is undone. */}
-      {offers.length > 0 && !undone && <BatchOffers offers={offers} />}
+      {offers.length > 0 && !undone && <BatchOffers offers={offers} onUndoStep={onUndoStep} />}
 
-      {(canUndo || undone || receipt.undo === "refused" || onView) && (
+      {(showUndo || undone || receipt.undo === "refused" || onView) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {undone && <span className="text-small font-medium text-text-muted">{t("undone")}</span>}
           {receipt.undo === "refused" && (
             <p className="rounded-sm bg-warning-bg px-3 py-2 text-small text-warning-text">{t("cantUndo")}</p>
           )}
-          {canUndo && (
+          {showUndo && (
             <button
+              ref={undoRef}
               type="button"
-              onClick={() => onUndo?.(receipt.changeSetId)}
-              disabled={receipt.undo === "pending"}
-              aria-label={t("undoLabel", { changes: plainChanges })}
-              className="flex min-h-tap items-center gap-1 rounded-button px-3 text-small font-strong text-accent-text disabled:opacity-60"
+              onClick={runUndo}
+              aria-disabled={undoPending || undefined}
+              aria-label={undoName}
+              className="flex min-h-tap items-center gap-1 rounded-button px-3 text-small font-strong text-accent-text aria-disabled:opacity-60"
             >
               <UndoIcon aria-hidden="true" className="size-icon-sm" />
-              {receipt.undo === "pending" ? t("undoing") : t("undo")}
+              {undoPending ? t("undoing") : t("undo")}
             </button>
           )}
           {onView && savedSomething && !undone && (

@@ -79,8 +79,12 @@ export type ChatAction =
 
 export const replyId = (userMessageId: string) => `${userMessageId}:reply`;
 
-/** A live ApplyResult or a saved receipt (the same minus `state`) as the receipt card's model. */
+/**
+ * A live ApplyResult or a saved receipt (the same minus `state`) as the receipt card's model. A
+ * saved receipt that was undone since comes back as Undone, exactly as after a live Undo.
+ */
 export function toReceipt(result: ApplyResult | ChatReceipt): Receipt {
+  const undone = "undone" in result && result.undone === true;
   return {
     changeSetId: result.changeSetId,
     newVersion: result.newVersion,
@@ -88,7 +92,7 @@ export function toReceipt(result: ApplyResult | ChatReceipt): Receipt {
     ...(result.undoBlockedReason ? { undoBlockedReason: result.undoBlockedReason } : {}),
     applied: result.applied,
     rejected: result.rejected,
-    undo: "idle",
+    undo: undone ? "done" : "idle",
   };
 }
 

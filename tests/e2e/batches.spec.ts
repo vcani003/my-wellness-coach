@@ -65,9 +65,11 @@ test("batches: buy eggs twice → the choice → Those are gone → Undo; defros
 
   // "Those are gone": one batch left, the result in place with Undo (focused), announced.
   await choice(page).getByRole("button", { name: /^Those are gone: eggs from / }).click();
-  const undo = lastReceipt(page).getByRole("button", { name: "Undo: Eggs: those are gone (1 left)" });
+  const undo = lastReceipt(page).getByRole("button", { name: "Undo: Eggs: those are gone (1 batch left)" });
   await expect(undo).toBeFocused();
-  await expect(page.getByTestId("announcer")).toContainText("Eggs: those are gone (1 left)");
+  // One Undo per receipt: it steps back the newest change ("Those are gone") first.
+  await expect(lastReceipt(page).getByRole("button", { name: /^Undo/ })).toHaveCount(1);
+  await expect(page.getByTestId("announcer")).toContainText("Eggs: those are gone (1 batch left)");
   await expect(choice(page)).toHaveCount(0);
   await expect(eggsRow(page)).toContainText("added today");
   await expect(eggsRow(page).getByRole("button", { name: /^Eggs/ })).toHaveCount(0);
@@ -77,6 +79,8 @@ test("batches: buy eggs twice → the choice → Those are gone → Undo; defros
   await undo.click();
   await expect(eggsRow(page).getByRole("button", { name: /^Eggs/ })).toContainText("2 batches");
   await expect(choice(page).getByRole("button", { name: /^Those are gone: eggs from / })).toBeFocused();
+  await expect(lastReceipt(page).getByRole("button", { name: /^Undo/ })).toHaveCount(1);
+  await expect(lastReceipt(page).getByRole("button", { name: "Undo: Added eggs (2 batches)" })).toBeVisible();
 
   // "I defrosted the chicken" → Defrosted on its row.
   await say(page, "I bought chicken");
