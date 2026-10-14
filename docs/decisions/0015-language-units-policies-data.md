@@ -18,3 +18,4 @@
 - **The genuinely harder part is ingredient names across languages.** "Espinaca" and "spinach" must be the same item in one kitchen. This is solvable if every item has an internal standard name alongside what the user said, which the event model will already do.
 - **Showing amounts in other units** (lbs ↔ g) is a moderate add-on later. It works only for amounts given in real units; "half a bag" stays as said.
 - **If *not* prepared from day one:** retrofitting means touching every screen. That's weeks, not days, which is why the cheap preparation is the default.
+- **D2 (2026-10-14):** someone who deleted their data can come back as a **fresh start** (a new code or invite, empty profile). Their old kitchen changes still show "a former member".

@@ -13,3 +13,4 @@
 - Meal ideas favour food that needs using up. That's ranked on data we already have: days since added, the oldest batch, **defrosted** (a new "defrosted on" date) and **Low**. The "why" line says so ("Uses the chicken you defrosted yesterday").
 - A use-it-up item that's also an allergen **is still suggested, flagged** (0019).
 - **Shelf-life prediction stays out of MVP 1** (spec §10). It's a candidate for next: typical shelf-life ranges from USDA FoodKeeper data, shown only as a gentle "use soon" nudge, **never as "safe to eat"**.
+- **AI9 (2026-10-14):** only spoilage signals (oldest batch, defrosted, sitting long) can bring a member's allergen dish into unprompted ideas. **Low never does.**

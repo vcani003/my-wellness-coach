@@ -11,15 +11,14 @@
 
 ## Outstanding
 
-### D2. ⚪ If someone deletes their data, can they come back?
-*(From the Backend specialist, building Settings)* After deleting, their old access code stops working, with a clear message. That way the app never quietly recreates a deleted account.
-**Rec:** yes, as a **fresh start**. You remove their old code and add a new one, and they come back as a new member with an empty profile. Their old changes in the kitchen still show "a former member".
-
-> Answer:
-
-### AI9. 🟡 Does a "Low" item bring allergen dishes back into meal ideas?
-Decision 0025 lets a *use-it-up* allergen item (say, defrosted shrimp) still appear in unprompted ideas, flagged. "Use it up" currently also counts **Low**. But Low means *running out*, not *going off*, so a "fish sauce is low" note could bring seafood dishes back for Levi.
-**Rec (AI):** no. Only items that need using before they spoil count (the oldest batch, defrosted, sitting long). Low still nudges ordinary ideas, just not allergen ones.
+### SU1. ⛔ Levi signs up himself (you asked): invite link + his own passphrase
+**Rec (being built on this; I'll check with you before it goes live, since it's a sign-in change, decision 0028):**
+- **No open sign-up.** In **Settings → Kitchen → "Invite someone"**, you get a **single-use invite link** that's valid for 24 hours. You send it to Levi however you like.
+- Levi opens it and chooses his **name** and a **passphrase** (at least 12 characters, shown with Show/Hide). He's signed in and joins your kitchen. The link stops working once used.
+- Passphrases are stored **scrambled (hashed)**, never readable, not even by you or me.
+- **Forgot your passphrase?** Another kitchen member can send a **reset link** from Settings, the same way as an invite.
+- Your current access code keeps working. You can switch to your own passphrase from Settings whenever you like. Vercel access codes become a backup only.
+- The **max 4 accounts** limit stays (0006). This **replaces the planned email sign-in** (S4 / Resend no longer needed).
 
 > Answer:
 
@@ -138,5 +137,7 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | GH2 | Push the Do-later fix | Approved 2026-10-14; pushed after a clean-copy check (317 tests) |
 | P2 | Next builds | Order: (a) chat history → (d) meal ideas to cooking → (b) Settings → (e) staging + testers → (c) batches |
 | MI1 | Named dish goes straight to its recipe | [0013](decisions/0013-meal-lifecycle.md): approved 2026-10-14 |
+| AI9 | Low vs allergens | [0025](decisions/0025-batches-and-use-it-up.md): Low never brings allergen dishes back |
+| D2 | Returning after deletion | [0015](decisions/0015-language-units-policies-data.md): yes, as a fresh start with a new code |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |
