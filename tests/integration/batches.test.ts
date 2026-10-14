@@ -18,7 +18,7 @@ import { getUnansweredBatchIds } from "@/domains/kitchen/public";
 import { replay } from "@/domains/kitchen/state";
 import { appendEvents } from "@/shared/events/store";
 import type { EventEnvelope } from "@/shared/events/types";
-import { createKitchen, createUser } from "@/shared/identity";
+import { createKitchen } from "@/shared/identity";
 import { requireMember } from "@/shared/membership";
 import { said } from "../support/memory-kitchen";
 import { newKitchen, ok, openLocalDb } from "../support/db";
@@ -45,7 +45,9 @@ describe("migration 0008: existing items become one batch each (additive, 0028)"
     for (const e of journal.entries as { tag: string }[]) fs.copyFileSync(path.join(MIGRATIONS_FOLDER, `${e.tag}.sql`), path.join(dir, `${e.tag}.sql`));
     const { db, close } = await openLocalDb({ migrationsFolder: dir });
     try {
-      await createUser(db, { id: "vero", displayName: "Vero" });
+      // Raw SQL: the old schema has no later columns (e.g. 0009's passphrase_hash), and Drizzle
+      // names every column it knows about in an insert.
+      await db.execute(sql`insert into users (id, display_name) values ('vero', 'Vero')`);
       await createKitchen(db, { id: "home", name: "Home", memberIds: ["vero"] });
 
       // Old-build events (no batch IDs) and the projection rows the old build wrote.

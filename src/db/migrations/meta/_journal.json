@@ -64,6 +64,13 @@
       "when": 1791998150553,
       "tag": "0008_item_batches",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792002912819,
+      "tag": "0009_invites_passphrases",
+      "breakpoints": true
     }
   ]
 }

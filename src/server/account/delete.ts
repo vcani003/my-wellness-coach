@@ -100,7 +100,7 @@ export async function deleteMyData(db: Db, userId: string, now: Date = new Date(
       await tx.delete(events).where(eq(events.stream, userStream(userId)));
       await tx.delete(profileRestrictions).where(eq(profileRestrictions.userId, userId));
       await tx.delete(profilePreferences).where(eq(profilePreferences.userId, userId));
-      await tx.delete(rateLimits).where(inArray(rateLimits.key, [`chat:hour:${userId}`, `chat:day:${userId}`]));
+      await tx.delete(rateLimits).where(inArray(rateLimits.key, [`chat:hour:${userId}`, `chat:day:${userId}`, `passchange:user:${userId}`, `invite:user:${userId}`]));
 
       // 4. The account: memberships and chats cascade. The tombstone first: the trigger then
       //    stops anything recreating this ID.

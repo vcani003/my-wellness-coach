@@ -38,8 +38,13 @@ const audit = {
 
 // ─── Shared: identity and membership ────────────────────────────────────────────────
 
-/** Minimal placeholder. Better Auth's tables arrive with the sign-in milestone. */
-export const users = pgTable("users", {
+/**
+ * People. Sign-in (backend-data.md §7): an interim access code (`ACCESS_CODES`) and/or a
+ * passphrase chosen through an invite link (SU1 Rec).
+ */
+export const users = pgTable(
+  "users",
+  {
   id: text("id").primaryKey(),
   displayName: text("display_name").notNull(),
   email: text("email").unique(),
@@ -50,8 +55,20 @@ export const users = pgTable("users", {
    * was issued under; bumping this rejects all older cookies. Cookies from before 0007 count as 0.
    */
   sessionEpoch: integer("session_epoch").notNull().default(0),
+  /**
+   * The passphrase, scrambled: `scrypt$ln=17,r=8,p=1$<salt>$<hash>` (algorithm, its parameters, a
+   * per-user salt, the result; `src/lib/auth/passphrase.ts`). Null = no passphrase (access code
+   * only, or not set up yet). Never selected outside sign-in, never logged or returned.
+   */
+  passphraseHash: text("passphrase_hash"),
   createdAt: ts("created_at").notNull().defaultNow(),
-});
+  },
+  (t) => [
+    // Sign-in is by name + passphrase, so a name is unique (case-insensitive) among people who
+    // can sign in that way. Partial: older rows, seeds and tests may share a display name.
+    uniqueIndex("users_signin_name_uq").on(sql`lower(${t.displayName})`).where(sql`${t.passphraseHash} is not null`),
+  ],
+);
 
 /**
  * People who deleted their data (D1, 0015). Only the ID and when: it keeps their old kitchen
@@ -84,6 +101,42 @@ export const memberships = pgTable(
     createdAt: ts("created_at").notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.kitchenId, t.userId] }), index("memberships_user_idx").on(t.userId)],
+);
+
+/**
+ * Invite and reset links (SU1 Rec; backend-data.md §7). Only an SHA-256 of the link's random
+ * token is stored; the token itself appears once, in the link. Single use (`usedAt`), 24 hours.
+ * - `join`: anyone holding the link creates a new account in `kitchenId` (account cap 4, 0006).
+ * - `reset`: `targetUserId` (a member of `kitchenId`) sets a new passphrase.
+ * Not history: an invite goes when its kitchen, its creator or its target is deleted.
+ */
+export const invites = pgTable(
+  "invites",
+  {
+    id: text("id").primaryKey(),
+    kitchenId: text("kitchen_id")
+      .notNull()
+      .references(() => kitchens.id, { onDelete: "cascade" }),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Hex SHA-256 of the raw token. */
+    tokenHash: text("token_hash").notNull(),
+    /** join | reset */
+    purpose: text("purpose").notNull(),
+    targetUserId: text("target_user_id").references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: ts("expires_at").notNull(),
+    usedAt: ts("used_at"),
+    /** Who used it: the new account (join) or the target (reset). No FK: it's a record. */
+    usedBy: text("used_by"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("invites_token_hash_uq").on(t.tokenHash),
+    index("invites_kitchen_idx").on(t.kitchenId),
+    check("invites_purpose_ck", sql`${t.purpose} in ('join', 'reset')`),
+    check("invites_target_ck", sql`(${t.purpose} = 'reset') = (${t.targetUserId} is not null)`),
+  ],
 );
 
 // ─── Shared: the event store ──────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 /**
- * Who is making this request? (backend-data.md §7, interim access-code gate.)
+ * Who is making this request? (backend-data.md §7: access-code or passphrase session.)
  *
  * `getCurrentUser()` is what route handlers, server actions and server components call. It
  * re-checks the session cookie itself rather than trusting the proxy, because a Server Function
@@ -53,7 +53,7 @@ export async function resolveCurrentUser(
   if (devActingAsEnabled(e)) {
     return loadUser(db, input.devActingAs || e.DEV_ACTING_AS!, true);
   }
-  if (!e.SESSION_SECRET || !e.ACCESS_CODES) return null;
+  if (!e.SESSION_SECRET) return null;
   const session = verifySession(
     { secret: e.SESSION_SECRET, accessCodes: e.ACCESS_CODES, production: e.NODE_ENV === "production" },
     input.sessionToken,
