@@ -35,7 +35,33 @@ export function item(spec: ItemSpec, index: number): ItemRow {
   };
 }
 
-export function kitchen(items: ItemSpec[] = [], version = 3): KitchenState {
+/** A shopping-list entry (0027): name, optional store and quantity, ticked or not. */
+export interface ListSpec {
+  name: string;
+  store?: string;
+  quantity?: string;
+  ticked?: boolean;
+}
+
+export function listItem(spec: ListSpec, index: number) {
+  const at = new Date(NOW.getTime() - 3_600_000).toISOString();
+  const f = <T>(value: T) => ({ value, basis: "said" as const, confidence: "high" as const });
+  return {
+    id: `shop-${index + 1}`,
+    name: f(spec.name),
+    standardName: standardName(spec.name),
+    ...(spec.quantity && { quantity: f({ asSaid: spec.quantity }) }),
+    ...(spec.store && { store: f(spec.store) }),
+    source: "chat" as const,
+    ...(spec.ticked && { ticked: { by: actor, at } }),
+    createdAt: at,
+    createdBy: actor,
+    updatedAt: at,
+    updatedBy: actor,
+  };
+}
+
+export function kitchen(items: ItemSpec[] = [], version = 3, list: ListSpec[] = []): KitchenState {
   return KitchenState.parse({
     kitchenId: "k-home",
     version,
@@ -44,6 +70,7 @@ export function kitchen(items: ItemSpec[] = [], version = 3): KitchenState {
     plan: [],
     ticks: [],
     toReview: [],
+    shoppingList: list.map(listItem),
   });
 }
 
@@ -51,8 +78,9 @@ export function request(
   text: string,
   items: ItemSpec[] = [],
   history: InterpretRequest["history"] = [],
+  list: ListSpec[] = [],
 ): InterpretRequest {
-  const state = kitchen(items);
+  const state = kitchen(items, 3, list);
   return {
     kitchenId: state.kitchenId,
     userId: "u-vero",
@@ -75,3 +103,21 @@ export const VERO_PANTRY: ItemSpec[] = [
   { name: "beef", location: "fridge" },
   { name: "star anise" },
 ];
+
+/** The list after the first-test message (0026, 0027): MD Oriental ×8, Publix ×1. */
+export const VERO_LIST: ListSpec[] = [
+  { name: "garlic", store: "MD Oriental" },
+  { name: "ginger", store: "MD Oriental" },
+  { name: "green onion", store: "MD Oriental" },
+  { name: "shallot", store: "MD Oriental" },
+  { name: "culantro", store: "MD Oriental" },
+  { name: "lemongrass", store: "MD Oriental" },
+  { name: "sweet potato", store: "MD Oriental" },
+  { name: "coconut milk", store: "MD Oriental" },
+  { name: "oatmilk", store: "Publix" },
+];
+
+/** Vero's first real test message (0027): only the pho was saved. */
+export const FIRST_TEST_MESSAGE =
+  "I've made a beef pho. I need to shop for some staple pantry items and other ingredients for other dishes ill be making this week. " +
+  "MD Oriental Market: garlic, ginger, green onion, shallot, culantro, lemongrass, sweet potato, ginger, coconut milk / Publix: oatmilk";

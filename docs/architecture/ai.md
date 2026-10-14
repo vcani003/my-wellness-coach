@@ -195,4 +195,15 @@ eval/            cases · runner · matchers
 - **Simplified for now:** a single fixed prompt, with no separate `context/` or `guards/` folders yet. Recent chat is sent as data inside the turn rather than as role turns. There's no allergy context, because `InterpretRequest` carries no profiles, and no retry on bad output.
 - **Names:** non-English names are kept as said, with the English name in parentheses when it's obvious ("nước mắm (fish sauce)"), because the contract has no separate English-name field. Restocks reuse the listed name so the backend matches them.
 - **Schema:** the JSON schema is built with Zod's `toJSONSchema`, not the SDK's `betaZodOutputFormat`. SDK 0.133.0 moves `enum` into the description, so the API wouldn't enforce the values.
-- **Eval:** `npm run eval` runs `src/ai/eval/interpret.eval.ts` (17 cases); it's skipped without a key.
+- **Eval:** `npm run eval` runs `src/ai/eval/interpret.eval.ts` (23 cases); it's skipped without a key.
+
+## Build notes: shopping list (2026-10-14, 0027, prompt `interpret-2026-10-14.2`)
+- **What the model sees:** a `<shopping_list>` section after `<kitchen>`, one line per open item with an `s1`, `s2`… label, its store ("Anywhere" if none) and "got it" when ticked. It sits in the per-turn message, so the cached system prompt stays byte-identical whatever is on the list.
+- **New model actions:** `list_add`, `list_update` (store or quantity), `list_tick` / `list_untick`, `list_remove`, plus a `store` fact on every operation and a top-level `listOfferAccepted` (`staples` | `stock-offer` | null). Code maps them to `shopping.add / .update / .tick / .remove`; `s`-labels become `shoppingItemId`s, and an unknown label falls back to the name.
+- **"I bought X"** stays a kitchen `item.add`; the backend takes X off the list (SL5 Rec). No AI-side list change.
+- **Code guards** (`to-proposal.ts`), each easy to remove:
+  - An `item.add` whose evidence says "need to buy", "add … to my list" and similar becomes a `shopping.add`, so a list never lands in the kitchen.
+  - The same item twice in one message is added once (the backend would merge it anyway).
+  - Stores: "MD Oriental Market" is filed as "MD Oriental" (a one-line alias table); every other store is kept as said.
+  - A list add for something the user didn't name needs Kitchen's last turn to have offered to add it ("Want me to add these to your list?"); it's then tagged `staples` or `stock-offer`. Without the offer it's dropped.
+  - A list add next to an Out/Low of the same item is dropped unless the message asks for the list or buying (SL3: the reply only offers).

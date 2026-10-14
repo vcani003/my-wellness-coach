@@ -17,11 +17,28 @@ const QuantityFact = z.object({
   ...meta,
 });
 
+/**
+ * Kitchen actions (add/update/use/remove) and shopping-list actions (list_*, 0027). A list action
+ * never touches the kitchen; "I bought X" is a kitchen add (the backend takes it off the list, SL5).
+ */
+export const ModelAction = z.enum([
+  "add",
+  "update",
+  "use",
+  "remove",
+  "list_add",
+  "list_update",
+  "list_tick",
+  "list_untick",
+  "list_remove",
+]);
+export type ModelAction = z.infer<typeof ModelAction>;
+
 export const ModelOp = z.object({
-  action: z.enum(["add", "update", "use", "remove"]),
+  action: ModelAction,
   /** The user's exact words this operation comes from, copied character for character. */
   evidence: z.string(),
-  /** Label of an item already in the kitchen (e.g. "i3"), or null. */
+  /** Label of an item already in the kitchen (e.g. "i3") or on the shopping list (e.g. "s2"), or null. */
   item: z.string().nullable(),
   /** add: the new item's name. update/use/remove with no label: the name as said. */
   name: TextFact.nullable(),
@@ -32,6 +49,8 @@ export const ModelOp = z.object({
   stock: z.object({ value: StockLevel, ...meta }).nullable(),
   /** use: how much was used, when said. */
   amountUsed: QuantityFact.nullable(),
+  /** list_add / list_update: the store to buy it at, as said (SL1). */
+  store: TextFact.nullable(),
 });
 export type ModelOp = z.infer<typeof ModelOp>;
 
@@ -48,6 +67,11 @@ export const ModelOutput = z.object({
     .nullable(),
   /** Only when the user just said yes to "Want me to remember …?" in the previous turn. */
   rememberPreference: z.object({ statement: z.string(), evidence: z.string() }).nullable(),
+  /**
+   * Only when the previous Kitchen turn offered to add things to the shopping list and the user
+   * now says yes: which offer it was. Code checks the offer really happened (0027, SL3).
+   */
+  listOfferAccepted: z.enum(["staples", "stock-offer"]).nullable(),
 });
 export type ModelOutput = z.infer<typeof ModelOutput>;
 

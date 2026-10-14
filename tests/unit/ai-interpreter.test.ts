@@ -6,9 +6,10 @@ import type { ApplyResult } from "@/contracts/apply-result";
 import { getInterpreter, NOT_CONFIGURED_REPLY, notConfiguredInterpreter, selectInterpreterKind } from "@/ai";
 import { createRealInterpreter, FAILURE_REPLY, REFUSAL_REPLY, type MessagesApi } from "@/ai/real";
 import type { ModelOp, ModelOutput } from "@/ai/real/model-output";
-import { NOTHING_TO_CHANGE_REPLY } from "@/ai/real/to-proposal";
+import { NOTHING_TO_CHANGE_REPLY, storeName } from "@/ai/real/to-proposal";
+import { PROMPT_VERSION } from "@/ai/real/prompt";
 import { estimateCostUsd } from "@/ai/real/settings";
-import { NOW, request, VERO_PANTRY } from "@/ai/eval/fixtures";
+import { FIRST_TEST_MESSAGE, NOW, request, VERO_LIST, VERO_PANTRY } from "@/ai/eval/fixtures";
 import { MemoryKitchen } from "../support/memory-kitchen";
 
 type Message = Anthropic.Beta.Messages.BetaMessage;
@@ -36,12 +37,13 @@ function op(partial: Partial<ModelOp> & Pick<ModelOp, "action" | "evidence">): M
     frozen: null,
     stock: null,
     amountUsed: null,
+    store: null,
     ...partial,
   };
 }
 
 function output(partial: Partial<ModelOutput>): ModelOutput {
-  return { kind: "change", reply: "Got it.", operations: [], clarification: null, rememberPreference: null, ...partial };
+  return { kind: "change", reply: "Got it.", operations: [], clarification: null, rememberPreference: null, listOfferAccepted: null, ...partial };
 }
 
 const said = <T>(value: T, confidence: "high" | "medium" | "low" = "high") => ({ value, basis: "said" as const, confidence });
@@ -439,5 +441,210 @@ describe("cost estimate", () => {
     expect(
       estimateCostUsd({ input_tokens: 2000, output_tokens: 1000, cache_read_input_tokens: 3000, cache_creation_input_tokens: 1000 }),
     ).toBeCloseTo(0.0336, 6);
+  });
+});
+
+describe("shopping list (0027)", () => {
+  const md = (value: string) => ({ value, basis: "said" as const, confidence: "high" as const });
+  const listAdd = (name: string, store: string | null = null, evidence = name) =>
+    op({ action: "list_add", evidence, name: said(name), store: store ? md(store) : null });
+
+  /** What the model should return for Vero's first-test message. */
+  function firstTestOutput(): ModelOutput {
+    const mdItems = ["garlic", "ginger", "green onion", "shallot", "culantro", "lemongrass", "sweet potato", "ginger", "coconut milk"];
+    return output({
+      reply: "Got it. Pho's saved, and your list is ready. Ginger was in there twice, so it's on once.",
+      operations: [
+        op({
+          action: "add",
+          evidence: "I've made a beef pho",
+          name: { value: "beef pho (leftovers)", basis: "inferred", confidence: "high" },
+          location: { value: "fridge", basis: "inferred", confidence: "medium" },
+        }),
+        // the model may keep "MD Oriental Market"; code still files it under "MD Oriental"
+        ...mdItems.map((n, i) => listAdd(n, i === 0 ? "MD Oriental Market" : "MD Oriental")),
+        listAdd("oatmilk", "Publix"),
+      ],
+    });
+  }
+
+  it("the first-test message saves the pho AND 9 list items, ginger once, MD Oriental ×8 / Publix ×1", async () => {
+    const result = await respond(firstTestOutput()).interpreter.interpret(request(FIRST_TEST_MESSAGE));
+    expect(result.kind).toBe("change");
+    const ops = ProposedChange.parse(result.proposal).operations;
+    expect(ops.filter((o) => o.type === "item.add")).toHaveLength(1);
+    const adds = ops.filter((o) => o.type === "shopping.add");
+    expect(adds).toHaveLength(9);
+    expect(adds.filter((o) => o.fields.name.value === "ginger")).toHaveLength(1);
+    const byStore = (s: string) => adds.filter((o) => o.fields.store?.value === s).map((o) => o.fields.name.value);
+    expect(byStore("MD Oriental")).toEqual([
+      "garlic", "ginger", "green onion", "shallot", "culantro", "lemongrass", "sweet potato", "coconut milk",
+    ]);
+    expect(byStore("Publix")).toEqual(["oatmilk"]);
+    expect(adds.every((o) => o.source === undefined)).toBe(true); // absent = chat
+
+    // …and the kitchen validator applies all of it
+    const k = new MemoryKitchen();
+    const plan = k.say(FIRST_TEST_MESSAGE, ops);
+    expect(plan.rejected).toEqual([]);
+    const list = k.state().shoppingList;
+    expect(list).toHaveLength(9);
+    expect(list.filter((e) => e.store?.value === "MD Oriental")).toHaveLength(8);
+    expect(list.filter((e) => e.store?.value === "Publix")).toHaveLength(1);
+    expect(k.state().items.map((i) => i.name.value)).toEqual(["beef pho (leftovers)"]);
+  });
+
+  it("'add pho noodles to my list' adds to the list with no store", async () => {
+    const { interpreter } = respond(output({ operations: [listAdd("pho noodles")] }));
+    const ops = ProposedChange.parse((await interpreter.interpret(request("add pho noodles to my list"))).proposal).operations;
+    expect(ops).toEqual([
+      expect.objectContaining({ type: "shopping.add", evidence: "pho noodles", fields: { name: said("pho noodles") } }),
+    ]);
+  });
+
+  it("'I need to buy X' never lands in the kitchen, even if the model says add", async () => {
+    const text = "I need to buy fish sauce";
+    const { interpreter } = respond(output({ operations: [op({ action: "add", evidence: text, name: said("fish sauce") })] }));
+    const ops = ProposedChange.parse((await interpreter.interpret(request(text))).proposal).operations;
+    expect(ops).toEqual([expect.objectContaining({ type: "shopping.add", fields: { name: said("fish sauce") } })]);
+  });
+
+  it("remove / move / tick / untick map list labels to shopping item IDs", async () => {
+    const text = "take oat milk off the list, move coconut milk to Publix, got the garlic, untick ginger";
+    const { interpreter } = respond(
+      output({
+        operations: [
+          op({ action: "list_remove", evidence: "take oat milk off the list", item: "s9" }),
+          op({ action: "list_update", evidence: "move coconut milk to Publix", item: "s8", store: md("Publix") }),
+          op({ action: "list_tick", evidence: "got the garlic", item: "s1" }),
+          op({ action: "list_untick", evidence: "untick ginger", item: "s2" }),
+          op({ action: "list_update", evidence: "x", item: "s3" }), // nothing to change → dropped
+        ],
+      }),
+    );
+    const ops = ProposedChange.parse((await interpreter.interpret(request(text, [], [], VERO_LIST))).proposal).operations;
+    expect(ops).toEqual([
+      expect.objectContaining({ type: "shopping.remove", target: { shoppingItemId: "shop-9" } }),
+      expect.objectContaining({ type: "shopping.update", target: { shoppingItemId: "shop-8" }, fields: { store: md("Publix") } }),
+      expect.objectContaining({ type: "shopping.tick", target: { shoppingItemId: "shop-1" }, ticked: true }),
+      expect.objectContaining({ type: "shopping.tick", target: { shoppingItemId: "shop-2" }, ticked: false }),
+    ]);
+  });
+
+  it("by name, the kitchen validator applies remove, move, tick, and 'I bought garlic' clears it (SL5)", async () => {
+    const k = new MemoryKitchen();
+    const first = await respond(firstTestOutput()).interpreter.interpret(request(FIRST_TEST_MESSAGE));
+    k.say(FIRST_TEST_MESSAGE, ProposedChange.parse(first.proposal).operations);
+
+    const steps: Array<[string, ModelOp]> = [
+      ["take oat milk off the list", op({ action: "list_remove", evidence: "take oat milk off the list", name: said("oatmilk") })],
+      ["move coconut milk to Publix", op({ action: "list_update", evidence: "move coconut milk to Publix", name: said("coconut milk"), store: md("Publix") })],
+      ["tick ginger", op({ action: "list_tick", evidence: "tick ginger", name: said("ginger") })],
+      ["I bought garlic", op({ action: "add", evidence: "I bought garlic", name: said("garlic") })],
+    ];
+    for (const [text, modelOp] of steps) {
+      const r = await respond(output({ operations: [modelOp] })).interpreter.interpret(request(text));
+      const plan = k.say(text, ProposedChange.parse(r.proposal).operations);
+      expect(plan.rejected, text).toEqual([]);
+    }
+    const list = k.state().shoppingList;
+    expect(list.map((e) => e.name.value)).not.toContain("oatmilk");
+    expect(list.map((e) => e.name.value)).not.toContain("garlic"); // SL5: bought → off the list
+    expect(list.find((e) => e.name.value === "coconut milk")?.store?.value).toBe("Publix");
+    expect(list.find((e) => e.name.value === "ginger")?.ticked).toBeDefined();
+    expect(k.state().items.map((i) => i.name.value)).toContain("garlic");
+  });
+
+  it("'what's on my list?' sends the list to the model and answers with no proposal", async () => {
+    const { interpreter, calls } = respond(
+      output({ kind: "answer", reply: "MD Oriental: garlic, ginger… Publix: oatmilk." }),
+    );
+    const result = await interpreter.interpret(request("what's on my list?", [], [], [...VERO_LIST.slice(0, 8), { name: "oatmilk", store: "Publix", ticked: true }, { name: "eggs" }]));
+    expect(result).toMatchObject({ kind: "answer", proposal: null });
+    const user = calls[0].body.messages[0].content as string;
+    expect(user).toContain("<shopping_list>\ns1: garlic · MD Oriental\n");
+    expect(user).toContain("s9: oatmilk · Publix · got it");
+    expect(user).toContain("s10: eggs · Anywhere");
+  });
+
+  describe("adding staples on a yes (never without it)", () => {
+    const offer = [
+      { role: "user" as const, text: "what staples do I still need?" },
+      { role: "assistant" as const, text: "MD Oriental: fish sauce, rice noodles. Publix: eggs. Want me to add these to your list?" },
+    ];
+    const yesOutput = output({
+      listOfferAccepted: "staples",
+      operations: [
+        listAdd("fish sauce", "MD Oriental", "yes"),
+        listAdd("rice noodles", "MD Oriental", "yes"),
+        listAdd("eggs", "Publix", "yes"),
+        listAdd("tofu", null, "yes"), // never offered → dropped
+      ],
+    });
+
+    it("adds the offered items, tagged as staples", async () => {
+      const ops = ProposedChange.parse((await respond(yesOutput).interpreter.interpret(request("yes", [], offer))).proposal).operations;
+      expect(ops.map((o) => o.type === "shopping.add" && [o.fields.name.value, o.source])).toEqual([
+        ["fish sauce", "staples"],
+        ["rice noodles", "staples"],
+        ["eggs", "staples"],
+      ]);
+    });
+
+    it("adds nothing when Kitchen didn't offer", async () => {
+      const result = await respond(yesOutput).interpreter.interpret(request("yes"));
+      expect(result).toEqual({ kind: "answer", proposal: null, reply: NOTHING_TO_CHANGE_REPLY });
+    });
+  });
+
+  describe("Out / Low only offers the list (SL3)", () => {
+    const outAndAdd = output({
+      reply: "Marked fish sauce as out. Want me to add it to your list?",
+      operations: [
+        op({ action: "use", evidence: "we're out of fish sauce", item: "i1", stock: said("out" as const) }),
+        listAdd("fish sauce", null, "fish sauce"),
+      ],
+    });
+
+    it("drops a list add the user didn't ask for", async () => {
+      const ops = ProposedChange.parse(
+        (await respond(outAndAdd).interpreter.interpret(request("we're out of fish sauce", VERO_PANTRY))).proposal,
+      ).operations;
+      expect(ops.map((o) => o.type)).toEqual(["item.use"]);
+    });
+
+    it("keeps it when the user asks for the list too", async () => {
+      const text = "we're out of fish sauce, add it to the list";
+      const ops = ProposedChange.parse((await respond(outAndAdd).interpreter.interpret(request(text, VERO_PANTRY))).proposal).operations;
+      expect(ops.map((o) => o.type)).toEqual(["item.use", "shopping.add"]);
+    });
+
+    it("adds on a yes to the offer, tagged stock-offer", async () => {
+      const history = [
+        { role: "user" as const, text: "we're out of fish sauce" },
+        { role: "assistant" as const, text: "Marked fish sauce as out. Want me to add it to your list?" },
+      ];
+      const { interpreter } = respond(output({ listOfferAccepted: "stock-offer", operations: [listAdd("fish sauce", null, "yes please")] }));
+      const ops = ProposedChange.parse((await interpreter.interpret(request("yes please", [], history))).proposal).operations;
+      expect(ops).toEqual([expect.objectContaining({ type: "shopping.add", source: "stock-offer" })]);
+    });
+  });
+
+  it("keeps the cached prefix byte-identical whatever is on the list, and bumps the prompt version", async () => {
+    const a = respond(output({ kind: "answer" }));
+    const b = respond(output({ kind: "answer" }));
+    await a.interpreter.interpret(request("hi"));
+    await b.interpreter.interpret(request("hi", VERO_PANTRY, [], VERO_LIST));
+    const sys = (c: typeof a) => (c.calls[0].body.system as Anthropic.Beta.Messages.BetaTextBlockParam[])[0].text;
+    expect(sys(a)).toBe(sys(b));
+    expect(PROMPT_VERSION).toBe("interpret-2026-10-14.2");
+    expect(a.logs[0]).toMatchObject({ promptVersion: "interpret-2026-10-14.2" });
+  });
+
+  it("files 'MD Oriental Market' under 'MD Oriental' and keeps other stores as said", () => {
+    expect(storeName("MD Oriental Market")).toBe("MD Oriental");
+    expect(storeName(" md oriental ")).toBe("MD Oriental");
+    expect(storeName("Publix")).toBe("Publix");
+    expect(storeName("Costco Wholesale")).toBe("Costco Wholesale");
   });
 });

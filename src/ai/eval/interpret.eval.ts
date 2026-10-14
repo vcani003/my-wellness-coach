@@ -1,14 +1,14 @@
 /**
  * Real-model eval for the interpreter (ai.md §8), scored by exact rules, not by another AI.
  * Run with `npm run eval`; skipped unless ANTHROPIC_API_KEY is set. Costs real money: about
- * 17 calls at ~3–6¢ each. Includes the first grocery-trip test (0026).
+ * 23 calls at ~3–6¢ each. Includes the first grocery-trip test (0026) and the shopping list (0027).
  */
 import { afterAll, describe, expect, it } from "vitest";
 import type { Operation, OperationOf, OperationType } from "@/contracts/operations";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult } from "../interpreter";
 import { createRealInterpreter, type UsageLog } from "../real";
-import { request, VERO_PANTRY, type ItemSpec } from "./fixtures";
+import { FIRST_TEST_MESSAGE, request, VERO_LIST, VERO_PANTRY, type ItemSpec, type ListSpec } from "./fixtures";
 
 const usage: UsageLog[] = [];
 const interpreter = createRealInterpreter({
@@ -23,6 +23,7 @@ type Case = {
   text: string;
   items?: ItemSpec[];
   history?: InterpretRequest["history"];
+  list?: ListSpec[];
   check: (r: InterpretResult, ops: Operation[]) => void;
 };
 
@@ -36,6 +37,12 @@ function only<T extends OperationType>(ops: Operation[], type: T): OperationOf<T
 const addNamed = (ops: Operation[], needle: string) =>
   only(ops, "item.add").find((o) => o.fields.name.value.toLowerCase().includes(needle.toLowerCase()));
 const targets = (o: { target: unknown }, itemId: string) => expect(o.target).toEqual({ itemId });
+const listAdds = (ops: Operation[]) => only(ops, "shopping.add");
+const listTarget = (o: { target: unknown }, shoppingItemId: string, name: RegExp) =>
+  expect(
+    JSON.stringify(o.target) === JSON.stringify({ shoppingItemId }) ||
+      ("name" in (o.target as object) && name.test((o.target as { name: string }).name)),
+  ).toBe(true);
 const answerOnly = (r: InterpretResult) => {
   expect(r.kind).toBe("answer");
   expect(r.proposal).toBeNull();
@@ -225,12 +232,83 @@ const cases: Case[] = [
       expect(save.confirmedByMessageId).toBe("msg-1");
     },
   },
+  // ─── Shopping list (0027) ─── VERO_LIST: shop-1 garlic … shop-8 coconut milk (MD Oriental) · shop-9 oatmilk (Publix)
+  {
+    name: "the first real test: pho saved AND the list kept, by store",
+    text: FIRST_TEST_MESSAGE,
+    check: (r, ops) => {
+      expect(r.kind).toBe("change");
+      const kitchenAdds = only(ops, "item.add");
+      expect(kitchenAdds).toHaveLength(1);
+      expect(kitchenAdds[0].fields.name.value).toMatch(/pho/i);
+      const adds = listAdds(ops);
+      expect(adds).toHaveLength(9); // ginger once
+      const store = (n: string) => adds.find((o) => o.fields.name.value.toLowerCase().includes(n))?.fields.store?.value;
+      for (const n of ["garlic", "ginger", "green onion", "shallot", "culantro", "lemongrass", "sweet potato", "coconut milk"]) {
+        expect(store(n), n).toBe("MD Oriental");
+      }
+      expect(store("oat")).toBe("Publix");
+    },
+  },
+  {
+    name: "add pho noodles to my list",
+    text: "add pho noodles to my list",
+    list: VERO_LIST,
+    check: (r, ops) => {
+      expect(only(ops, "item.add")).toHaveLength(0);
+      const [add] = listAdds(ops);
+      expect(add.fields.name.value).toMatch(/pho noodles/i);
+      expect(add.fields.store ?? null).toBeNull();
+    },
+  },
+  {
+    name: "what's on my list?",
+    text: "what's on my list?",
+    list: VERO_LIST,
+    check: (r) => {
+      answerOnly(r);
+      expect(r.reply).toMatch(/MD Oriental/);
+      expect(r.reply).toMatch(/Publix/);
+      for (const n of [/garlic/i, /lemongrass/i, /coconut milk/i, /oat ?milk/i]) expect(r.reply).toMatch(n);
+      expect(r.reply).not.toMatch(/hoisin|fish sauce/i);
+    },
+  },
+  {
+    name: "take oat milk off the list",
+    text: "take oat milk off the list",
+    list: VERO_LIST,
+    check: (r, ops) => {
+      const [rm] = only(ops, "shopping.remove");
+      listTarget(rm, "shop-9", /oat ?milk/i);
+      expect(only(ops, "item.remove")).toHaveLength(0);
+    },
+  },
+  {
+    name: "move coconut milk to Publix",
+    text: "move coconut milk to Publix",
+    list: VERO_LIST,
+    check: (r, ops) => {
+      const [upd] = only(ops, "shopping.update");
+      listTarget(upd, "shop-8", /coconut milk/i);
+      expect(upd.fields.store?.value).toBe("Publix");
+    },
+  },
+  {
+    name: "I bought garlic (a kitchen add; the backend takes it off the list, SL5)",
+    text: "I bought garlic",
+    list: VERO_LIST,
+    check: (r, ops) => {
+      expect(addNamed(ops, "garlic")).toBeDefined();
+      expect(listAdds(ops)).toHaveLength(0);
+      expect(only(ops, "shopping.remove")).toHaveLength(0);
+    },
+  },
 ];
 
 describe.skipIf(!process.env.ANTHROPIC_API_KEY)("interpreter eval (real model)", () => {
   for (const c of cases) {
     it(c.name, async () => {
-      const result = await interpreter.interpret(request(c.text, c.items, c.history));
+      const result = await interpreter.interpret(request(c.text, c.items, c.history, c.list));
       console.info(`[${c.name}] ${result.kind}: ${result.reply}`);
       c.check(result, opsOf(result));
     });
