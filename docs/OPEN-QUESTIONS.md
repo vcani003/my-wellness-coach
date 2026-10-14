@@ -11,6 +11,15 @@
 
 ## Outstanding
 
+### C12. 🟡 Lower the spend cap (your pushback on $40)
+The $40 was a **ceiling** (production $30 + a staging copy $10 that doesn't exist yet), not expected spend. You're right that it's more than this test needs.
+**Rec:**
+- Set the Anthropic spend limit to **$10** now. That covers today's test and the next few days many times over.
+- Raise it to your **$20/month** target only if real usage shows you need it.
+- Lower the per-person message limit from 300/day to **100/day**, so a bug or runaway loop can't burn through the cap in an afternoon.
+
+> Answer:
+
 ### T1. ⛔ Today: deploy a small version for your grocery trip (in progress)
 **Goal:** live in about 2 hours, for you only. Levi is added tonight.
 **Status: ready to deploy.** The screens, the real AI and the online hosting are merged. All tests pass: 217 unit and integration, 8 in a real browser, plus a production build.
@@ -27,7 +36,7 @@
 
 ## Setup tasks for you: do these now for today's deploy
 These need **your** accounts. Keep every key and code private: you paste them yourself, and I'll never ask you to send them in chat.
-- **S1. Anthropic (about 5 min):** at console.anthropic.com, create a workspace (for example "wellness-coach"), set its **monthly spend limit to $30**, and create an **API key**. Keep it somewhere safe for S3.
+- **S1. Anthropic (about 5 min):** at console.anthropic.com, create a workspace (for example "wellness-coach"), set its **monthly spend limit to $10** (see C12), and create an **API key**. Keep it somewhere safe for S3.
 - **S2. Neon (about 5 min):** at neon.com, sign up (free), create a project "wellness-coach" in a US East region, and copy the **connection string** from the dashboard.
 - **S3. Vercel (about 5 min):** at vercel.com, sign up for the free (Hobby) plan. Then, in the Terminal app, in the project folder, run `npx vercel login` and follow the browser prompt. When I ask, you'll add these settings in the Vercel dashboard (Project → Settings → Environment Variables):
   - `DATABASE_URL`: the Neon connection string (S2)
