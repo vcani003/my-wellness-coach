@@ -12,6 +12,7 @@
  */
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   index,
@@ -341,4 +342,42 @@ export const rateLimits = pgTable(
     count: integer("count").notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.key, t.windowStart] }), index("rate_limits_window_idx").on(t.windowStart)],
+);
+
+// ─── Chat: messages (P2 a) ─────────────────────────────────────────────────────────────
+
+/**
+ * Chat messages, so a conversation survives a reload and the interpreter's recent turns come
+ * from the server, not the client (backend-data.md §6). **Private per person** (H2, 0017): every
+ * read filters by user and kitchen. Not kitchen state and not events: a delete removes them (0015).
+ * Text is stored exactly as typed or pasted and is only ever shown as plain text.
+ */
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: text("id").primaryKey(),
+    /** Insertion order: the history cursor. Strictly increasing, unlike timestamps. */
+    seq: bigint("seq", { mode: "number" }).generatedAlwaysAsIdentity().notNull(),
+    kitchenId: text("kitchen_id")
+      .notNull()
+      .references(() => kitchens.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** user | assistant */
+    role: text("role").notNull(),
+    text: text("text").notNull(),
+    /** The turn's client-made ID; one row per role per turn, so a retry saves nothing twice. */
+    clientMessageId: text("client_message_id").notNull(),
+    /** The turn's change set, if it applied anything (assistant rows only). */
+    changeSetId: text("change_set_id"),
+    /** The ApplyResult without `state`, so a reloaded receipt can show "What changed". */
+    receipt: jsonb("receipt"),
+    createdAt: ts("created_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("chat_messages_turn_uq").on(t.kitchenId, t.userId, t.clientMessageId, t.role),
+    index("chat_messages_history_idx").on(t.kitchenId, t.userId, t.seq),
+    check("chat_messages_role_ck", sql`${t.role} in ('user', 'assistant')`),
+  ],
 );

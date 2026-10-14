@@ -10,6 +10,7 @@ const Body = z.object({
   kitchenId: Id,
   clientMessageId: Id,
   text: z.string().trim().min(1).max(4000),
+  // Accepted but ignored: recent turns now come from the saved chat (P2 a).
   history: z
     .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().max(4000) }))
     .max(10)
@@ -36,7 +37,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const events = handleChatTurn(
     { db: ctx.db, scope: ctx.scope, interpreter: getInterpreter({ db: ctx.db, scope: ctx.scope }) },
-    { clientMessageId: parsed.data.clientMessageId, text: parsed.data.text, history: parsed.data.history },
+    { clientMessageId: parsed.data.clientMessageId, text: parsed.data.text },
   );
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({

@@ -4,11 +4,17 @@
  * `done` or `error` last. The interpreter only proposes; `applyProposedChange` decides.
  * The draft reply is sent only if every operation applied; otherwise `reword`, or a reply built
  * from the receipt.
+ *
+ * Chat is saved (P2 a): the user's message on arrival, the reply and its receipt at `done`. The
+ * interpreter's recent turns come from those saved messages, never from the client. Saving and
+ * loading are best-effort: a failure is logged and the turn carries on (0018).
  */
 import { randomUUID } from "node:crypto";
 import type { Db } from "@/db/client";
 import type { ApplyResult } from "@/contracts/apply-result";
 import type { StreamEvent } from "@/contracts/stream";
+import { saveAssistantMessage, saveUserMessage } from "@/domains/chat/commands";
+import { getRecentTurns } from "@/domains/chat/queries";
 import { applyProposedChange } from "@/domains/kitchen/commands";
 import { getKitchenState } from "@/domains/kitchen/queries";
 import type { KitchenScope } from "@/shared/membership";
@@ -20,7 +26,10 @@ export interface ChatTurnInput {
   /** Client-made ID: the idempotency key, so "Try again" can never apply twice. */
   clientMessageId: string;
   text: string;
-  /** Recent turns, oldest first (chats live on the device in this milestone). */
+  /**
+   * Ignored: the recent turns now come from the saved chat (P2 a). Still accepted so older
+   * clients keep working.
+   */
   history?: InterpretRequest["history"];
 }
 
@@ -32,6 +41,12 @@ export async function* handleChatTurn(
   const turnId = randomUUID();
   let appliedSent = false;
   try {
+    const history = await bestEffort("load recent turns", [], () =>
+      getRecentTurns(db, scope, { excludeClientMessageId: input.clientMessageId }),
+    );
+    await bestEffort("save user message", undefined, () =>
+      saveUserMessage(db, scope, { clientMessageId: input.clientMessageId, text: input.text }),
+    );
     yield { type: "ack", turnId, messageId: input.clientMessageId };
     yield { type: "status", phase: "interpreting" };
 
@@ -42,7 +57,7 @@ export async function* handleChatTurn(
       message: { id: input.clientMessageId, text: input.text },
       state,
       version: state.version,
-      history: (input.history ?? []).slice(-10),
+      history,
     };
     const interpretation = await interpreter.interpret(req);
     const proposal = interpretation.proposal;
@@ -78,9 +93,23 @@ export async function* handleChatTurn(
       reply = interpreter.reword ? await interpreter.reword(req, interpretation, result) : replyFromReceipt(result);
     }
     yield { type: "text", delta: reply };
-    yield { type: "done", turnId, assistantMessageId: randomUUID() };
+    const newId = randomUUID();
+    const assistantMessageId = await bestEffort("save reply", newId, () =>
+      saveAssistantMessage(db, scope, { id: newId, clientMessageId: input.clientMessageId, text: reply, result }),
+    );
+    yield { type: "done", turnId, assistantMessageId };
   } catch (error) {
     console.error("chat.turn: failed", { turnId, error });
     yield { type: "error", reason: msg("SAVE_FAILED"), changed: appliedSent, retryable: true };
+  }
+}
+
+/** Run a chat-history step; on failure log it and use the fallback, so the turn goes on (0018). */
+async function bestEffort<T>(what: string, fallback: T, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    console.error(`chat.history: couldn't ${what}`, { error });
+    return fallback;
   }
 }
