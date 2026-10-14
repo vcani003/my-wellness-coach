@@ -14,6 +14,9 @@ const TEMPLATES: Record<string, string> = {
   ITEM_RESTOCKED_FROM_LIST: "Added {name} (back in stock) and took it off the shopping list",
   ITEM_UPDATED: "Updated {name}",
   ITEM_MOVED: "{name} → {location}",
+  // categories (CAT1). `category` is the ID; `categoryName` the English name.
+  ITEM_CATEGORY: "{name} → {categoryName}",
+  CATEGORY_REMEMBERED: "I'll put {name} under {categoryName} from now on",
   ITEM_USED: "Used {name}",
   ITEM_LOW: "{name}: running low",
   ITEM_OUT: "{name}: out",

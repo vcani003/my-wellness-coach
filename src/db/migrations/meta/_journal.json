@@ -71,6 +71,13 @@
       "when": 1792002912819,
       "tag": "0009_invites_passphrases",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792013920342,
+      "tag": "0010_item_categories",
+      "breakpoints": true
     }
   ]
 }

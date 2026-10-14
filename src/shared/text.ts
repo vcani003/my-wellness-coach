@@ -6,7 +6,7 @@
 
 const KEEP_AS_IS = /(ss|us|is|ous)$/;
 
-function singularWord(word: string): string {
+export function singularWord(word: string): string {
   if (word.length <= 3 || KEEP_AS_IS.test(word)) return word;
   if (word.endsWith("ies") && word.length > 4) return `${word.slice(0, -3)}y`; // berries → berry
   if (/(ches|shes|xes|zes|sses|oes)$/.test(word)) return word.slice(0, -2); // tomatoes → tomato
@@ -22,6 +22,19 @@ export function normalizeText(input: string): string {
     .replace(/[^\p{L}\p{N}\s-]/gu, " ")
     .replace(/[\s-]+/g, " ")
     .trim();
+}
+
+/**
+ * Case- and accent-insensitive form for search and keyword matching (CAT1): "Nước Mắm" →
+ * "nuoc mam". Strips diacritics (NFD + combining marks) and maps "đ" to "d", which NFD keeps.
+ * Only for matching: names are always stored and shown as said.
+ */
+export function foldText(input: string): string {
+  return normalizeText(input)
+    .replace(/đ/g, "d")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .normalize("NFC");
 }
 
 /** "Chicken Thighs" → "chicken thigh". */

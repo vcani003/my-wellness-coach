@@ -3,7 +3,7 @@
  * All kitchen state logic lives here. Undo, or a fix to this logic, rebuilds a kitchen by
  * replaying its events; projections are just this state written to tables.
  */
-import type { Fact, Location, MealStatus, Quantity, ReviewKind, ReviewOrigin, ShoppingSource, StockLevel } from "@/contracts/common";
+import type { Fact, ItemCategory, Location, MealStatus, Quantity, ReviewKind, ReviewOrigin, ShoppingSource, StockLevel } from "@/contracts/common";
 import type { RecipeIngredient, ReviewEntry } from "@/contracts/operations";
 import {
   CHANGESET_REVERTED,
@@ -38,6 +38,11 @@ export interface Item extends AuditFields {
   id: string;
   name: Fact<string>;
   standardName: string;
+  /**
+   * What kind of thing it is (CAT1). Item-level, not per batch. Absent = saved before categories:
+   * readers use `effectiveCategory` (the remembered choice or the keyword guess), never stored.
+   */
+  category?: Fact<ItemCategory>;
   /** Every batch, open and closed, in the order added. */
   batches: Batch[];
   /** Derived: the most recent "defrosted on" among the open batches. */
@@ -110,6 +115,15 @@ export interface ShoppingItem extends AuditFields {
   movedToItemId?: string;
 }
 
+/**
+ * A category the user said for a name (CAT1: "fish sauce goes under sauces"), remembered per
+ * kitchen so future adds of that standard name default to it.
+ */
+export interface CategoryPref extends AuditFields {
+  standardName: string;
+  category: ItemCategory;
+}
+
 export interface KitchenEntities {
   items: Record<string, Item>;
   meals: Record<string, Meal>;
@@ -118,9 +132,11 @@ export interface KitchenEntities {
   ticks: Record<string, Tick>;
   reviews: Record<string, Review>;
   shopping: Record<string, ShoppingItem>;
+  /** Keyed by standard name (CAT1). */
+  categoryPrefs: Record<string, CategoryPref>;
 }
 
-export type KitchenEntity = Item | Meal | Recipe | Tick | Review | ShoppingItem;
+export type KitchenEntity = Item | Meal | Recipe | Tick | Review | ShoppingItem | CategoryPref;
 
 export const emptyKitchen = (): KitchenEntities => ({
   items: {},
@@ -129,6 +145,7 @@ export const emptyKitchen = (): KitchenEntities => ({
   ticks: {},
   reviews: {},
   shopping: {},
+  categoryPrefs: {},
 });
 
 export const tickId = (mealId: string, ingredientKey: string) => `${mealId}|${ingredientKey}`;
@@ -157,6 +174,7 @@ export const KITCHEN_EVENT = {
   batchClosed: "item.batch.closed",
   batchKept: "item.batch.kept",
   batchDefrosted: "item.batch.defrosted",
+  categoryRemembered: "item.category.remembered",
 } as const;
 
 type ItemFactFields = Pick<Item, "quantity" | "location" | "frozen" | "opened" | "occurredAt">;
@@ -165,6 +183,8 @@ export interface ItemAddedPayload extends ItemFactFields {
   itemId: string;
   name: Fact<string>;
   standardName: string;
+  /** CAT1. Absent on events from before categories (read as the keyword guess). */
+  category?: Fact<ItemCategory>;
   /** Its first batch. Absent (events from before batches) = the item's own ID. */
   batchId?: string;
 }
@@ -172,7 +192,8 @@ export interface ItemUpdatedPayload {
   itemId: string;
   /** The batch the facts apply to. Absent (older events): the oldest open batch. */
   batchId?: string;
-  set: Partial<ItemFactFields & { name: Fact<string>; standardName: string }>;
+  /** `name`, `standardName` and `category` apply to the item; the rest to the batch. */
+  set: Partial<ItemFactFields & { name: Fact<string>; standardName: string; category: Fact<ItemCategory> }>;
   /** Fields set back to unknown. `stock` is cleared when an item is added again. */
   clear: (keyof ItemFactFields | "stock")[];
 }
@@ -213,6 +234,11 @@ export interface BatchDefrostedPayload {
   frozen: Fact<boolean>;
   /** Where it is after defrosting (DF1 Rec). Absent on older events, which leave the place as it was. */
   location?: Fact<Location>;
+}
+/** A category the user said, remembered for this standard name (CAT1). Its own event, so Undo restores it. */
+export interface CategoryRememberedPayload {
+  standardName: string;
+  category: ItemCategory;
 }
 export interface ItemRemovedPayload {
   itemId: string;
@@ -333,6 +359,8 @@ export function kitchenTouchedKeys(event: EventEnvelope): string[] {
     case KITCHEN_EVENT.shoppingRemoved:
     case KITCHEN_EVENT.shoppingMoved:
       return [`shopping:${p.shoppingItemId as string}`];
+    case KITCHEN_EVENT.categoryRemembered:
+      return [`catpref:${p.standardName as string}`];
     case CHANGESET_REVERTED:
       return Object.keys((event.payload as ChangesetRevertedPayload).restore);
     default:
@@ -347,6 +375,7 @@ const COLLECTION = {
   tick: "ticks",
   review: "reviews",
   shopping: "shopping",
+  catpref: "categoryPrefs",
 } as const satisfies Record<string, keyof KitchenEntities>;
 
 export function getKitchenEntity(state: KitchenEntities, key: string): KitchenEntity | null {
@@ -403,6 +432,7 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
         id: p.itemId,
         name: p.name,
         standardName: p.standardName,
+        ...(p.category ? { category: p.category } : {}),
         addedAt,
         batches: [batch],
         ...created(event),
@@ -413,8 +443,14 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
       const p = event.payload as ItemUpdatedPayload;
       const found = state.items[p.itemId];
       if (!found) return state;
-      const { name, standardName, ...facts } = p.set;
-      let next: Item = { ...ensureBatches(found), ...(name ? { name } : {}), ...(standardName ? { standardName } : {}), ...stamp(event) };
+      const { name, standardName, category, ...facts } = p.set;
+      let next: Item = {
+        ...ensureBatches(found),
+        ...(name ? { name } : {}),
+        ...(standardName ? { standardName } : {}),
+        ...(category ? { category } : {}),
+        ...stamp(event),
+      };
       const clear = p.clear.filter((f) => f !== "stock");
       // Older events: "added again" cleared `stock`, reopening an Out item (before batches).
       if (p.clear.includes("stock")) {
@@ -500,6 +536,16 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
         if (p.location) b.location = p.location;
       }
       return put(state, "items", item.id, withBatch(item, b));
+    }
+    case KITCHEN_EVENT.categoryRemembered: {
+      const p = event.payload as CategoryRememberedPayload;
+      const prev = state.categoryPrefs[p.standardName];
+      const pref: CategoryPref = {
+        standardName: p.standardName,
+        category: p.category,
+        ...(prev ? { createdAt: prev.createdAt, createdBy: prev.createdBy, ...stamp(event) } : created(event)),
+      };
+      return put(state, "categoryPrefs", p.standardName, pref);
     }
     case KITCHEN_EVENT.itemRemoved: {
       const p = event.payload as ItemRemovedPayload;

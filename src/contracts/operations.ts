@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   BatchWhich,
   Id,
+  ItemCategory,
   Location,
   MealStatus,
   Quantity,
@@ -73,6 +74,13 @@ export const ItemFields = z.object({
   opened: optionalFact(z.boolean()),
   /** When the user says it happened ("yesterday"); ISO 8601. */
   occurredAt: optionalFact(z.iso.datetime({ offset: true })),
+  /**
+   * What kind of thing it is (CAT1). Belongs to the item, not a batch. On `item.add` usually
+   * `inferred`; absent → the kitchen's remembered choice for that name, else its keyword guess.
+   * `said` (a correction: "fish sauce goes under sauces") always wins over `inferred` and is
+   * remembered for future adds of that name. Not clearable.
+   */
+  category: optionalFact(ItemCategory),
 });
 export type ItemFields = z.infer<typeof ItemFields>;
 

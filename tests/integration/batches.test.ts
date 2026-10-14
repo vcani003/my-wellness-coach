@@ -65,23 +65,31 @@ describe("migration 0008: existing items become one batch each (additive, 0028)"
         ev(5, 7, "item.used", { itemId: "it-milk", stock: said("low") }),
       ];
       await appendEvents(db, legacy);
+      // Raw SQL again: the old `items` table has no later columns (e.g. 0010's category).
+      const j = (v: unknown) => (v === undefined ? null : JSON.stringify(v));
       for (const i of Object.values(replay(legacy).items)) {
-        await db.insert(items).values({
-          id: i.id, kitchenId: "home", name: i.name, standardName: i.standardName,
-          quantity: i.quantity ?? null, location: i.location ?? null, frozen: null, opened: null,
-          stock: i.stock ?? null, occurredAt: null, addedAt: new Date(i.addedAt),
-          lastUsedAt: i.lastUsedAt ? new Date(i.lastUsedAt) : null,
-          createdAt: new Date(i.createdAt), createdBy: i.createdBy, updatedAt: new Date(i.updatedAt), updatedBy: i.updatedBy,
-        });
+        await db.execute(sql`
+          insert into items (id, kitchen_id, name, standard_name, quantity, location, frozen, opened, stock,
+            occurred_at, added_at, last_used_at, created_at, created_by, updated_at, updated_by)
+          values (${i.id}, 'home', ${j(i.name)}::jsonb, ${i.standardName}, ${j(i.quantity)}::jsonb,
+            ${j(i.location)}::jsonb, null, null, ${j(i.stock)}::jsonb, null, ${i.addedAt}::timestamptz,
+            ${i.lastUsedAt ?? null}::timestamptz, ${i.createdAt}::timestamptz, ${i.createdBy},
+            ${i.updatedAt}::timestamptz, ${i.updatedBy})`);
       }
       await db.update(kitchens).set({ version: 5 }).where(eq(kitchens.id, "home"));
-      const oldRows = await db.select().from(items).orderBy(items.id);
+      const rawItems = async () =>
+        ((await db.execute(sql`select * from items order by id`)) as unknown as { rows: Record<string, unknown>[] }).rows;
+      const withoutCategory = (r: Record<string, unknown>) => Object.fromEntries(Object.entries(r).filter(([k]) => k !== "category"));
+      const oldRows = await rawItems();
 
       // Deploy: the real migrations, including 0008.
       await migrate(db as unknown as Parameters<typeof migrate>[0], { migrationsFolder: MIGRATIONS_FOLDER });
 
-      // Additive: the items rows are exactly as they were (old code still reads them).
-      expect(await db.select().from(items).orderBy(items.id)).toEqual(oldRows);
+      // Additive: the items rows are exactly as they were (old code still reads them); later
+      // migrations only add columns (0010's category stays null: it's computed on read).
+      const newRows = await rawItems();
+      expect(newRows.map((r) => r.category)).toEqual(oldRows.map(() => null));
+      expect(newRows.map(withoutCategory)).toEqual(oldRows);
       const batches = await db.select().from(itemBatches).orderBy(itemBatches.id);
       expect(batches.map((b) => [b.id, b.itemId, b.closedReason])).toEqual([
         ["it-eggs", "it-eggs", null],

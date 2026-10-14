@@ -24,7 +24,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import type { Fact, Location, Msg, Quantity, StockLevel } from "@/contracts/common";
+import type { Fact, ItemCategory, Location, Msg, Quantity, StockLevel } from "@/contracts/common";
 import type { RecipeIngredient, ReviewEntry } from "@/contracts/operations";
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
@@ -245,6 +245,11 @@ export const items = pgTable(
       .references(() => kitchens.id, { onDelete: "cascade" }),
     name: jsonb("name").$type<Fact<string>>().notNull(),
     standardName: text("standard_name").notNull(),
+    /**
+     * CAT1 (migration 0010, additive). Null = saved before categories: read as the kitchen's
+     * guess (`effectiveCategory`), computed on read and never written back (0028).
+     */
+    category: jsonb("category").$type<Fact<ItemCategory>>(),
     quantity: jsonb("quantity").$type<Fact<Quantity>>(),
     location: jsonb("location").$type<Fact<Location>>(),
     frozen: jsonb("frozen").$type<Fact<boolean>>(),
@@ -292,6 +297,24 @@ export const itemBatches = pgTable(
     ...audit,
   },
   (t) => [primaryKey({ columns: [t.kitchenId, t.id] }), index("item_batches_item_idx").on(t.kitchenId, t.itemId)],
+);
+
+/**
+ * Categories the user said, remembered per kitchen by standard name (CAT1): "fish sauce goes
+ * under sauces" makes later adds of fish sauce default to it. From `item.category.remembered`.
+ */
+export const itemCategoryPrefs = pgTable(
+  "item_category_prefs",
+  {
+    kitchenId: text("kitchen_id")
+      .notNull()
+      .references(() => kitchens.id, { onDelete: "cascade" }),
+    standardName: text("standard_name").notNull(),
+    /** An `ItemCategory` ID. */
+    category: text("category").notNull(),
+    ...audit,
+  },
+  (t) => [primaryKey({ columns: [t.kitchenId, t.standardName] })],
 );
 
 export const meals = pgTable(

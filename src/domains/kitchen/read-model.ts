@@ -22,6 +22,7 @@ import type { Restriction } from "@/shared/profile/state";
 import { resolveItem } from "./validate";
 import { ACTIVE_STATUSES } from "./lifecycle";
 import { openBatches } from "./batches";
+import { effectiveCategory } from "./categories";
 import type { KitchenEntities, Meal, Recipe, Review } from "./state";
 
 export interface ReadContext {
@@ -89,7 +90,13 @@ export function buildKitchenState(kitchen: KitchenEntities, ctx: ReadContext): K
     safeMap(
       Object.values(kitchen.items).filter((i) => i.stock?.value !== "out"),
       // Open batches only, oldest first (0025); closed ones stay in history.
-      (i) => ({ ...i, batches: openBatches(i).map((b) => ({ ...b, ...audit(b, names) })), ...audit(i, names) }),
+      (i) => ({
+        ...i,
+        // CAT1: items saved before categories read as the kitchen's guess (never written back).
+        category: effectiveCategory(i, kitchen),
+        batches: openBatches(i).map((b) => ({ ...b, ...audit(b, names) })),
+        ...audit(i, names),
+      }),
       "item",
     ),
     "item",

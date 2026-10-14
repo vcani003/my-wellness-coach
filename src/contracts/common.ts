@@ -47,6 +47,28 @@ export type Quantity = z.infer<typeof Quantity>;
 export const Location = z.enum(["fridge", "freezer", "pantry"]);
 export type Location = z.infer<typeof Location>;
 
+/**
+ * What kind of thing an item is (CAT1 Rec): the "By type" view and search. Stable IDs; the UI
+ * shows them through en.json (`category.<id>`). Stored like any fact, `{value, basis, confidence}`:
+ * the kitchen's guess is `inferred`, a correction the user gives is `said` (0011).
+ */
+export const ItemCategory = z.enum([
+  "produce",
+  "meat_seafood",
+  "dairy_eggs",
+  "rice_noodles_grains",
+  "sauces_condiments",
+  "spices_seasonings",
+  "canned_jarred",
+  "baking",
+  "snacks_sweets",
+  "drinks",
+  "leftovers",
+  "other",
+]);
+export type ItemCategory = z.infer<typeof ItemCategory>;
+export const ITEM_CATEGORIES = ItemCategory.options;
+
 export const StockLevel = z.enum(["low", "out"]);
 export type StockLevel = z.infer<typeof StockLevel>;
 

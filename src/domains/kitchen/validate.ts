@@ -7,7 +7,7 @@
  * guess doesn't sink "I bought 4 things."
  */
 import type { AppliedOp, BatchOffer, ChangeRef, RefKind, RejectedOp } from "@/contracts/apply-result";
-import { MAX_OPEN_BATCHES, type BatchWhich, type Fact, type Location, type Msg, type Quantity, type StockLevel } from "@/contracts/common";
+import { MAX_OPEN_BATCHES, type BatchWhich, type Fact, type ItemCategory, type Location, type Msg, type Quantity, type StockLevel } from "@/contracts/common";
 import {
   PASTE_ALLOWED_OPERATION_TYPES,
   PROFILE_OPERATION_TYPES,
@@ -37,6 +37,8 @@ import { applyProfileEvent, profileTouchedKeys, type ProfileState } from "@/shar
 import { validateProfileOperation } from "@/shared/profile/validate";
 import { canTransition } from "./lifecycle";
 import { openBatches, type Batch } from "./batches";
+import { categoryForNewItem, categoryOnRestock, categoryOnUpdate, defaultCategory } from "./categories";
+import { CATEGORY_LABEL_EN } from "@/shared/item-category";
 import {
   KITCHEN_EVENT,
   apply,
@@ -47,6 +49,7 @@ import {
   type BatchClosedPayload,
   type BatchDefrostedPayload,
   type BatchKeptPayload,
+  type CategoryRememberedPayload,
   type ChecklistTickedPayload,
   type Item,
   type ItemAddedPayload,
@@ -257,17 +260,31 @@ const byUpdatedDesc = (a: Item, b: Item) => b.updatedAt.localeCompare(a.updatedA
  * event. An Out item of that name comes back with the new batch. Otherwise it's a new item.
  * With several matches (duplicates saved before batches), the most recently changed one wins.
  */
-function addToKitchen(name: Fact<string>, facts: KitchenFacts, kitchen: KitchenEntities, env: OpEnv): Added {
+function addToKitchen(
+  name: Fact<string>,
+  facts: KitchenFacts,
+  kitchen: KitchenEntities,
+  env: OpEnv,
+  category?: Fact<ItemCategory>,
+): Added {
   const k = kitchenStream(env.ctx.kitchenId);
   const std = standardName(name.value);
   const extra = { occurredAt: facts.occurredAt?.value ?? null };
   const same = Object.values(kitchen.items).filter((i) => i.standardName === std);
   const target =
     same.filter((i) => openBatches(i).length > 0).sort(byUpdatedDesc)[0] ?? same.sort(byUpdatedDesc)[0];
+  const remember = rememberCategory(std, category, kitchen, env);
   if (!target) {
-    const payload: ItemAddedPayload = { itemId: env.ctx.newId(), name, standardName: std, batchId: env.ctx.newId(), ...facts };
+    const payload: ItemAddedPayload = {
+      itemId: env.ctx.newId(),
+      name,
+      standardName: std,
+      category: categoryForNewItem(category, name.value, std, kitchen),
+      batchId: env.ctx.newId(),
+      ...facts,
+    };
     return {
-      events: [env.make(k, KITCHEN_EVENT.itemAdded, payload, extra)],
+      events: [env.make(k, KITCHEN_EVENT.itemAdded, payload, extra), ...remember],
       itemId: payload.itemId,
       batchId: payload.batchId!,
       restocked: null,
@@ -285,6 +302,13 @@ function addToKitchen(name: Fact<string>, facts: KitchenFacts, kitchen: KitchenE
   const batchId = env.ctx.newId();
   const added: BatchAddedPayload = { itemId: target.id, batchId, ...facts };
   events.push(env.make(k, KITCHEN_EVENT.batchAdded, added, extra));
+  // The item keeps its category unless the user said one now (CAT1, said beats inferred).
+  const recategorized = categoryOnRestock(target.category, category);
+  if (recategorized) {
+    const update: ItemUpdatedPayload = { itemId: target.id, set: { category: recategorized }, clear: [] };
+    events.push(emit(env, k, KITCHEN_EVENT.itemUpdated, update));
+  }
+  events.push(...remember);
   const older = open.filter((b) => b !== autoClosed);
   const offer: BatchOffer | undefined = older.length
     ? {
@@ -324,6 +348,24 @@ function addedSummary(added: Added, name: string, fromList: boolean, kitchenAfte
 
 const applyAll = (kitchen: KitchenEntities, events: EventEnvelope[]) => events.reduce(apply, kitchen);
 
+/**
+ * CAT1: a category the user **said** is remembered for that standard name, so the next add of
+ * it defaults to it. Nothing for a guess, or when that's already what's remembered.
+ */
+function rememberCategory(
+  std: string,
+  category: Fact<ItemCategory> | undefined,
+  kitchen: KitchenEntities,
+  env: OpEnv,
+): EventEnvelope[] {
+  if (category?.basis !== "said" || !std) return [];
+  if (kitchen.categoryPrefs[std]?.category === category.value) return [];
+  const payload: CategoryRememberedPayload = { standardName: std, category: category.value };
+  return [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.categoryRemembered, payload)];
+}
+
+const categoryParams = (name: string, category: ItemCategory) => ({ name, category, categoryName: CATEGORY_LABEL_EN[category] });
+
 function itemAdd(op: OperationOf<"item.add">, env: OpEnv): OpOutcome {
   const f = op.fields;
   const facts = compact({
@@ -333,7 +375,7 @@ function itemAdd(op: OperationOf<"item.add">, env: OpEnv): OpOutcome {
     opened: nn(f.opened),
     occurredAt: nn(f.occurredAt),
   });
-  const added = addToKitchen(f.name, facts, env.kitchen, env);
+  const added = addToKitchen(f.name, facts, env.kitchen, env, nn(f.category));
   const existing = added.restocked ?? added.merged;
   const itemRef: ChangeRef = { kind: "item", id: added.itemId, change: existing ? "updated" : "added", batchId: added.batchId };
   const name = existing ? existing.name.value : f.name.value;
@@ -367,12 +409,14 @@ function boughtClearsListItems(name: Fact<string>, itemId: string, env: OpEnv): 
 }
 
 function recordUnknownItem(name: Fact<string>, env: OpEnv, extra: Partial<ItemAddedPayload> = {}): EventEnvelope {
+  const std = standardName(name.value);
   const payload: ItemAddedPayload = {
     itemId: env.ctx.newId(),
     name,
-    standardName: standardName(name.value),
+    standardName: std,
     batchId: env.ctx.newId(),
     ...compact(extra),
+    category: categoryForNewItem(extra.category, name.value, std, env.kitchen),
   };
   return env.make(kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.itemAdded, payload);
 }
@@ -430,6 +474,7 @@ function itemUpdate(op: OperationOf<"item.update">, env: OpEnv): OpOutcome {
     frozen: nn(f.frozen),
     opened: nn(f.opened),
     occurredAt: nn(f.occurredAt),
+    category: nn(f.category),
   });
   if (clear.some((field) => field in set)) return reject("INVALID_OPERATION");
 
@@ -438,15 +483,37 @@ function itemUpdate(op: OperationOf<"item.update">, env: OpEnv): OpOutcome {
   if (match.kind === "unknown-id" || match.kind === "ambiguous") return reject("UNKNOWN_ITEM");
   if (match.kind === "none") {
     const name = f.name ?? nameFact(targetName(op.target));
+    const std = standardName(name.value);
+    const remember = rememberCategory(std, set.category, env.kitchen, env);
+    // "Fish sauce goes under sauces" with no fish sauce in the kitchen: only remember it (CAT1).
+    if (Object.keys(set).every((key) => key === "category") && clear.length === 0) {
+      if (remember.length === 0) return noChange();
+      return ok(remember, msg("CATEGORY_REMEMBERED", categoryParams(name.value, set.category!.value)), []);
+    }
     const rest = compact({ ...set, name: undefined, standardName: undefined });
     const event = recordUnknownItem(name, env, rest);
     const itemId = (event.payload as ItemAddedPayload).itemId;
-    return ok([event], msg("ITEM_RECORDED", { name: name.value }), [{ kind: "item", id: itemId, change: "added" }]);
+    return ok([event, ...remember], msg("ITEM_RECORDED", { name: name.value }), [{ kind: "item", id: itemId, change: "added" }]);
   }
 
   const item = match.item;
-  if (Object.keys(set).length === 0 && clear.length === 0) return noChange();
-  const hasBatchFields = clear.length > 0 || Object.keys(set).some((key) => key !== "name" && key !== "standardName");
+  const std = set.standardName ?? item.standardName;
+  const remember = rememberCategory(std, set.category, env.kitchen, env);
+  // CAT1: said beats inferred, and a same-as-before category is no change.
+  const category = categoryOnUpdate(item.category, set.category);
+  if (category) set.category = category;
+  else delete set.category;
+  // A rename re-sorts an item the user never sorted themselves ("chicken" → "fish sauce").
+  if (set.name && !f.category && item.category?.basis !== "said") {
+    const guess = defaultCategory(set.name.value, std, env.kitchen);
+    if (guess.value !== item.category?.value || guess.basis !== item.category?.basis) set.category = guess;
+  }
+  if (Object.keys(set).length === 0 && clear.length === 0) {
+    if (remember.length === 0) return noChange();
+    return ok(remember, msg("CATEGORY_REMEMBERED", categoryParams(item.name.value, f.category!.value)), []);
+  }
+  const hasBatchFields =
+    clear.length > 0 || Object.keys(set).some((key) => key !== "name" && key !== "standardName" && key !== "category");
   let batch: Batch | undefined;
   if (hasBatchFields) {
     const spec = batchSpec(op.target);
@@ -463,9 +530,11 @@ function itemUpdate(op: OperationOf<"item.update">, env: OpEnv): OpOutcome {
   const summary =
     set.location && set.location.value !== (batch ?? item).location?.value
       ? msg("ITEM_MOVED", { name: displayName, location: set.location.value })
-      : msg("ITEM_UPDATED", { name: displayName });
+      : set.category && Object.keys(set).length === 1 && clear.length === 0
+        ? msg("ITEM_CATEGORY", categoryParams(displayName, set.category.value))
+        : msg("ITEM_UPDATED", { name: displayName });
   return ok(
-    [emit(env, k, KITCHEN_EVENT.itemUpdated, payload, set.occurredAt?.value)],
+    [emit(env, k, KITCHEN_EVENT.itemUpdated, payload, set.occurredAt?.value), ...remember],
     summary,
     [compact({ kind: "item" as const, id: item.id, change: "updated" as const, batchId: batch?.id })],
   );

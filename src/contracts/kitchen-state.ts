@@ -7,6 +7,7 @@ import {
   AllergenFlag,
   Audit,
   Id,
+  ItemCategory,
   Location,
   MealRef,
   MealStatus,
@@ -57,6 +58,12 @@ export const ItemRow = z.object({
   name: fact(z.string()),
   /** Internal standard name used for matching (0015). */
   standardName: z.string(),
+  /**
+   * What kind of thing it is (CAT1): the "By type" view. Always sent by this build (items saved
+   * before categories get the kitchen's guess, `inferred`); optional so an older cached state
+   * still parses (0018).
+   */
+  category: fact(ItemCategory).optional(),
   quantity: fact(Quantity).optional(),
   /** Absent = "Not sure where". */
   location: fact(Location).optional(),
