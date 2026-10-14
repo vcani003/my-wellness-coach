@@ -308,6 +308,8 @@ Don't set `DEV_ACTING_AS` or `PGLITE_DIR`. The server refuses to start if a requ
    - Vercel → Logs show no "Invalid environment variables" or `[unlock]` errors.
    - After 6 wrong tries from one phone, it says "Too many tries" (optional; it clears in 15 minutes).
 
+**Automatic migrations (0028, 2026-10-14):** Vercel runs `npm run vercel-build`, which is `db-migrate --neon-only` and then `next build`. Every production deploy therefore applies pending migrations to Neon before the new code goes live, with no manual step and no secrets in anyone's Terminal. Builds without `DATABASE_URL` skip it. **Only additive migrations may ship this way**; anything that changes or drops existing data needs Vero's go-ahead first (0028).
+
 **Adding Levi:** add `levi=<code>` to `ACCESS_CODES` and redeploy (Vercel applies env changes on the next deploy). His user and membership already exist from the bootstrap; re-running it is harmless.
 **Signing someone out:** change their code (just them) or `SESSION_SECRET` (everyone), then redeploy.
 
