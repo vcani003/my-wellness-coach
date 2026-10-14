@@ -60,6 +60,13 @@ export type RestrictionKind = z.infer<typeof RestrictionKind>;
 export const ReviewKind = z.enum(["add-to-kitchen", "after-cooking"]);
 export type ReviewKind = z.infer<typeof ReviewKind>;
 
+/**
+ * How a shopping-list item got on the list (0027): said in chat, a staples answer, a recipe's
+ * "Need" items, or the "Add to shopping list" offer after marking something Out or Low (SL3).
+ */
+export const ShoppingSource = z.enum(["chat", "staples", "recipe", "stock-offer"]);
+export type ShoppingSource = z.infer<typeof ShoppingSource>;
+
 /** Computed by code from current profiles on every read; never stored. */
 export const AllergenFlag = z.object({
   ingredient: z.string(),

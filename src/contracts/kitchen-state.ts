@@ -12,8 +12,10 @@ import {
   MealStatus,
   Quantity,
   ReviewKind,
+  ShoppingSource,
   StockLevel,
   fact,
+  ActorRef,
   ItemRef,
 } from "./common";
 import { ReviewEntry } from "./operations";
@@ -75,6 +77,22 @@ export const ReviewRow = z.object({
 });
 export type ReviewRow = z.infer<typeof ReviewRow>;
 
+/** An item open on the shopping list (0027). Removed or moved items stay in history only. */
+export const ShoppingItemRow = z.object({
+  id: Id,
+  name: fact(z.string()),
+  /** Internal standard name used for matching and merging (0015). */
+  standardName: z.string(),
+  quantity: fact(Quantity).optional(),
+  /** Absent = "Anywhere" (SL1). Spelled like the first time that store was used on the list. */
+  store: fact(z.string()).optional(),
+  source: ShoppingSource,
+  /** Present while ticked ("got it"); shared by the kitchen. */
+  ticked: z.object({ by: ActorRef, at: isoDate }).optional(),
+  ...Audit,
+});
+export type ShoppingItemRow = z.infer<typeof ShoppingItemRow>;
+
 export const KitchenState = z.object({
   kitchenId: Id,
   version: z.number().int().nonnegative(),
@@ -88,6 +106,11 @@ export const KitchenState = z.object({
   ticks: z.array(TickRow),
   /** Pending To review cards. */
   toReview: z.array(ReviewRow),
+  /**
+   * The shared shopping list (0027): open items in the order they were added. Defaults to []
+   * so a state saved by an older build (offline cache) still parses (0018).
+   */
+  shoppingList: z.array(ShoppingItemRow).default([]),
 });
 export type KitchenState = z.infer<typeof KitchenState>;
 

@@ -22,10 +22,14 @@ export const RejectionCode = z.enum([
   "ALREADY_UNDONE",
   "INVALID_OPERATION",
   "UNDO_OF_UNDO",
+  // shopping list (0027)
+  "NOT_ON_LIST",
+  "NOT_TICKED",
 ]);
 export type RejectionCode = z.infer<typeof RejectionCode>;
 
-export const RefKind = z.enum(["item", "meal", "recipe", "tick", "review", "profile"]);
+/** `shopping` = a shopping-list item; `removed` also covers one moved into the kitchen. */
+export const RefKind = z.enum(["item", "meal", "recipe", "tick", "review", "profile", "shopping"]);
 export type RefKind = z.infer<typeof RefKind>;
 
 export const ChangeRef = z.object({

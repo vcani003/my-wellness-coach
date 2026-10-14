@@ -10,6 +10,7 @@ import {
   Quantity,
   RestrictionKind,
   ReviewKind,
+  ShoppingSource,
   StockLevel,
   fact,
   optionalFact,
@@ -190,6 +191,80 @@ export const PreferenceRemove = z.object({
   fields: z.object({ statement: fact(z.string().min(1).max(500)) }),
 });
 
+// ─── Shopping list (0027, SL1–SL3) ───────────────────────────────────────────────────
+
+/** `{shoppingItemId}` (exact) or `{name}` (as said; matched against items open on the list). */
+export const ShoppingTarget = z.union([
+  z.strictObject({ shoppingItemId: Id }),
+  z.strictObject({ name: z.string().min(1).max(200) }),
+]);
+export type ShoppingTarget = z.infer<typeof ShoppingTarget>;
+
+export const ShoppingFields = z.object({
+  name: fact(z.string().min(1).max(200)),
+  quantity: optionalFact(Quantity),
+  /** Where to buy it ("MD Oriental", "Publix"), as said (SL1). Absent = "Anywhere". */
+  store: optionalFact(z.string().min(1).max(100)),
+});
+export type ShoppingFields = z.infer<typeof ShoppingFields>;
+
+/** Fields `shopping.update` may set back to unknown. Never `name`. */
+export const ClearableShoppingField = z.enum(["quantity", "store"]);
+export type ClearableShoppingField = z.infer<typeof ClearableShoppingField>;
+
+/**
+ * Put something on the list. If an item with the same standard name is already open on the
+ * list, it merges: no duplicate, and a newly given store or quantity replaces the old one.
+ */
+export const ShoppingAdd = z.object({
+  ...common,
+  type: z.literal("shopping.add"),
+  fields: ShoppingFields,
+  /** Absent = "chat". */
+  source: ShoppingSource.optional(),
+});
+
+/** "Move hoisin to Publix", "make it 2 lemongrass", a rename. */
+export const ShoppingUpdate = z.object({
+  ...common,
+  type: z.literal("shopping.update"),
+  target: ShoppingTarget,
+  fields: ShoppingFields.partial(),
+  clear: z.array(ClearableShoppingField).optional(),
+});
+
+/** Tick = "got it" (0027), not bought or used. Shared by the kitchen; who ticked is kept. */
+export const ShoppingTick = z.object({
+  ...common,
+  type: z.literal("shopping.tick"),
+  target: ShoppingTarget,
+  ticked: z.boolean(),
+});
+
+export const ShoppingRemove = z.object({
+  ...common,
+  type: z.literal("shopping.remove"),
+  target: ShoppingTarget,
+});
+
+/** Kitchen facts a done-shopping entry may add to the new kitchen item (the name comes from the list). */
+export const ShoppingDoneFields = ItemFields.pick({ quantity: true, location: true, frozen: true, opened: true }).partial();
+
+/**
+ * "Done shopping" (SL2). The chosen items must be open and ticked. Each one goes into the kitchen
+ * with `item.add`'s rules (restocks a low/out item of the same name, else adds a new one; the
+ * list's quantity is used unless `fields.quantity` is given) and leaves the list as moved.
+ * Ticked items not chosen stay on the list. All or nothing within this operation.
+ */
+export const ShoppingDone = z.object({
+  ...common,
+  type: z.literal("shopping.done"),
+  items: z
+    .array(z.strictObject({ shoppingItemId: Id, fields: ShoppingDoneFields.optional() }))
+    .min(1)
+    .max(100),
+});
+
 export const ChangesetRevert = z.object({
   ...common,
   type: z.literal("changeset.revert"),
@@ -213,11 +288,19 @@ export const Operation = z.discriminatedUnion("type", [
   RestrictionRemove,
   PreferenceSave,
   PreferenceRemove,
+  ShoppingAdd,
+  ShoppingUpdate,
+  ShoppingTick,
+  ShoppingRemove,
+  ShoppingDone,
   ChangesetRevert,
 ]);
 export type Operation = z.infer<typeof Operation>;
 export type OperationType = Operation["type"];
 export type OperationOf<T extends OperationType> = Extract<Operation, { type: T }>;
+
+/** Operations that pasted text may produce (backend-data.md §6, §7); everything else needs typed evidence. */
+export const PASTE_ALLOWED_OPERATION_TYPES = ["recipe.save", "shopping.add"] as const satisfies readonly OperationType[];
 
 export const PROFILE_OPERATION_TYPES = [
   "profile.restriction.add",

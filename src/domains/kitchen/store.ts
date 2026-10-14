@@ -3,11 +3,11 @@
  * same transaction as their events (backend-data.md §3).
  */
 import { and, eq } from "drizzle-orm";
-import { checklistTicks, items, meals, recipes, reviews } from "@/db/schema";
+import { checklistTicks, items, meals, recipes, reviews, shoppingItems } from "@/db/schema";
 import type { Queryable } from "@/db/client";
-import type { MealStatus, ReviewKind } from "@/contracts/common";
+import type { MealStatus, ReviewKind, ShoppingSource } from "@/contracts/common";
 import { compact, splitEntityKey } from "@/shared/events/types";
-import type { Item, KitchenEntities, Meal, Recipe, Review, Tick } from "./state";
+import type { Item, KitchenEntities, Meal, Recipe, Review, ShoppingItem, ShoppingStatus, Tick } from "./state";
 import { tickId } from "./state";
 
 const iso = (d: Date) => d.toISOString();
@@ -90,14 +90,32 @@ export function reviewFromRow(r: typeof reviews.$inferSelect): Review {
   };
 }
 
+export function shoppingFromRow(r: typeof shoppingItems.$inferSelect): ShoppingItem {
+  return compact({
+    id: r.id,
+    name: r.name,
+    standardName: r.standardName,
+    quantity: r.quantity ?? undefined,
+    store: r.store ?? undefined,
+    source: r.source as ShoppingSource,
+    position: r.position,
+    status: r.status as ShoppingStatus,
+    tickedAt: isoOpt(r.tickedAt),
+    tickedBy: r.tickedBy ?? undefined,
+    movedToItemId: r.movedToItemId ?? undefined,
+    ...auditFrom(r),
+  });
+}
+
 /** The whole kitchen as the pure state (all rows, including done meals and `out` items). */
 export async function loadKitchenEntities(db: Queryable, kitchenId: string): Promise<KitchenEntities> {
-  const [itemRows, mealRows, recipeRows, tickRows, reviewRows] = await Promise.all([
+  const [itemRows, mealRows, recipeRows, tickRows, reviewRows, shoppingRows] = await Promise.all([
     db.select().from(items).where(eq(items.kitchenId, kitchenId)),
     db.select().from(meals).where(eq(meals.kitchenId, kitchenId)),
     db.select().from(recipes).where(eq(recipes.kitchenId, kitchenId)),
     db.select().from(checklistTicks).where(eq(checklistTicks.kitchenId, kitchenId)),
     db.select().from(reviews).where(eq(reviews.kitchenId, kitchenId)),
+    db.select().from(shoppingItems).where(eq(shoppingItems.kitchenId, kitchenId)),
   ]);
   return {
     items: Object.fromEntries(itemRows.map((r) => [r.id, itemFromRow(r)])),
@@ -105,6 +123,7 @@ export async function loadKitchenEntities(db: Queryable, kitchenId: string): Pro
     recipes: Object.fromEntries(recipeRows.map((r) => [r.id, recipeFromRow(r)])),
     ticks: Object.fromEntries(tickRows.map((r) => [tickId(r.mealId, r.ingredientKey), tickFromRow(r)])),
     reviews: Object.fromEntries(reviewRows.map((r) => [r.id, reviewFromRow(r)])),
+    shopping: Object.fromEntries(shoppingRows.map((r) => [r.id, shoppingFromRow(r)])),
   };
 }
 
@@ -218,6 +237,28 @@ export async function persistKitchenEntities(
         }
         break;
       }
+      case "shopping": {
+        await db.delete(shoppingItems).where(and(eq(shoppingItems.kitchenId, kitchenId), eq(shoppingItems.id, id)));
+        const e = state.shopping[id];
+        if (e) {
+          await db.insert(shoppingItems).values({
+            id: e.id,
+            kitchenId,
+            name: e.name,
+            standardName: e.standardName,
+            quantity: e.quantity ?? null,
+            store: e.store ?? null,
+            source: e.source,
+            position: e.position,
+            status: e.status,
+            tickedAt: dateOpt(e.tickedAt),
+            tickedBy: e.tickedBy ?? null,
+            movedToItemId: e.movedToItemId ?? null,
+            ...auditTo(e),
+          });
+        }
+        break;
+      }
       default:
         // Profile keys are persisted by the shared profile store.
         break;
@@ -232,12 +273,14 @@ export async function replaceKitchenProjections(db: Queryable, kitchenId: string
   await db.delete(recipes).where(eq(recipes.kitchenId, kitchenId));
   await db.delete(checklistTicks).where(eq(checklistTicks.kitchenId, kitchenId));
   await db.delete(reviews).where(eq(reviews.kitchenId, kitchenId));
+  await db.delete(shoppingItems).where(eq(shoppingItems.kitchenId, kitchenId));
   const keys = [
     ...Object.keys(state.items).map((id) => `item:${id}`),
     ...Object.keys(state.meals).map((id) => `meal:${id}`),
     ...Object.keys(state.recipes).map((id) => `recipe:${id}`),
     ...Object.keys(state.ticks).map((id) => `tick:${id}`),
     ...Object.keys(state.reviews).map((id) => `review:${id}`),
+    ...Object.keys(state.shopping).map((id) => `shopping:${id}`),
   ];
   await persistKitchenEntities(db, kitchenId, state, keys);
 }

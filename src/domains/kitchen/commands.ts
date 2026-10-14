@@ -15,7 +15,8 @@ import { randomUUID } from "node:crypto";
 import { changeSets, kitchens, mealIdeas, users } from "@/db/schema";
 import type { Db, Queryable } from "@/db/client";
 import { ApplyResult, type ApplyResult as ApplyResultT } from "@/contracts/apply-result";
-import type { Msg } from "@/contracts/common";
+import type { Msg, Quantity, ShoppingSource } from "@/contracts/common";
+import type { Operation } from "@/contracts/operations";
 import { ProposedChange } from "@/contracts/proposed-change";
 import { MealIdea } from "@/contracts/stream";
 import { msg } from "@/shared/messages";
@@ -256,6 +257,72 @@ export function undo(db: Db, scope: KitchenScope, args: { changeSetId: string; t
     source: { via: "button", action: "undo" },
     operations: [{ opId: "undo", type: "changeset.revert", target: { changeSetId: args.changeSetId } }],
   });
+}
+
+// ─── Shopping list buttons (0027) ─────────────────────────────────────────────────────
+// Each builds a one-step ProposedChange and goes through the same validate → apply path as chat.
+
+/** What every button command needs: `tapId` makes a double tap harmless. */
+export interface TapArgs {
+  tapId: string;
+  basedOnVersion: number;
+}
+
+function tap(db: Db, scope: KitchenScope, args: TapArgs, action: string, operations: Operation[]) {
+  return applyProposedChange(db, scope, {
+    proposalId: args.tapId,
+    kitchenId: scope.kitchenId,
+    basedOnVersion: args.basedOnVersion,
+    source: { via: "button", action },
+    operations,
+  });
+}
+
+const said = <T>(value: T) => ({ value, basis: "said" as const, confidence: "high" as const });
+
+/** One-tap adds: a staples answer, a recipe's "Need" items, the Out/Low offer (SL3). Merges like chat. */
+export function addShoppingItems(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { source: ShoppingSource; items: { name: string; quantity?: Quantity; store?: string }[] },
+) {
+  return tap(
+    db,
+    scope,
+    args,
+    "shopping.add",
+    args.items.map((i, n) => ({
+      opId: `add-${n + 1}`,
+      type: "shopping.add",
+      source: args.source,
+      fields: {
+        name: said(i.name),
+        ...(i.quantity ? { quantity: said(i.quantity) } : {}),
+        ...(i.store ? { store: said(i.store) } : {}),
+      },
+    })),
+  );
+}
+
+export function tickShoppingItem(db: Db, scope: KitchenScope, args: TapArgs & { shoppingItemId: string; ticked: boolean }) {
+  return tap(db, scope, args, args.ticked ? "shopping.tick" : "shopping.untick", [
+    { opId: "tick", type: "shopping.tick", target: { shoppingItemId: args.shoppingItemId }, ticked: args.ticked },
+  ]);
+}
+
+export function removeShoppingItem(db: Db, scope: KitchenScope, args: TapArgs & { shoppingItemId: string }) {
+  return tap(db, scope, args, "shopping.remove", [
+    { opId: "remove", type: "shopping.remove", target: { shoppingItemId: args.shoppingItemId } },
+  ]);
+}
+
+/** "Done shopping" (SL2): the chosen ticked items go into the kitchen; unchosen ticked items stay. */
+export function doneShopping(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { items: { shoppingItemId: string; fields?: Extract<Operation, { type: "shopping.done" }>["items"][number]["fields"] }[] },
+) {
+  return tap(db, scope, args, "shopping.done", [{ opId: "done", type: "shopping.done", items: args.items }]);
 }
 
 export interface NewMealIdea {

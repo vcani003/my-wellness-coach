@@ -3,7 +3,7 @@
  * All kitchen state logic lives here. Undo, or a fix to this logic, rebuilds a kitchen by
  * replaying its events; projections are just this state written to tables.
  */
-import type { Fact, Location, MealStatus, Quantity, ReviewKind, StockLevel } from "@/contracts/common";
+import type { Fact, Location, MealStatus, Quantity, ReviewKind, ShoppingSource, StockLevel } from "@/contracts/common";
 import type { RecipeIngredient, ReviewEntry } from "@/contracts/operations";
 import {
   CHANGESET_REVERTED,
@@ -67,6 +67,25 @@ export interface Review extends AuditFields {
   status: "pending" | "done" | "skipped";
 }
 
+export type ShoppingStatus = "open" | "removed" | "moved";
+
+/** A shopping-list item (0027). Removed and moved ones stay, for history, Undo and the link to the kitchen item. */
+export interface ShoppingItem extends AuditFields {
+  id: string;
+  name: Fact<string>;
+  standardName: string;
+  quantity?: Fact<Quantity>;
+  store?: Fact<string>;
+  source: ShoppingSource;
+  /** List order: one more than the highest so far. Kept on merge. */
+  position: number;
+  status: ShoppingStatus;
+  tickedAt?: string;
+  tickedBy?: string;
+  /** The kitchen item it became, once moved by "Done shopping". */
+  movedToItemId?: string;
+}
+
 export interface KitchenEntities {
   items: Record<string, Item>;
   meals: Record<string, Meal>;
@@ -74,11 +93,19 @@ export interface KitchenEntities {
   /** Keyed by `${mealId}|${ingredientKey}`; present only while ticked. */
   ticks: Record<string, Tick>;
   reviews: Record<string, Review>;
+  shopping: Record<string, ShoppingItem>;
 }
 
-export type KitchenEntity = Item | Meal | Recipe | Tick | Review;
+export type KitchenEntity = Item | Meal | Recipe | Tick | Review | ShoppingItem;
 
-export const emptyKitchen = (): KitchenEntities => ({ items: {}, meals: {}, recipes: {}, ticks: {}, reviews: {} });
+export const emptyKitchen = (): KitchenEntities => ({
+  items: {},
+  meals: {},
+  recipes: {},
+  ticks: {},
+  reviews: {},
+  shopping: {},
+});
 
 export const tickId = (mealId: string, ingredientKey: string) => `${mealId}|${ingredientKey}`;
 
@@ -96,6 +123,11 @@ export const KITCHEN_EVENT = {
   checklistTicked: "checklist.ticked",
   reviewQueued: "review.queued",
   reviewResolved: "review.resolved",
+  shoppingAdded: "shopping.added",
+  shoppingUpdated: "shopping.updated",
+  shoppingTicked: "shopping.ticked",
+  shoppingRemoved: "shopping.removed",
+  shoppingMoved: "shopping.moved",
 } as const;
 
 type ItemFactFields = Pick<Item, "quantity" | "location" | "frozen" | "opened" | "occurredAt">;
@@ -170,6 +202,35 @@ export interface ReviewResolvedPayload {
   outcome: "done" | "skipped";
 }
 
+export interface ShoppingAddedPayload {
+  shoppingItemId: string;
+  name: Fact<string>;
+  standardName: string;
+  quantity?: Fact<Quantity>;
+  store?: Fact<string>;
+  source: ShoppingSource;
+  position: number;
+}
+type ShoppingFactFields = Pick<ShoppingItem, "name" | "standardName" | "quantity" | "store">;
+export interface ShoppingUpdatedPayload {
+  shoppingItemId: string;
+  set: Partial<ShoppingFactFields>;
+  /** Fields set back to unknown. */
+  clear: ("quantity" | "store")[];
+}
+export interface ShoppingTickedPayload {
+  shoppingItemId: string;
+  ticked: boolean;
+}
+export interface ShoppingRemovedPayload {
+  shoppingItemId: string;
+}
+export interface ShoppingMovedPayload {
+  shoppingItemId: string;
+  /** The kitchen item it was added to (or restocked), in the same change set. */
+  itemId: string;
+}
+
 /** Entity keys a kitchen event touches (`item:<id>` …), for Undo conflicts and STALE_TARGET. */
 export function kitchenTouchedKeys(event: EventEnvelope): string[] {
   const p = event.payload as Record<string, unknown>;
@@ -190,6 +251,12 @@ export function kitchenTouchedKeys(event: EventEnvelope): string[] {
     case KITCHEN_EVENT.reviewQueued:
     case KITCHEN_EVENT.reviewResolved:
       return [`review:${p.reviewId as string}`];
+    case KITCHEN_EVENT.shoppingAdded:
+    case KITCHEN_EVENT.shoppingUpdated:
+    case KITCHEN_EVENT.shoppingTicked:
+    case KITCHEN_EVENT.shoppingRemoved:
+    case KITCHEN_EVENT.shoppingMoved:
+      return [`shopping:${p.shoppingItemId as string}`];
     case CHANGESET_REVERTED:
       return Object.keys((event.payload as ChangesetRevertedPayload).restore);
     default:
@@ -203,6 +270,7 @@ const COLLECTION = {
   recipe: "recipes",
   tick: "ticks",
   review: "reviews",
+  shopping: "shopping",
 } as const satisfies Record<string, keyof KitchenEntities>;
 
 export function getKitchenEntity(state: KitchenEntities, key: string): KitchenEntity | null {
@@ -360,6 +428,55 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
       const prev = state.reviews[p.reviewId];
       if (!prev) return state;
       return put(state, "reviews", prev.id, { ...prev, status: p.outcome, ...stamp(event) });
+    }
+    case KITCHEN_EVENT.shoppingAdded: {
+      const p = event.payload as ShoppingAddedPayload;
+      const entry: ShoppingItem = {
+        id: p.shoppingItemId,
+        name: p.name,
+        standardName: p.standardName,
+        quantity: p.quantity,
+        store: p.store,
+        source: p.source,
+        position: p.position,
+        status: "open",
+        ...created(event),
+      };
+      return put(state, "shopping", entry.id, entry);
+    }
+    case KITCHEN_EVENT.shoppingUpdated: {
+      const p = event.payload as ShoppingUpdatedPayload;
+      const prev = state.shopping[p.shoppingItemId];
+      if (!prev) return state;
+      const next: ShoppingItem = { ...prev, ...compact(p.set), ...stamp(event) };
+      for (const field of p.clear) delete next[field];
+      return put(state, "shopping", next.id, next);
+    }
+    case KITCHEN_EVENT.shoppingTicked: {
+      const p = event.payload as ShoppingTickedPayload;
+      const prev = state.shopping[p.shoppingItemId];
+      if (!prev) return state;
+      const next: ShoppingItem = { ...prev, ...stamp(event) };
+      if (p.ticked) {
+        next.tickedAt = event.recordedAt;
+        next.tickedBy = event.actor;
+      } else {
+        delete next.tickedAt;
+        delete next.tickedBy;
+      }
+      return put(state, "shopping", next.id, next);
+    }
+    case KITCHEN_EVENT.shoppingRemoved: {
+      const p = event.payload as ShoppingRemovedPayload;
+      const prev = state.shopping[p.shoppingItemId];
+      if (!prev) return state;
+      return put(state, "shopping", prev.id, { ...prev, status: "removed", ...stamp(event) });
+    }
+    case KITCHEN_EVENT.shoppingMoved: {
+      const p = event.payload as ShoppingMovedPayload;
+      const prev = state.shopping[p.shoppingItemId];
+      if (!prev) return state;
+      return put(state, "shopping", prev.id, { ...prev, status: "moved", movedToItemId: p.itemId, ...stamp(event) });
     }
     case CHANGESET_REVERTED: {
       const p = event.payload as ChangesetRevertedPayload<KitchenEntity>;

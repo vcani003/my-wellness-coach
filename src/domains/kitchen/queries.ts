@@ -7,7 +7,7 @@ import { and, asc, eq, gt, isNotNull } from "drizzle-orm";
 import { changeSets, kitchens } from "@/db/schema";
 import type { Queryable } from "@/db/client";
 import { ChangeSetSummary, type ChangeSetSummary as ChangeSetSummaryT } from "@/contracts/apply-result";
-import type { KitchenState, RecipeView } from "@/contracts/kitchen-state";
+import type { KitchenState, RecipeView, ShoppingItemRow } from "@/contracts/kitchen-state";
 import { loadNames } from "@/shared/identity";
 import { listMembers, type KitchenScope } from "@/shared/membership";
 import { loadProfiles } from "@/shared/profile/store";
@@ -24,12 +24,13 @@ export async function getKitchenVersion(db: Queryable, scope: KitchenScope): Pro
 
 function actorIds(kitchen: KitchenEntities): string[] {
   const ids = new Set<string>();
-  for (const coll of [kitchen.items, kitchen.meals, kitchen.recipes, kitchen.ticks, kitchen.reviews]) {
+  for (const coll of [kitchen.items, kitchen.meals, kitchen.recipes, kitchen.ticks, kitchen.reviews, kitchen.shopping]) {
     for (const e of Object.values(coll)) {
       ids.add(e.createdBy);
       ids.add(e.updatedBy);
     }
   }
+  for (const e of Object.values(kitchen.shopping)) if (e.tickedBy) ids.add(e.tickedBy);
   return [...ids];
 }
 
@@ -58,6 +59,11 @@ export async function readKitchenState(db: Queryable, kitchenId: string): Promis
 
 export async function getKitchenState(db: Queryable, scope: KitchenScope): Promise<KitchenState> {
   return readKitchenState(db, scope.kitchenId);
+}
+
+/** The shared shopping list (0027): open items in the order added. Same as `KitchenState.shoppingList`. */
+export async function getShoppingList(db: Queryable, scope: KitchenScope): Promise<ShoppingItemRow[]> {
+  return (await readKitchenState(db, scope.kitchenId)).shoppingList;
 }
 
 /** The latest recipe for a meal, or null. */

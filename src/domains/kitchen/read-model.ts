@@ -13,6 +13,7 @@ import {
   type KitchenState,
   RecipeView,
   ReviewRow,
+  ShoppingItemRow,
   TickRow,
 } from "@/contracts/kitchen-state";
 import { computeAllergenFlags } from "@/shared/profile/allergens";
@@ -144,7 +145,29 @@ export function buildKitchenState(kitchen: KitchenEntities, ctx: ReadContext): K
     "review",
   ).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
-  return { kitchenId: ctx.kitchenId, version: ctx.version, items, meals, plan, ticks, toReview };
+  // The shopping list (0027): open items, in the order they were added.
+  const shoppingList = checked(
+    ShoppingItemRow,
+    safeMap(
+      Object.values(kitchen.shopping)
+        .filter((e) => e.status === "open")
+        .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)),
+      (e) => ({
+        id: e.id,
+        name: e.name,
+        standardName: e.standardName,
+        ...(e.quantity ? { quantity: e.quantity } : {}),
+        ...(e.store ? { store: e.store } : {}),
+        source: e.source,
+        ...(e.tickedAt && e.tickedBy ? { ticked: { by: actorRef(e.tickedBy, names), at: e.tickedAt } } : {}),
+        ...audit(e, names),
+      }),
+      "shopping",
+    ),
+    "shopping",
+  );
+
+  return { kitchenId: ctx.kitchenId, version: ctx.version, items, meals, plan, ticks, toReview, shoppingList };
 }
 
 /** The latest recipe for a meal, with item references resolved defensively. */

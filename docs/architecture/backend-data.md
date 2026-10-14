@@ -82,6 +82,7 @@ Every change is saved as a permanent **event** (a record of something that happe
 | Recipe | text, ingredients, steps, `source: user \| ai`, version | Refining saves a new version, and old versions stay. Suggesting vs asking is UI and prompt only (**R2**). |
 | Checklist tick | meal, ingredient, `actor` | **Shared** by the kitchen; who ticked is stored and shown (M6, 0013). |
 | To review | kind (`add-to-kitchen` or `after-cooking`), items, meal, status | Fed by "Do later". The after-cooking step's wording and defaults are UI only (**M8**). |
+| Shopping-list item (0027) | name as said + standard name (0015), quantity as said, `store` (SL1; absent = "Anywhere"), `source` (`chat`, `staples`, `recipe`, `stock-offer`), ticked (who + when), `status` (`open`, `removed`, `moved` + the kitchen item it became) | **Shared** by the kitchen. Adding something already open on the list **merges** (a newly given store or quantity wins). Removed and moved items stay in history; `KitchenState` lists only open ones, in the order added. |
 | Chat message | per user, within a kitchen | Private (H2, 0017) |
 
 Every current-state row carries `createdAt/By` and `updatedAt/By`, which drive the "Levi · just now" cues. The expanded Kitchen view (K1, view-only) is just another read of the items table.
@@ -135,15 +136,22 @@ Operation = common & one of the typed shapes below (a union keyed by `type`)
   review.resolve    target {reviewId}; outcome: done|skipped   // the actual kitchen changes are item.* ops in the same proposal
   profile.restriction.add / .update / .remove   fields { kind: allergy|diet, subject: Fact<string>, note?: Fact<string> }; forUserId?
   profile.preference.save / .remove   fields { statement: Fact<string> }; confirmedByMessageId (save only)
+  shopping.add      fields { name: Fact<string>, quantity?: Fact<Quantity>, store?: Fact<string> }; source?: chat|staples|recipe|stock-offer  // absent = chat
+  shopping.update   target {shoppingItemId}|{name}; fields: any shopping.add field, all optional; clear?: [quantity|store]
+  shopping.tick     target {shoppingItemId}|{name}; ticked: boolean      // "got it" (0027), not bought or used
+  shopping.remove   target {shoppingItemId}|{name}
+  shopping.done     items: [{ shoppingItemId, fields?: { quantity?, location?, frozen?, opened? } }]   // "Done shopping" (SL2)
   changeset.revert  target {changeSetId}
 
 ApplyResult { changeSetId; newVersion; undoable; undoBlockedReason?: Msg
-  applied:  [{ opId, summary: Msg, refs: [{ kind: item|meal|recipe|tick|review|profile, id, change: added|updated|removed }] }]
+  applied:  [{ opId, summary: Msg, refs: [{ kind: item|meal|recipe|tick|review|profile|shopping, id, change: added|updated|removed }] }]
   rejected: [{ opId, reason: Msg }]   // codes: UNKNOWN_ITEM (bad ID), AMBIGUOUS_ITEM, EVIDENCE_NOT_FOUND, NOT_SAID,
-                                      // NOT_ALLOWED, INVALID_TRANSITION, ALREADY_OUT, STALE_TARGET
+                                      // NOT_ALLOWED, INVALID_TRANSITION, ALREADY_OUT, STALE_TARGET (+ build additions, changelog)
   state: KitchenState }               // full current state; small at MVP size, so no refetch is needed
-KitchenState { version, items, meals, plan, ticks, toReview }   // every row has createdAt/By, updatedAt/By;
+KitchenState { version, items, meals, plan, ticks, toReview, shoppingList }   // every row has createdAt/By, updatedAt/By;
                                                                 // meals carry allergenFlags[]
+ShoppingItemRow { id, name: Fact, standardName, quantity?, store?: Fact<string>, source, ticked?: { by: ActorRef, at } }
+                                                                // open items only, in the order added; defaults to []
 ```
 
 **Validation rules:**
@@ -153,6 +161,13 @@ KitchenState { version, items, meals, plan, ticks, toReview }   // every row has
 - **After cooking (0013):** `meal.transition` to `done` records every in-kitchen ingredient as **used in this meal, amount unknown**. The after-cooking step adds an `item.use` with `stock` for each "Running low" / "Out", and its optional `note` is saved on that cooking session. Skip adds nothing more (M8 Rec).
 - **Profile operations** need `basis: said`, and evidence found in the *typed*, not pasted, text. Operations whose evidence falls inside `pastedRanges` may only be `recipe.save`. With no ranges, a message over 1,500 characters counts as pasted. Only the profile's owner can update a restriction's note or remove it; adding one for another member needs the speaker's confirmation (ai.md §4). The `note` is stored as said and only ever shown back, never interpreted.
 - **`changeset.revert`** of someone else's change set is refused with `NOT_ALLOWED` (H3, 0017).
+- **Shopping list (0027):**
+  - **`shopping.add` merges:** if an item with the same standard name is open on the list, nothing is duplicated. A newly given store or quantity replaces the old one (`SHOPPING_STORE` / `SHOPPING_UPDATED`); otherwise it's a no-change `SHOPPING_ALREADY`. A store that matches one already on the list, ignoring case and punctuation, keeps that spelling, so the groups don't split (SL1).
+  - **Name targets** match open items only, like kitchen items: exact standard name, then all the words. None → a no-change `SHOPPING_NOT_FOUND`; two → `AMBIGUOUS_ITEM`. An ID that's no longer open → `NOT_ON_LIST`; an unknown ID → `UNKNOWN_TARGET`.
+  - **Ticks are shared.** Ticking something already ticked changes nothing, so the first person's tick stands.
+  - **`shopping.done`** (SL2) is all or nothing. Every chosen item must be open (`NOT_ON_LIST`) and ticked (`NOT_TICKED`), with no repeats (`INVALID_OPERATION`). Each goes into the kitchen with `item.add`'s rules: it restocks a low or out item of the same name, otherwise it's a new item. The list's quantity is used unless `fields.quantity` is given. Then the list item is marked `moved`, linked to the kitchen item. It's one change set, so one Undo restores both. Ticked items that weren't chosen stay on the list.
+  - **SL5 Rec (pending Vero, easy to switch off):** `item.add` **via chat** ("I bought garlic") also marks any open list item with the same standard name as moved, in the same change set (`ITEM_ADDED_FROM_LIST`). It's one rule in `validate.ts` behind `SL5_BOUGHT_IN_CHAT_CLEARS_LIST`. Buttons don't trigger it.
+  - **Pasted text may produce `shopping.add`** as well as `recipe.save` (0027: "pasting a whole list"). Every other shopping operation needs typed evidence.
 
 **Defensive reads (0018).** A read never throws to the UI because of bad or missing data:
 - A missing referenced row (item, meal, actor) comes back as `{id, missing: true}`; the UI shows its fallback ("Unknown item", "Someone"). An unknown location is simply absent ("Not sure where").
@@ -166,7 +181,7 @@ KitchenState { version, items, meals, plan, ticks, toReview }   // every row has
 |---|---|
 | `POST /api/chat` (turn stream) | `{kitchenId, clientMessageId, text, pastedRanges?}`. A retry with the same ID replays the stored result. |
 | `POST /api/meals/choose` (turn stream) | `{kitchenId, clientMessageId, ideaId \| mealId}`: applies `meal.choose`, then streams the recipe. It's also used for "Suggest one" if R2 is "ask". |
-| Server actions (UI functions that run on the server, no streaming) | `undo`, `addToPlan`, `transitionMeal`, `tick`, `resolveReview`, `confirmPreference`, `removeProfileFact`. Each one builds a ProposedChange and returns an ApplyResult. |
+| Server actions (UI functions that run on the server, no streaming) | `undo`, `addToPlan`, `transitionMeal`, `tick`, `resolveReview`, `confirmPreference`, `removeProfileFact`. Each one builds a ProposedChange and returns an ApplyResult. **Built for the shopping list** (`src/app/actions.ts`, each `{kitchenId, tapId, basedOnVersion, …}`): `addToShoppingList {source, items:[{name, quantity?, store?}]}`, `tickShoppingListItem` / `untickShoppingListItem` / `removeShoppingListItem {shoppingItemId}`, `finishShopping {items:[{shoppingItemId, fields?}]}`. |
 | `GET /api/kitchens/:id/state` · `/version` · `/changes?since=` | Full state · the version number only · change-set summaries (`Msg` + actor) for "Since your last visit" |
 | `GET /api/me/export`, `POST /api/me/delete` | Data controls (0015). Settings shows the export readably and offers the JSON download. |
 
@@ -187,6 +202,8 @@ The stream is one JSON object per line (NDJSON), checked with the shared Zod sch
 | `recipe.saved` | After `recipe.save` is applied | `{mealId, recipeId, version, newVersion}`. Not shown as a receipt. |
 | `done` | The turn is complete | `{turnId, assistantMessageId}` |
 | `error` | Any failure | `{reason: Msg, changed: boolean, retryable: boolean}`. `changed` is true if `applied` was already sent. |
+
+**Receipts for the shopping list.** There's no new stream event: `applied` carries the list in `state.shoppingList`, and each operation has one summary. A pasted 10-item list gives up to 10 lines (`SHOPPING_ADDED` / `SHOPPING_ADDED_STORE`, plus `SHOPPING_ALREADY` for a merged repeat, which has no refs); the receipt may group them. `shopping.done` gives one line, `SHOPPING_DONE {count, names}`, with refs for each kitchen item (`added` or `updated`) and each list item (`removed`). A list item that leaves the list, removed or moved, is a `shopping` ref with `change: removed`.
 
 **How the screen learns about changes:**
 - **Your own change:** the ApplyResult (with `state`) comes straight back, so your widgets update immediately.
@@ -214,7 +231,7 @@ The stream is one JSON object per line (NDJSON), checked with the shared Zod sch
   - tokens and cost logged for every call
 - **Pasted content (for the AI specialist):** pasted recipes are **data, not instructions**.
   - Wrap them in delimiters in the prompt.
-  - Pasted text can only produce `recipe.save`. The backend uses `pastedRanges` and `evidence` to enforce this (§6).
+  - Pasted text can only produce `recipe.save` or `shopping.add` (a pasted shopping list, 0027; adding to the list is harmless and undoable). The backend uses `pastedRanges` and `evidence` to enforce this (§6).
   - The server never fetches links the user pastes.
   - Recipes are shown as plain text, never HTML.
   - Pastes are capped at about 20,000 characters.
@@ -348,3 +365,4 @@ Tracked in `OPEN-QUESTIONS.md`. H2 and H3: answered → 0017. B14: answered → 
 | Allergen words | A small starter list in `src/shared/profile/allergens.ts`; the AI specialist owns the full list and should replace it there (one list, not two). |
 | Not built yet | `getEvents(userId, …)` from §5; the 4-account cap and Better Auth tables (sign-in milestone); route handlers. |
 | **Deployable for Vero (2026-10-14, 0026)** | Neon via the WebSocket Pool driver when `DATABASE_URL` is set, PGlite otherwise (§2); `db:migrate` works on both. **Interim access-code gate** in place of email sign-in for now (§7): `src/proxy.ts`, `/unlock`, signed 1-year rolling cookie, `getCurrentUser()` / `requireCurrentUser()` in `src/lib/auth/current-user.ts`. New `rate_limits` table (migration 0002) for unlock attempts and `checkChatRateLimit` (new message code `RATE_LIMITED`). `npm run db:bootstrap` creates users `vero`, `levi` and the shared kitchen `home` ("Home"). Production env validation at start (`src/instrumentation.ts`); new env vars `SESSION_SECRET`, `ACCESS_CODES`, `AI_MODE`, `ANTHROPIC_API_KEY`, `DEV_ACTING_AS`. Deploy steps in §10. |
+| **Shopping list (2026-10-14, 0027, SL1–SL3 Recs, SL5 Rec)** | New operations `shopping.add / .update / .tick / .remove / .done` (§6); events `shopping.added / .updated / .ticked / .removed / .moved`; projection table `shopping_items` (**migration 0003_shopping_list**, additive only: one new table, run `db:migrate` before the deploy that ships it). `KitchenState.shoppingList` (defaults to `[]`, so older cached states still parse). `RefKind` adds `shopping`; rejection codes add `NOT_ON_LIST`, `NOT_TICKED`. `shopping.done` reuses `item.add`'s rules through one shared function. Pasted text may produce `shopping.add`. SL5 Rec: buying in chat moves the matching open list item, behind one switch. Commands `addShoppingItems`, `tickShoppingItem`, `removeShoppingItem`, `doneShopping`; query `getShoppingList`; server actions in §6. |

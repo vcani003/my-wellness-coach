@@ -9,8 +9,10 @@
 import type { AppliedOp, ChangeRef, RefKind, RejectedOp } from "@/contracts/apply-result";
 import type { Fact, Quantity, StockLevel } from "@/contracts/common";
 import {
+  PASTE_ALLOWED_OPERATION_TYPES,
   PROFILE_OPERATION_TYPES,
   type ItemTarget,
+  type ShoppingTarget,
   type Operation,
   type OperationOf,
 } from "@/contracts/operations";
@@ -51,6 +53,12 @@ import {
   type RecipeSavedPayload,
   type ReviewQueuedPayload,
   type ReviewResolvedPayload,
+  type ShoppingAddedPayload,
+  type ShoppingItem,
+  type ShoppingMovedPayload,
+  type ShoppingRemovedPayload,
+  type ShoppingTickedPayload,
+  type ShoppingUpdatedPayload,
 } from "./state";
 import { getProfileEntity } from "@/shared/profile/state";
 
@@ -115,7 +123,8 @@ function occurrences(text: string, needle: string): { start: number; end: number
 
 /**
  * Chat operations need `evidence` (the user's exact words). Operations whose evidence sits only
- * in pasted text may only be `recipe.save`; profile operations need evidence in the typed text.
+ * in pasted text may only be `recipe.save` or `shopping.add` (a pasted list, 0027); profile
+ * operations need evidence in the typed text.
  * Returns null when the operation passes.
  */
 export function checkEvidence(op: Operation, ctx: Pick<PlanContext, "source" | "messageText">): OpOutcome | null {
@@ -130,7 +139,7 @@ export function checkEvidence(op: Operation, ctx: Pick<PlanContext, "source" | "
   const found = occurrences(text, op.evidence);
   const typed = found.some((o) => !pasted.some((r) => o.start < r.end && o.end > r.start));
 
-  if (op.type === "recipe.save") return null;
+  if ((PASTE_ALLOWED_OPERATION_TYPES as readonly string[]).includes(op.type)) return null;
   if (isProfile) {
     if (found.length === 0) return reject("EVIDENCE_NOT_FOUND");
     return typed ? null : reject("NOT_ALLOWED");
@@ -217,11 +226,33 @@ function nextPlanPosition(kitchen: KitchenEntities): number {
   return positions.length ? Math.max(...positions) + 1 : 1;
 }
 
+type KitchenFacts = Partial<Pick<ItemAddedPayload, "quantity" | "location" | "frozen" | "opened" | "occurredAt">>;
+
+/**
+ * `item.add`'s rules, shared with "Done shopping": adding the same item again clears `stock`
+ * (backend-data.md §6) if exactly one item with that name is low or out; otherwise a new item.
+ */
+function addToKitchen(
+  name: Fact<string>,
+  facts: KitchenFacts,
+  kitchen: KitchenEntities,
+  env: OpEnv,
+): { event: EventEnvelope; itemId: string; restocked: Item | null } {
+  const k = kitchenStream(env.ctx.kitchenId);
+  const std = standardName(name.value);
+  const extra = { occurredAt: facts.occurredAt?.value ?? null };
+  const restock = Object.values(kitchen.items).filter((i) => i.standardName === std && i.stock);
+  if (restock.length === 1) {
+    const item = restock[0];
+    const payload: ItemUpdatedPayload = { itemId: item.id, set: facts, clear: ["stock"] };
+    return { event: env.make(k, KITCHEN_EVENT.itemUpdated, payload, extra), itemId: item.id, restocked: item };
+  }
+  const payload: ItemAddedPayload = { itemId: env.ctx.newId(), name, standardName: std, ...facts };
+  return { event: env.make(k, KITCHEN_EVENT.itemAdded, payload, extra), itemId: payload.itemId, restocked: null };
+}
+
 function itemAdd(op: OperationOf<"item.add">, env: OpEnv): OpOutcome {
-  const { kitchen, make, ctx } = env;
-  const k = kitchenStream(ctx.kitchenId);
   const f = op.fields;
-  const std = standardName(f.name.value);
   const facts = compact({
     quantity: nn(f.quantity),
     location: nn(f.location),
@@ -229,25 +260,39 @@ function itemAdd(op: OperationOf<"item.add">, env: OpEnv): OpOutcome {
     opened: nn(f.opened),
     occurredAt: nn(f.occurredAt),
   });
-
-  // Adding the same item again clears `stock` (backend-data.md §6).
-  const restock = Object.values(kitchen.items).filter((i) => i.standardName === std && i.stock);
-  if (restock.length === 1) {
-    const item = restock[0];
-    const payload: ItemUpdatedPayload = { itemId: item.id, set: facts, clear: ["stock"] };
+  const { event, itemId, restocked } = addToKitchen(f.name, facts, env.kitchen, env);
+  const itemRef: ChangeRef = { kind: "item", id: itemId, change: restocked ? "updated" : "added" };
+  const name = restocked ? restocked.name.value : f.name.value;
+  const fromList = boughtClearsListItems(f.name, itemId, env);
+  if (fromList.events.length > 0) {
     return ok(
-      [make(k, KITCHEN_EVENT.itemUpdated, payload, { occurredAt: facts.occurredAt?.value ?? null })],
-      msg("ITEM_RESTOCKED", { name: item.name.value }),
-      [{ kind: "item", id: item.id, change: "updated" }],
+      [event, ...fromList.events],
+      msg(restocked ? "ITEM_RESTOCKED_FROM_LIST" : "ITEM_ADDED_FROM_LIST", { name }),
+      [itemRef, ...fromList.refs],
     );
   }
+  return ok([event], msg(restocked ? "ITEM_RESTOCKED" : "ITEM_ADDED", { name }), [itemRef]);
+}
 
-  const payload: ItemAddedPayload = { itemId: ctx.newId(), name: f.name, standardName: std, ...facts };
-  return ok(
-    [make(k, KITCHEN_EVENT.itemAdded, payload, { occurredAt: facts.occurredAt?.value ?? null })],
-    msg("ITEM_ADDED", { name: f.name.value }),
-    [{ kind: "item", id: payload.itemId, change: "added" }],
-  );
+/**
+ * SL5 Rec (pending Vero's answer; ux.md §10): telling Kitchen in chat that you bought something
+ * takes the matching open shopping-list item (same standard name) off the list as moved, in the
+ * same change set, so one Undo restores both. Set to false to switch the rule off.
+ */
+export const SL5_BOUGHT_IN_CHAT_CLEARS_LIST = true;
+
+function boughtClearsListItems(name: Fact<string>, itemId: string, env: OpEnv): { events: EventEnvelope[]; refs: ChangeRef[] } {
+  if (!SL5_BOUGHT_IN_CHAT_CLEARS_LIST || env.ctx.via !== "chat") return { events: [], refs: [] };
+  const std = standardName(name.value);
+  const matches = Object.values(env.kitchen.shopping).filter((e) => e.status === "open" && e.standardName === std);
+  const k = kitchenStream(env.ctx.kitchenId);
+  return {
+    events: matches.map((e) => {
+      const payload: ShoppingMovedPayload = { shoppingItemId: e.id, itemId };
+      return emit(env, k, KITCHEN_EVENT.shoppingMoved, payload);
+    }),
+    refs: matches.map((e) => ({ kind: "shopping", id: e.id, change: "removed" })),
+  };
 }
 
 function recordUnknownItem(name: Fact<string>, env: OpEnv, extra: Partial<ItemAddedPayload> = {}): EventEnvelope {
@@ -532,12 +577,208 @@ function reviewResolve(op: OperationOf<"review.resolve">, env: OpEnv): OpOutcome
   );
 }
 
+// ─── Shopping list (0027, SL1–SL3) ───────────────────────────────────────────────────
+
+type ShoppingMatch =
+  | { kind: "found"; entry: ShoppingItem }
+  | { kind: "none" }
+  | { kind: "ambiguous" }
+  | { kind: "unknown-id" }
+  | { kind: "not-open"; entry: ShoppingItem };
+
+const openShopping = (kitchen: KitchenEntities) => Object.values(kitchen.shopping).filter((e) => e.status === "open");
+
+/** `{shoppingItemId}` exact; `{name}` matched like items (exact standard name, then all the words), open items only. */
+export function resolveShopping(target: ShoppingTarget, kitchen: KitchenEntities): ShoppingMatch {
+  if ("shoppingItemId" in target) {
+    const entry = kitchen.shopping[target.shoppingItemId];
+    if (!entry) return { kind: "unknown-id" };
+    return entry.status === "open" ? { kind: "found", entry } : { kind: "not-open", entry };
+  }
+  const open = openShopping(kitchen);
+  const std = standardName(target.name);
+  let m = open.filter((e) => e.standardName === std);
+  if (m.length === 0) {
+    const tokens = nameTokens(target.name);
+    m = tokens.length ? open.filter((e) => tokens.every((t) => e.standardName.split(" ").includes(t))) : [];
+  }
+  if (m.length === 1) return { kind: "found", entry: m[0] };
+  return m.length > 1 ? { kind: "ambiguous" } : { kind: "none" };
+}
+
+/**
+ * A store that matches one already on the list (ignoring case and punctuation) keeps that
+ * spelling, so "md oriental" and "MD Oriental" don't become two groups (SL1).
+ */
+function canonicalStore(store: Fact<string> | undefined, kitchen: KitchenEntities): Fact<string> | undefined {
+  if (!store) return undefined;
+  const key = normalizeText(store.value);
+  if (!key) return undefined;
+  const known = openShopping(kitchen).find((e) => e.store && normalizeText(e.store.value) === key);
+  return known?.store ? { ...store, value: known.store.value } : { ...store, value: store.value.trim() };
+}
+
+const sameQuantity = (a: Fact<Quantity> | undefined, b: Fact<Quantity>) =>
+  a !== undefined && normalizeText(a.value.asSaid) === normalizeText(b.value.asSaid);
+
+function shoppingRejectFor(match: ShoppingMatch, target: ShoppingTarget): OpOutcome | null {
+  const targetName = "name" in target ? target.name : "";
+  if (match.kind === "unknown-id") return reject("UNKNOWN_TARGET");
+  if (match.kind === "not-open") return reject("NOT_ON_LIST", { name: match.entry.name.value });
+  if (match.kind === "ambiguous") return reject("AMBIGUOUS_ITEM", { name: targetName });
+  if (match.kind === "none") return ok([], msg("SHOPPING_NOT_FOUND", { name: targetName }), []);
+  return null;
+}
+
+function shoppingAdd(op: OperationOf<"shopping.add">, env: OpEnv): OpOutcome {
+  const k = kitchenStream(env.ctx.kitchenId);
+  const f = op.fields;
+  const std = standardName(f.name.value);
+  if (!std) return reject("INVALID_OPERATION");
+  const quantity = nn(f.quantity);
+  const store = canonicalStore(nn(f.store), env.kitchen);
+
+  // Already open on the list: merge instead of duplicating; a newly given store or quantity wins.
+  const existing = openShopping(env.kitchen).find((e) => e.standardName === std);
+  if (existing) {
+    const set = compact({
+      quantity: quantity && !sameQuantity(existing.quantity, quantity) ? quantity : undefined,
+      store: store && store.value !== existing.store?.value ? store : undefined,
+    });
+    if (Object.keys(set).length === 0) return ok([], msg("SHOPPING_ALREADY", { name: existing.name.value }), []);
+    const payload: ShoppingUpdatedPayload = { shoppingItemId: existing.id, set, clear: [] };
+    return ok(
+      [emit(env, k, KITCHEN_EVENT.shoppingUpdated, payload)],
+      set.store
+        ? msg("SHOPPING_STORE", { name: existing.name.value, store: set.store.value })
+        : msg("SHOPPING_UPDATED", { name: existing.name.value }),
+      [{ kind: "shopping", id: existing.id, change: "updated" }],
+    );
+  }
+
+  const positions = Object.values(env.kitchen.shopping).map((e) => e.position);
+  const payload: ShoppingAddedPayload = compact({
+    shoppingItemId: env.ctx.newId(),
+    name: f.name,
+    standardName: std,
+    quantity,
+    store,
+    source: op.source ?? "chat",
+    position: positions.length ? Math.max(...positions) + 1 : 1,
+  });
+  return ok(
+    [emit(env, k, KITCHEN_EVENT.shoppingAdded, payload)],
+    store
+      ? msg("SHOPPING_ADDED_STORE", { name: f.name.value, store: store.value })
+      : msg("SHOPPING_ADDED", { name: f.name.value }),
+    [{ kind: "shopping", id: payload.shoppingItemId, change: "added" }],
+  );
+}
+
+function shoppingUpdate(op: OperationOf<"shopping.update">, env: OpEnv): OpOutcome {
+  const f = op.fields;
+  const clear = op.clear ?? [];
+  const store = canonicalStore(nn(f.store), env.kitchen);
+  const set = compact({
+    name: nn(f.name),
+    standardName: f.name ? standardName(f.name.value) : undefined,
+    quantity: nn(f.quantity),
+    store,
+  });
+  if (clear.some((field) => field in set)) return reject("INVALID_OPERATION");
+  if (set.standardName === "") return reject("INVALID_OPERATION");
+
+  const match = resolveShopping(op.target, env.kitchen);
+  const rejected = shoppingRejectFor(match, op.target);
+  if (rejected) return rejected;
+  const entry = (match as { entry: ShoppingItem }).entry;
+  if (Object.keys(set).length === 0 && clear.length === 0) return noChange();
+
+  const payload: ShoppingUpdatedPayload = { shoppingItemId: entry.id, set, clear };
+  const name = set.name?.value ?? entry.name.value;
+  return ok(
+    [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.shoppingUpdated, payload)],
+    store ? msg("SHOPPING_STORE", { name, store: store.value }) : msg("SHOPPING_UPDATED", { name }),
+    [{ kind: "shopping", id: entry.id, change: "updated" }],
+  );
+}
+
+function shoppingTick(op: OperationOf<"shopping.tick">, env: OpEnv): OpOutcome {
+  const match = resolveShopping(op.target, env.kitchen);
+  const rejected = shoppingRejectFor(match, op.target);
+  if (rejected) return rejected;
+  const entry = (match as { entry: ShoppingItem }).entry;
+  // Already as asked (e.g. both of you ticked it): the first tick, and who made it, stand.
+  if (Boolean(entry.tickedAt) === op.ticked) return noChange();
+  const payload: ShoppingTickedPayload = { shoppingItemId: entry.id, ticked: op.ticked };
+  return ok(
+    [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.shoppingTicked, payload)],
+    msg(op.ticked ? "SHOPPING_TICKED" : "SHOPPING_UNTICKED", { name: entry.name.value }),
+    [{ kind: "shopping", id: entry.id, change: "updated" }],
+  );
+}
+
+function shoppingRemove(op: OperationOf<"shopping.remove">, env: OpEnv): OpOutcome {
+  const match = resolveShopping(op.target, env.kitchen);
+  const rejected = shoppingRejectFor(match, op.target);
+  if (rejected) return rejected;
+  const entry = (match as { entry: ShoppingItem }).entry;
+  const payload: ShoppingRemovedPayload = { shoppingItemId: entry.id };
+  return ok(
+    [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.shoppingRemoved, payload)],
+    msg("SHOPPING_REMOVED", { name: entry.name.value }),
+    [{ kind: "shopping", id: entry.id, change: "removed" }],
+  );
+}
+
+/** "Done shopping" (SL2): chosen ticked items go into the kitchen and leave the list. All or nothing. */
+function shoppingDone(op: OperationOf<"shopping.done">, env: OpEnv): OpOutcome {
+  const k = kitchenStream(env.ctx.kitchenId);
+  const seen = new Set<string>();
+  const chosen: { entry: ShoppingItem; fields: (typeof op.items)[number]["fields"] }[] = [];
+  for (const { shoppingItemId, fields } of op.items) {
+    if (seen.has(shoppingItemId)) return reject("INVALID_OPERATION");
+    seen.add(shoppingItemId);
+    const entry = env.kitchen.shopping[shoppingItemId];
+    if (!entry) return reject("UNKNOWN_TARGET");
+    if (entry.status !== "open") return reject("NOT_ON_LIST", { name: entry.name.value });
+    if (!entry.tickedAt) return reject("NOT_TICKED", { name: entry.name.value });
+    chosen.push({ entry, fields });
+  }
+
+  let working = env.kitchen;
+  const events: EventEnvelope[] = [];
+  const refs: ChangeRef[] = [];
+  for (const { entry, fields } of chosen) {
+    const facts: KitchenFacts = compact({
+      quantity: nn(fields?.quantity) ?? entry.quantity,
+      location: nn(fields?.location),
+      frozen: nn(fields?.frozen),
+      opened: nn(fields?.opened),
+    });
+    const added = addToKitchen(entry.name, facts, working, env);
+    const moved: ShoppingMovedPayload = { shoppingItemId: entry.id, itemId: added.itemId };
+    const movedEvent = emit(env, k, KITCHEN_EVENT.shoppingMoved, moved);
+    for (const e of [added.event, movedEvent]) {
+      working = apply(working, e);
+      events.push(e);
+    }
+    refs.push(
+      { kind: "item", id: added.itemId, change: added.restocked ? "updated" : "added" },
+      { kind: "shopping", id: entry.id, change: "removed" },
+    );
+  }
+  const names = chosen.map((c) => c.entry.name.value);
+  return ok(events, msg("SHOPPING_DONE", { count: names.length, names: names.join(", ") }), refs);
+}
+
 const REF_KIND: Record<string, RefKind> = {
   item: "item",
   meal: "meal",
   recipe: "recipe",
   tick: "tick",
   review: "review",
+  shopping: "shopping",
   restriction: "profile",
   preference: "profile",
 };
@@ -582,6 +823,12 @@ function targetKeys(op: Operation): string[] {
       return [`meal:${op.target.mealId}`];
     case "review.resolve":
       return [`review:${op.target.reviewId}`];
+    case "shopping.update":
+    case "shopping.tick":
+    case "shopping.remove":
+      return "shoppingItemId" in op.target ? [`shopping:${op.target.shoppingItemId}`] : [];
+    case "shopping.done":
+      return op.items.map((i) => `shopping:${i.shoppingItemId}`);
     default:
       return [];
   }
@@ -616,6 +863,16 @@ function validateOperation(op: Operation, env: OpEnv): OpOutcome {
       return reviewQueue(op, env);
     case "review.resolve":
       return reviewResolve(op, env);
+    case "shopping.add":
+      return shoppingAdd(op, env);
+    case "shopping.update":
+      return shoppingUpdate(op, env);
+    case "shopping.tick":
+      return shoppingTick(op, env);
+    case "shopping.remove":
+      return shoppingRemove(op, env);
+    case "shopping.done":
+      return shoppingDone(op, env);
     case "changeset.revert":
       return changesetRevert(op, env);
     case "profile.restriction.add":

@@ -10,6 +10,8 @@ const TEMPLATES: Record<string, string> = {
   // applied summaries
   ITEM_ADDED: "Added {name}",
   ITEM_RESTOCKED: "Added {name} (back in stock)",
+  ITEM_ADDED_FROM_LIST: "Added {name} and took it off the shopping list",
+  ITEM_RESTOCKED_FROM_LIST: "Added {name} (back in stock) and took it off the shopping list",
   ITEM_UPDATED: "Updated {name}",
   ITEM_MOVED: "{name} → {location}",
   ITEM_USED: "Used {name}",
@@ -35,6 +37,17 @@ const TEMPLATES: Record<string, string> = {
   PREFERENCE_SAVED: "I'll remember: {statement}",
   PREFERENCE_REMOVED: "Forgot: {statement}",
   UNDONE: "Undid that change",
+  // shopping list (0027)
+  SHOPPING_ADDED: "Added {name} to the shopping list",
+  SHOPPING_ADDED_STORE: "Added {name} to the shopping list ({store})",
+  SHOPPING_ALREADY: "{name} is already on the shopping list",
+  SHOPPING_STORE: "{name} → {store}",
+  SHOPPING_UPDATED: "Updated {name} on the shopping list",
+  SHOPPING_TICKED: "Got {name}",
+  SHOPPING_UNTICKED: "Unticked {name}",
+  SHOPPING_REMOVED: "Took {name} off the shopping list",
+  SHOPPING_NOT_FOUND: "{name} isn't on the shopping list",
+  SHOPPING_DONE: "Put {count} things from the shopping list in your kitchen: {names}",
   // rejections
   UNKNOWN_ITEM: "That item isn't in this kitchen",
   AMBIGUOUS_ITEM: "More than one item matches {name}",
@@ -49,6 +62,8 @@ const TEMPLATES: Record<string, string> = {
   ALREADY_UNDONE: "That was already undone",
   INVALID_OPERATION: "That change doesn't make sense",
   UNDO_OF_UNDO: "An undo can't be undone; tell me what to fix",
+  NOT_ON_LIST: "{name} isn't on the shopping list any more",
+  NOT_TICKED: "{name} isn't ticked yet",
   // errors
   INVALID_PROPOSAL: "I couldn't understand that change, so nothing changed",
   SAVE_FAILED: "I couldn't save that, so nothing changed",

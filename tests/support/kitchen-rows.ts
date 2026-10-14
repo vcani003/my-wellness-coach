@@ -21,7 +21,7 @@ export function item(id: string, name: string, extra: Partial<ItemRow> = {}): It
 }
 
 export function kitchen(items: ItemRow[], version = 1): KitchenState {
-  return { kitchenId: "k1", version, items, meals: [], plan: [], ticks: [], toReview: [] };
+  return { kitchenId: "k1", version, items, meals: [], plan: [], ticks: [], toReview: [], shoppingList: [] };
 }
 
 export { said };

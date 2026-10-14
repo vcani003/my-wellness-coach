@@ -258,6 +258,36 @@ export const reviews = pgTable(
   (t) => [index("reviews_kitchen_idx").on(t.kitchenId, t.status)],
 );
 
+/**
+ * The shared shopping list (0027). Every item ever put on the list stays, with `status`
+ * open | removed | moved, for history and Undo; KitchenState shows only the open ones.
+ * Who ticked = `ticked_by` (shared ticks, like the recipe checklist).
+ */
+export const shoppingItems = pgTable(
+  "shopping_items",
+  {
+    id: text("id").primaryKey(),
+    kitchenId: text("kitchen_id")
+      .notNull()
+      .references(() => kitchens.id, { onDelete: "cascade" }),
+    name: jsonb("name").$type<Fact<string>>().notNull(),
+    standardName: text("standard_name").notNull(),
+    quantity: jsonb("quantity").$type<Fact<Quantity>>(),
+    /** Null = "Anywhere" (SL1). */
+    store: jsonb("store").$type<Fact<string>>(),
+    /** chat | staples | recipe | stock-offer */
+    source: text("source").notNull(),
+    position: integer("position").notNull(),
+    /** open | removed | moved */
+    status: text("status").notNull(),
+    tickedAt: ts("ticked_at"),
+    tickedBy: text("ticked_by"),
+    movedToItemId: text("moved_to_item_id"),
+    ...audit,
+  },
+  (t) => [index("shopping_items_kitchen_idx").on(t.kitchenId, t.status)],
+);
+
 // ─── Projections: shared profile ──────────────────────────────────────────────────────
 
 /** Allergies and diets (0012, 0019). Saved only when said; the note is stored as said. */
