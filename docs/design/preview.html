@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kitchen calm directions</title>
+<meta name="description" content="A mood preview of three calm visual directions for Kitchen. Not production code.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Figtree:wght@400;500;600&family=Fraunces:opsz,wght@9..144,500..600&family=Nunito:wght@400;600;700&display=swap">
+<style>
+/* ---------- Tokens: one set per direction (see visual-direction.md §4) ---------- */
+:root, [data-direction="a"] {
+  --color-surface-default:#F7F4EE; --color-surface-raised:#FFFDF9; --color-surface-sunken:#EEE9E0;
+  --color-text-default:#2E2A25; --color-text-muted:#625B51; --color-text-inverse:#FFFDF9;
+  --color-border-default:#E3DCD0; --color-border-strong:#8A8274;
+  --color-accent-default:#4D6A54; --color-accent-text:#43604A; --color-accent-soft:#E4ECE3;
+  --color-focus-ring:#3B6E8C;
+  --color-highlight-bg:#FBF0D2; --color-highlight-text:#6A4D10;
+  --color-success-bg:#E5EFE4; --color-success-text:#2F6640;
+  --color-allergy-bg:#F5EBF3; --color-allergy-text:#5E2B58; --color-allergy-border:#8C4C84;
+  --color-warning-bg:#F8EED9; --color-warning-text:#6E4D12;
+  --color-error-bg:#F9E9E6; --color-error-text:#9A3329;
+  --color-selected-bg:#E4ECE3; --color-selected-border:#4D6A54;
+  --font-heading:"Fraunces", Georgia, serif; --font-body:"Figtree", system-ui, sans-serif;
+  --weight-heading:560; --weight-medium:500; --weight-strong:600;
+  --radius-sm:8px; --radius-md:12px; --radius-lg:20px; --radius-button:12px;
+  --shadow-card:0 1px 2px rgb(46 42 37 / .06);
+  --shadow-dock:0 -4px 16px rgb(46 42 37 / .08);
+  --motion-quick:120ms; --motion-gentle:280ms; --motion-slow:480ms;
+  --ease-gentle:cubic-bezier(0.25, 0.1, 0.25, 1);
+  --icon-stroke:1.5;
+}
+[data-direction="b"] {
+  --color-surface-default:#F2F5F6; --color-surface-raised:#FFFFFF; --color-surface-sunken:#E6ECEE;
+  --color-text-default:#1E2A30; --color-text-muted:#52626A; --color-text-inverse:#FFFFFF;
+  --color-border-default:#D9E1E4; --color-border-strong:#7C8A91;
+  --color-accent-default:#37677A; --color-accent-text:#305E70; --color-accent-soft:#DDEAEE;
+  --color-focus-ring:#2E5FA8;
+  --color-highlight-bg:#FAF2D3; --color-highlight-text:#644C12;
+  --color-success-bg:#E1F0E7; --color-success-text:#286445;
+  --color-allergy-bg:#F4EAF2; --color-allergy-text:#5F2A59; --color-allergy-border:#8E4986;
+  --color-warning-bg:#F9EFD8; --color-warning-text:#6C4C10;
+  --color-error-bg:#FBE8E6; --color-error-text:#9C2F2A;
+  --color-selected-bg:#DDEAEE; --color-selected-border:#37677A;
+  --font-heading:"Atkinson Hyperlegible", system-ui, sans-serif; --font-body:"Atkinson Hyperlegible", system-ui, sans-serif;
+  --weight-heading:700; --weight-medium:400; --weight-strong:700;
+  --radius-sm:6px; --radius-md:10px; --radius-lg:16px; --radius-button:10px;
+  --shadow-card:none;
+  --shadow-dock:0 -1px 0 #D9E1E4, 0 -2px 10px rgb(30 42 48 / .05);
+  --motion-quick:100ms; --motion-gentle:240ms; --motion-slow:400ms;
+  --ease-gentle:cubic-bezier(0.2, 0, 0, 1);
+  --icon-stroke:1.75;
+}
+[data-direction="c"] {
+  --color-surface-default:#FAF4EC; --color-surface-raised:#FFFBF6; --color-surface-sunken:#F1E8DC;
+  --color-text-default:#33281F; --color-text-muted:#685A4D; --color-text-inverse:#FFFBF6;
+  --color-border-default:#E8DCCC; --color-border-strong:#94826F;
+  --color-accent-default:#9A4E2F; --color-accent-text:#8E4729; --color-accent-soft:#F6E3D8;
+  --color-focus-ring:#2F6A6A;
+  --color-highlight-bg:#FAEFC9; --color-highlight-text:#654A0E;
+  --color-success-bg:#E6EFE0; --color-success-text:#3A6135;
+  --color-allergy-bg:#F3E9F2; --color-allergy-text:#5A2A57; --color-allergy-border:#87487F;
+  --color-warning-bg:#F8EDD6; --color-warning-text:#6B4A0F;
+  --color-error-bg:#F9E6E3; --color-error-text:#9B2D2A;
+  --color-selected-bg:#F6E3D8; --color-selected-border:#9A4E2F;
+  --font-heading:"Nunito", system-ui, sans-serif; --font-body:"Nunito", system-ui, sans-serif;
+  --weight-heading:700; --weight-medium:600; --weight-strong:700;
+  --radius-sm:12px; --radius-md:18px; --radius-lg:26px; --radius-button:999px;
+  --shadow-card:0 2px 10px rgb(51 40 31 / .07);
+  --shadow-dock:0 -6px 24px rgb(51 40 31 / .10);
+  --motion-quick:140ms; --motion-gentle:320ms; --motion-slow:560ms;
+  --ease-gentle:cubic-bezier(0.33, 1, 0.68, 1);
+  --icon-stroke:2;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root, [data-direction] { --motion-quick:0ms; --motion-gentle:0ms; --motion-slow:0ms; }
+}
+
+/* ---------- Base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; min-height: 100vh;
+  background: var(--color-surface-sunken); color: var(--color-text-default);
+  font: 400 16px/24px var(--font-body);
+}
+body, body * {
+  transition: background-color var(--motion-gentle) var(--ease-gentle),
+              color var(--motion-gentle) var(--ease-gentle),
+              border-color var(--motion-gentle) var(--ease-gentle);
+}
+h1, h2, h3, p, ul, dl, dd, figure { margin: 0; }
+ul { padding: 0; list-style: none; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.icon { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: var(--icon-stroke); stroke-linecap: round; stroke-linejoin: round; }
+.muted { color: var(--color-text-muted); }
+
+/* ---------- Page chrome ---------- */
+.page-head { max-width: 980px; margin: 0 auto; padding: 32px 16px 8px; }
+.eyebrow { font-size: 13px; line-height: 18px; color: var(--color-text-muted); }
+.page-head h1 { font: var(--weight-heading) 28px/34px var(--font-heading); margin-top: 4px; }
+.page-head .lead { max-width: 60ch; margin-top: 8px; color: var(--color-text-muted); }
+.switcher { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.switcher button {
+  min-height: 44px; padding: 8px 16px; border-radius: var(--radius-button);
+  border: 1px solid var(--color-border-strong); background: var(--color-surface-raised);
+  font-weight: var(--weight-medium);
+}
+.switcher button[aria-pressed="true"] {
+  background: var(--color-selected-bg); border-color: var(--color-selected-border);
+  box-shadow: inset 0 0 0 1px var(--color-selected-border); font-weight: var(--weight-strong);
+}
+.stage {
+  max-width: 980px; margin: 0 auto; padding: 24px 16px 64px;
+  display: grid; grid-template-columns: 410px minmax(0, 1fr); gap: 48px; align-items: start;
+}
+
+/* ---------- Phone ---------- */
+.phone-wrap { padding: 10px; }
+.phone {
+  width: 390px; height: 844px; border-radius: 46px; overflow: hidden;
+  display: flex; flex-direction: column; position: relative;
+  background: var(--color-surface-default);
+  box-shadow: 0 0 0 10px #26231F, 0 24px 60px rgb(0 0 0 / .16);
+}
+.statusbar { display: flex; justify-content: space-between; padding: 14px 30px 0; height: 44px; font-size: 15px; font-weight: 600; font-family: system-ui, sans-serif; }
+.appbar { display: flex; align-items: center; justify-content: space-between; padding: 4px 16px 8px; }
+.app-title { font: var(--weight-heading) 22px/28px var(--font-heading); }
+.avatar {
+  width: 44px; height: 44px; border-radius: 999px; border: 1px solid var(--color-border-default);
+  background: var(--color-accent-soft); font-weight: var(--weight-strong);
+}
+.workspace { flex: 1; overflow-y: auto; padding: 4px 16px 24px; display: flex; flex-direction: column; gap: 24px; }
+.widget {
+  background: var(--color-surface-raised); border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-card); padding: 16px;
+}
+.widget-head { display: flex; align-items: baseline; gap: 8px; }
+.widget-title { font: var(--weight-heading) 18px/24px var(--font-heading); }
+.widget-head .count { font-size: 13px; line-height: 18px; color: var(--color-text-muted); }
+.widget-head .end { margin-left: auto; }
+.link { color: var(--color-accent-text); font-weight: var(--weight-medium); text-decoration: none; padding: 10px 0; }
+.link:hover { text-decoration: underline; }
+
+.review {
+  width: 100%; display: flex; align-items: center; gap: 8px; margin-top: 12px;
+  min-height: 44px; padding: 8px 12px; text-align: left;
+  background: var(--color-surface-sunken); border: 0; border-radius: var(--radius-md);
+}
+.review span { display: block; }
+.review .what { font-size: 13px; line-height: 18px; color: var(--color-text-muted); }
+.review .icon { margin-left: auto; color: var(--color-text-muted); }
+.group { margin: 16px 0 4px; font-size: 13px; line-height: 18px; font-weight: var(--weight-strong); color: var(--color-text-muted); }
+.item {
+  display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 10px; margin: 0 -10px;
+}
+.item + .item { border-top: 1px solid var(--color-border-default); }
+.item .name { font-weight: var(--weight-medium); }
+.item .meta { font-size: 13px; line-height: 18px; color: var(--color-text-muted); margin-left: auto; text-align: right; }
+.item.is-changed { background: var(--color-highlight-bg); border-top-color: transparent; border-radius: var(--radius-sm); }
+.item.is-changed + .item { border-top-color: transparent; }
+.animate .item.is-changed { animation: wash var(--motion-slow) var(--ease-gentle) both; }
+@keyframes wash { from { background-color: transparent; } to { background-color: var(--color-highlight-bg); } }
+.label { font-size: 13px; line-height: 18px; font-weight: var(--weight-strong); color: var(--color-highlight-text); }
+.tag {
+  font-size: 13px; line-height: 18px; padding: 1px 8px; border-radius: 999px;
+  background: var(--color-surface-sunken); color: var(--color-text-muted);
+}
+
+.widget-sub { font-size: 13px; line-height: 18px; color: var(--color-text-muted); }
+.icon-btn {
+  width: 44px; height: 44px; display: grid; place-items: center; margin: -10px -10px -10px auto;
+  border: 0; background: transparent; border-radius: 999px; color: var(--color-text-muted);
+}
+.idea {
+  margin-top: 12px; padding: 16px; border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-default); background: var(--color-surface-raised);
+}
+.idea h3 { font: var(--weight-heading) 18px/24px var(--font-heading); }
+.idea .why { margin-top: 4px; font-size: 15px; line-height: 22px; color: var(--color-text-muted); }
+.idea dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin-top: 12px; font-size: 15px; line-height: 22px; }
+.idea dt { color: var(--color-text-muted); }
+.allergy {
+  display: flex; gap: 10px; margin-top: 14px; padding: 12px 12px 12px 10px;
+  background: var(--color-allergy-bg); color: var(--color-allergy-text);
+  border-left: 4px solid var(--color-allergy-border); border-radius: var(--radius-sm);
+  font-size: 15px; line-height: 22px;
+}
+.allergy .icon { color: var(--color-allergy-border); margin-top: 1px; }
+.allergy strong { font-weight: var(--weight-strong); }
+.allergy .note { margin-top: 4px; }
+.btn {
+  min-height: 44px; padding: 10px 20px; border-radius: var(--radius-button);
+  font-weight: var(--weight-strong); border: 1px solid transparent;
+  transition: transform var(--motion-quick) var(--ease-gentle), background-color var(--motion-gentle) var(--ease-gentle);
+}
+.btn:active { transform: scale(.98); }
+.btn-primary { background: var(--color-accent-default); color: var(--color-text-inverse); }
+.idea .btn { margin-top: 14px; width: 100%; }
+.caption-note { margin-top: 12px; font-size: 13px; line-height: 18px; color: var(--color-text-muted); text-align: center; }
+
+/* Chat dock, Peek */
+.dock {
+  background: var(--color-surface-raised); border-top: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0; box-shadow: var(--shadow-dock);
+  padding: 0 16px 24px; display: flex; flex-direction: column; gap: 8px;
+}
+.dock-bar { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; margin-bottom: -6px; }
+.handle { grid-column: 2; justify-self: center; width: 88px; height: 28px; border: 0; background: transparent; display: grid; place-items: center; border-radius: 999px; }
+.handle span { width: 40px; height: 5px; border-radius: 999px; background: var(--color-border-strong); }
+.dock-bar .icon-btn { grid-column: 3; margin: 0; }
+.bubble {
+  align-self: flex-start; max-width: 88%; padding: 10px 14px;
+  background: var(--color-surface-sunken); border-radius: var(--radius-md) var(--radius-md) var(--radius-md) 4px;
+}
+.receipt {
+  border: 1px solid var(--color-border-default); border-radius: var(--radius-md);
+  padding: 8px 12px 0; background: var(--color-surface-raised);
+}
+.receipt-title { font-size: 13px; line-height: 18px; font-weight: var(--weight-strong); color: var(--color-text-muted); }
+.receipt li { display: flex; gap: 8px; align-items: center; font-size: 15px; line-height: 22px; margin-top: 2px; }
+.receipt li .icon { width: 18px; height: 18px; color: var(--color-success-text); }
+.receipt-actions { display: flex; gap: 4px; margin: 0 -10px; }
+.text-btn {
+  min-height: 44px; padding: 0 10px; border: 0; background: transparent; border-radius: var(--radius-sm);
+  color: var(--color-accent-text); font-weight: var(--weight-strong);
+}
+.text-btn:hover { background: var(--color-accent-soft); }
+.composer { display: flex; gap: 8px; align-items: center; }
+.composer input {
+  flex: 1; min-width: 0; min-height: 44px; padding: 10px 14px;
+  background: var(--color-surface-sunken); border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-button); font-size: 16px;
+}
+.composer input::placeholder { color: var(--color-text-muted); opacity: 1; }
+.send {
+  width: 44px; height: 44px; border-radius: 999px; border: 0; display: grid; place-items: center;
+  background: var(--color-accent-default); color: var(--color-text-inverse);
+}
+
+/* ---------- Notes column ---------- */
+.notes { display: flex; flex-direction: column; gap: 20px; }
+.card {
+  background: var(--color-surface-raised); border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-card); padding: 20px;
+}
+.dir-name { font: var(--weight-heading) 26px/32px var(--font-heading); }
+.badge {
+  display: inline-block; margin-left: 8px; padding: 2px 10px; vertical-align: middle;
+  font: var(--weight-strong) 13px/18px var(--font-body); border-radius: 999px;
+  background: var(--color-success-bg); color: var(--color-success-text);
+}
+.badge[hidden] { display: none; }
+.feeling { margin-top: 6px; font-style: italic; color: var(--color-text-muted); }
+.dir-body { margin-top: 12px; }
+.dir-type { margin-top: 8px; font-size: 15px; line-height: 22px; color: var(--color-text-muted); }
+.card h2 { font: var(--weight-heading) 18px/24px var(--font-heading); }
+.card h2 + * { margin-top: 12px; }
+
+.mini-row { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.mini {
+  width: 180px; height: 300px; border-radius: 26px; overflow: hidden; position: relative; flex: none;
+  background: var(--color-surface-default); box-shadow: 0 0 0 6px #26231F;
+  margin: 6px; padding: 30px 10px 10px; font-size: 11px; line-height: 15px;
+}
+.mini .mini-title { font: var(--weight-heading) 14px/18px var(--font-heading); margin-bottom: 8px; }
+.mini .mini-widget { background: var(--color-surface-raised); border: 1px solid var(--color-border-default); border-radius: var(--radius-md); padding: 8px; }
+.mini .mini-widget + .mini-widget { margin-top: 8px; }
+.mini li { display: flex; justify-content: space-between; padding: 3px 0; }
+.mini li.is-changed { background: var(--color-highlight-bg); margin: 0 -4px; padding: 3px 4px; border-radius: 4px; }
+.chat-fab {
+  position: absolute; right: 14px; bottom: 18px; width: 48px; height: 48px; border-radius: 999px; border: 0;
+  display: grid; place-items: center; background: var(--color-accent-default); color: var(--color-text-inverse);
+  box-shadow: 0 4px 14px rgb(0 0 0 / .14);
+}
+.chat-fab .icon { width: 22px; height: 22px; }
+.chat-fab .dot {
+  position: absolute; top: 2px; right: 2px; width: 13px; height: 13px; border-radius: 999px;
+  background: var(--color-highlight-bg); box-shadow: 0 0 0 2px var(--color-accent-default);
+}
+.mini-cap { flex: 1; min-width: 180px; font-size: 15px; line-height: 22px; color: var(--color-text-muted); }
+
+.moments { display: flex; flex-direction: column; gap: 12px; }
+.moment-label { font-size: 13px; line-height: 18px; font-weight: var(--weight-strong); color: var(--color-text-muted); margin-bottom: 4px; }
+.receipt.undone li { color: var(--color-text-muted); }
+.receipt.undone li s { text-decoration-thickness: 1px; }
+.undone-note { font-size: 13px; line-height: 18px; color: var(--color-text-muted); padding: 6px 0 8px; }
+.error-line {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 6px 6px 14px;
+  background: var(--color-error-bg); color: var(--color-error-text); border-radius: var(--radius-md); font-size: 15px; line-height: 22px;
+}
+.error-line .text-btn { color: var(--color-error-text); text-decoration: underline; text-underline-offset: 3px; }
+.error-line .text-btn:hover { background: transparent; }
+.warning-line { padding: 10px 14px; background: var(--color-warning-bg); color: var(--color-warning-text); border-radius: var(--radius-md); font-size: 15px; line-height: 22px; }
+.offline-line { padding: 10px 14px; background: var(--color-surface-sunken); color: var(--color-text-muted); border-radius: var(--radius-md); font-size: 15px; line-height: 22px; }
+
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.swatch { display: flex; gap: 10px; align-items: center; font-size: 13px; line-height: 18px; }
+.chip { width: 32px; height: 32px; border-radius: var(--radius-sm); flex: none; border: 1px solid rgb(0 0 0 / .12); }
+.swatch code { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--color-text-muted); }
+.footer-note { font-size: 13px; line-height: 18px; color: var(--color-text-muted); }
+
+/* ---------- Narrow screens ---------- */
+@media (max-width: 900px) {
+  .stage { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 32px; }
+  .notes { width: 100%; max-width: 560px; }
+}
+@media (max-width: 460px) {
+  .stage { padding: 16px 0 48px; }
+  .phone-wrap { padding: 0; width: 100%; }
+  .phone { width: 100%; height: auto; border-radius: 0; box-shadow: none; border-block: 1px solid var(--color-border-default); }
+  .statusbar { display: none; }
+  .appbar { padding-top: 12px; }
+  .workspace { overflow: visible; }
+  .dock { padding-bottom: 20px; }
+  .notes { padding: 0 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body, body * { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body data-direction="a">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+</svg>
+
+<header class="page-head">
+  <p class="eyebrow">Kitchen · visual direction preview · not production code</p>
+  <h1>Three calm directions</h1>
+  <p class="lead">The same screen in three moods. Only the look changes: colour, type, shape and motion. Switch between them and notice which one you'd like to open at the end of a long day.</p>
+  <div class="switcher" role="group" aria-label="Choose a direction">
+    <button type="button" data-set="a" aria-pressed="true">A · Linen &amp; Sage</button>
+    <button type="button" data-set="b" aria-pressed="false">B · Still Water</button>
+    <button type="button" data-set="c" aria-pressed="false">C · Clay &amp; Honey</button>
+  </div>
+</header>
+
+<main class="stage">
+  <div class="phone-wrap">
+    <section class="phone" aria-label="Phone preview: main screen, chat in Peek">
+      <div class="statusbar" aria-hidden="true"><span>9:41</span><span>●●● ▮</span></div>
+      <header class="appbar">
+        <p class="app-title">Kitchen</p>
+        <button type="button" class="avatar" aria-label="Settings">V</button>
+      </header>
+
+      <div class="workspace animate" id="workspace">
+        <section class="widget" aria-labelledby="w-kitchen">
+          <div class="widget-head">
+            <h2 class="widget-title" id="w-kitchen">Kitchen</h2>
+            <span class="count">6 items</span>
+            <a class="link end" href="#" onclick="return false">See all</a>
+          </div>
+          <button type="button" class="review">
+            <span>
+              <span>To review (1)</span>
+              <span class="what">Update your kitchen · Spinach omelette</span>
+            </span>
+            <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+          </button>
+
+          <h3 class="group">Fridge</h3>
+          <ul>
+            <li class="item is-changed"><span class="name">Eggs</span><span class="label">New</span><span class="meta">12 · today</span></li>
+            <li class="item"><span class="name">Spinach</span><span class="meta">added 3 days ago</span></li>
+            <li class="item"><span class="name">Yogurt</span><span class="tag">Low</span><span class="meta">added last week</span></li>
+          </ul>
+          <h3 class="group">Freezer</h3>
+          <ul>
+            <li class="item is-changed"><span class="name">Chicken thighs</span><span class="label">Updated</span><span class="meta">frozen today</span></li>
+            <li class="item"><span class="name">Shrimp</span><span class="meta">1 bag · 2 weeks ago</span></li>
+          </ul>
+          <h3 class="group">Not sure where</h3>
+          <ul>
+            <li class="item"><span class="name">Lemons</span><span class="tag">[Husband]</span><span class="meta">yesterday</span></li>
+          </ul>
+        </section>
+
+        <section class="widget" aria-labelledby="w-ideas">
+          <div class="widget-head">
+            <div>
+              <h2 class="widget-title" id="w-ideas">Meal ideas</h2>
+              <p class="widget-sub">You asked about shrimp</p>
+            </div>
+            <button type="button" class="icon-btn" aria-label="Close meal ideas"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+          </div>
+          <article class="idea" aria-labelledby="idea-1" aria-describedby="idea-1-allergy">
+            <h3 id="idea-1">Shrimp &amp; spinach fried rice</h3>
+            <p class="why">Quick, and it uses the spinach and eggs you have.</p>
+            <dl>
+              <dt>Uses</dt><dd>Shrimp, spinach, eggs</dd>
+              <dt>Missing</dt><dd>Rice, spring onions</dd>
+            </dl>
+            <div class="allergy" id="idea-1-allergy">
+              <svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg>
+              <div>
+                <p><strong>Allergy</strong> · Contains shrimp: [Husband]'s seafood allergy. Medicine on hand?</p>
+                <p class="note">Their note: “can eat shellfish if medicine is on hand”</p>
+              </div>
+            </div>
+            <button type="button" class="btn btn-primary">Choose</button>
+          </article>
+        </section>
+        <p class="caption-note">Both widgets are open here so you can see them. In the app, only the one you're working with is open.</p>
+      </div>
+
+      <section class="dock" aria-label="Chat">
+        <div class="dock-bar">
+          <button type="button" class="handle" aria-label="Show chat" aria-expanded="false"><span></span></button>
+          <button type="button" class="icon-btn" aria-label="Minimize chat"><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+        </div>
+        <p class="bubble" data-copy="reply">Got it. Eggs are in, and the chicken's in the freezer.</p>
+        <div class="receipt" role="group" aria-labelledby="receipt-title">
+          <p class="receipt-title" id="receipt-title">What changed</p>
+          <ul>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Added eggs (12)</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Chicken thighs → freezer</li>
+          </ul>
+          <div class="receipt-actions">
+            <button type="button" class="text-btn" aria-label="Undo: added eggs, chicken thighs moved to freezer">Undo</button>
+            <button type="button" class="text-btn">View</button>
+          </div>
+        </div>
+        <form class="composer" onsubmit="return false">
+          <label class="sr-only" for="msg">Message Kitchen</label>
+          <input id="msg" type="text" autocomplete="off" placeholder="Tell me what changed, or ask what to make">
+          <button type="submit" class="send" aria-label="Send"><svg class="icon" aria-hidden="true"><use href="#i-send"/></svg></button>
+        </form>
+      </section>
+    </section>
+  </div>
+
+  <div class="notes">
+    <section class="card" aria-labelledby="dir-name" aria-live="polite">
+      <h2 class="dir-name" id="dir-name"><span data-info="name">Linen &amp; Sage</span><span class="badge" id="rec-badge">Recommended</span></h2>
+      <p class="feeling" data-info="feeling">“A slow morning: linen light, a pot of herbs on the sill.”</p>
+      <p class="dir-body" data-info="body">Warm off-white paper, soft sage green and a gentle serif for headings. Homely and grown-up, like a good cookbook.</p>
+      <p class="dir-type" data-info="type">Type: Fraunces for titles, Figtree for everything else. Medium-soft corners, a whisper of shadow, unhurried motion.</p>
+    </section>
+
+    <section class="card" aria-labelledby="min-title">
+      <h2 id="min-title">Chat minimized</h2>
+      <div class="mini-row">
+        <div class="mini" role="group" aria-label="Phone preview: chat minimized">
+          <p class="mini-title">Kitchen</p>
+          <div class="mini-widget">
+            <ul>
+              <li class="is-changed"><span>Eggs</span><span>New</span></li>
+              <li><span>Spinach</span><span class="muted">3 days</span></li>
+              <li><span>Yogurt</span><span class="muted">Low</span></li>
+              <li><span>Chicken thighs</span><span class="muted">Freezer</span></li>
+            </ul>
+          </div>
+          <div class="mini-widget">
+            <ul>
+              <li><span>Meal plan · 1</span><span class="muted">›</span></li>
+            </ul>
+          </div>
+          <button type="button" class="chat-fab" aria-label="Open chat, new reply">
+            <svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg>
+            <span class="dot" aria-hidden="true"></span>
+          </button>
+        </div>
+        <p class="mini-cap">The workspace gets the whole screen. A round chat button sits bottom-right, with a soft dot when Kitchen has replied since you minimized. Its name for screen readers is “Open chat, new reply”, so the dot is never the only cue.</p>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="mom-title">
+      <h2 id="mom-title">Other moments, kept calm</h2>
+      <div class="moments">
+        <div>
+          <p class="moment-label">After Undo</p>
+          <div class="receipt undone">
+            <ul>
+              <li><s>Added eggs (12)</s></li>
+              <li><s>Chicken thighs → freezer</s></li>
+            </ul>
+            <p class="undone-note" data-copy="undone">Undone. The chicken's back in the fridge.</p>
+          </div>
+        </div>
+        <div>
+          <p class="moment-label">Something failed (0018)</p>
+          <p class="error-line"><span data-copy="error">I couldn't save that, so nothing changed.</span><button type="button" class="text-btn">Try again</button></p>
+        </div>
+        <div>
+          <p class="moment-label">Undo no longer possible</p>
+          <p class="warning-line">Can't undo this now. Tell me what to fix.</p>
+        </div>
+        <div>
+          <p class="moment-label">Offline</p>
+          <p class="offline-line">Offline · showing your kitchen as of 6:42 pm</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="pal-title">
+      <h2 id="pal-title">Palette</h2>
+      <div class="swatches" id="swatches"></div>
+      <p class="footer-note" style="margin-top:14px">Plum is reserved for allergy flags and used nowhere else. Every text colour here meets WCAG AA; the ratios are in visual-direction.md §5.</p>
+    </section>
+  </div>
+</main>
+
+<script>
+(function () {
+  var INFO = {
+    a: { name: "Linen & Sage", rec: true,
+         feeling: "“A slow morning: linen light, a pot of herbs on the sill.”",
+         body: "Warm off-white paper, soft sage green and a gentle serif for headings. Homely and grown-up, like a good cookbook.",
+         type: "Type: Fraunces for titles, Figtree for everything else. Medium-soft corners, a whisper of shadow, unhurried motion.",
+         reply: "Got it. Eggs are in, and the chicken's in the freezer.",
+         undone: "Undone. The chicken's back in the fridge.",
+         error: "I couldn't save that, so nothing changed." },
+    b: { name: "Still Water", rec: false,
+         feeling: "“Cool and clear, like a glass of water on a quiet table.”",
+         body: "Misty blue-grey, a deep teal accent and flat cards with hairline borders. The calm of a tidy, airy room; the easiest to read.",
+         type: "Type: Atkinson Hyperlegible for everything. Crisp corners, borders instead of shadows, the quickest motion.",
+         reply: "Done. Eggs added; chicken thighs → freezer.",
+         undone: "Undone.",
+         error: "Couldn't save that. Nothing changed." },
+    c: { name: "Clay & Honey", rec: false,
+         feeling: "“Cosy and rounded: an afternoon with tea in a hand-thrown mug.”",
+         body: "Cream, terracotta clay, big round corners and soft shadows. The warmest and most playful of the three.",
+         type: "Type: Nunito for everything. The roundest corners, pill buttons, the slowest and softest motion.",
+         reply: "All set: eggs are in, and the chicken's tucked in the freezer.",
+         undone: "No problem, that's undone.",
+         error: "That didn't save, so nothing's changed." }
+  };
+  var SWATCHES = [
+    ["surface.default", "--color-surface-default"], ["surface.raised", "--color-surface-raised"],
+    ["surface.sunken", "--color-surface-sunken"], ["text.default", "--color-text-default"],
+    ["text.muted", "--color-text-muted"], ["accent.default", "--color-accent-default"],
+    ["accent.soft", "--color-accent-soft"], ["highlight.bg", "--color-highlight-bg"],
+    ["allergy.border", "--color-allergy-border"], ["allergy.bg", "--color-allergy-bg"],
+    ["success.text", "--color-success-text"], ["warning.text", "--color-warning-text"],
+    ["error.text", "--color-error-text"], ["focus-ring", "--color-focus-ring"]
+  ];
+  var body = document.body, ws = document.getElementById("workspace");
+
+  function setDirection(d) {
+    if (!INFO[d]) d = "a";
+    var info = INFO[d];
+    body.setAttribute("data-direction", d);
+    document.querySelectorAll(".switcher button").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-set") === d));
+    });
+    document.querySelectorAll("[data-info]").forEach(function (el) { el.textContent = info[el.getAttribute("data-info")]; });
+    document.querySelectorAll("[data-copy]").forEach(function (el) { el.textContent = info[el.getAttribute("data-copy")]; });
+    document.getElementById("rec-badge").hidden = !info.rec;
+    var styles = getComputedStyle(body), out = "";
+    SWATCHES.forEach(function (s) {
+      var hex = styles.getPropertyValue(s[1]).trim();
+      out += '<div class="swatch"><span class="chip" style="background:' + hex + '"></span><span>' + s[0] + "<code>" + hex + "</code></span></div>";
+    });
+    document.getElementById("swatches").innerHTML = out;
+    ws.classList.remove("animate"); void ws.offsetWidth; ws.classList.add("animate");
+    if (location.hash !== "#" + d) history.replaceState(null, "", "#" + d);
+  }
+  document.querySelectorAll(".switcher button").forEach(function (b) {
+    b.addEventListener("click", function () { setDirection(b.getAttribute("data-set")); });
+  });
+  setDirection((location.hash || "#a").slice(1));
+})();
+</script>
+</body>
+</html>

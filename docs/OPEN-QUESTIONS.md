@@ -14,11 +14,28 @@
 ### P1. ⛔ What should come after the backend foundation? (asked as building starts)
 Now building: **backend foundation** (project skeleton, event history, kitchen state, change checking, tests), plus **UX's calm visual direction** (you'll get a preview to pick from).
 Pick the next milestone, or put them in order:
-- **(a) The app on screen:** layout, chat dock (Peek / Full / Minimized + button), and the Kitchen widget, using a stand-in "fake AI" so it works without an AI key. It needs the visual direction (V1).
+- **(a) The app on screen:** layout, chat dock (Peek / Full / Minimized + button), and the Kitchen widget, using a stand-in "fake AI" so it works without an AI key. It needs the visual direction (**V1**).
 - **(b) The real AI:** Kitchen actually understanding your messages, plus the test set of example messages. This needs an Anthropic API key (S1).
 - **(c) Sign-in:** email link + code. This needs Resend and a sign-in email (S1).
 
 **Rec:** (a) → (b) → (c). You see and feel the app first; sign-in matters only once it's online.
+
+> Answer:
+
+### V1. 🟡 Which calm visual direction? (A, B or C)
+Open [`design/preview.html`](design/preview.html) in a browser and switch between the three. The details are in [`design/visual-direction.md`](design/visual-direction.md).
+- **A. Linen & Sage:** "A slow morning: linen light, a pot of herbs on the sill." Warm paper tones, a sage accent, and a soft serif for headings.
+- **B. Still Water:** "Cool and clear, like a glass of water on a quiet table." Misty blue-grey, a teal accent, flat cards, and a very readable font.
+- **C. Clay & Honey:** "Cosy and rounded: an afternoon with tea in a hand-thrown mug." Cream, a clay accent and pill-shaped buttons.
+
+All three pass the accessibility contrast checks and use free fonts. You can also mix them, for example A's colours with C's rounded buttons.
+**Rec (UX):** A. It feels warm without being sleepy, and sage stays far from the allergy and error colours, so those signals stay unmistakable.
+
+> Answer:
+
+### V2. ⚪ Plum for allergy flags?
+Plum is used **only** for allergy flags, so it always means "allergy" and never anything else.
+**Rec (UX):** yes. It's unmistakable without looking alarming.
 
 > Answer:
 
