@@ -11,17 +11,17 @@
 
 ## Outstanding
 
-### T1. ⛔ Today's grocery test: how to run it
-Today's test needs the **real AI**. The stand-in can't answer "what staples do I need?". Two ways to run it:
-- **(a) At home on your Wi-Fi, today.** The app runs on your Mac, and you and Levi open it on your phones over your home Wi-Fi.
-  - **Needs from you:** only an **Anthropic API key** (S1).
-  - **Limits:** it doesn't work at the store. Before you leave, ask Kitchen for the list and take a screenshot. When you're home, tell it what you bought.
-  - **Security:** anyone on your Wi-Fi could open the page while it's running, so we stop it after the test.
-- **(b) Online, usable anywhere** (at the store, Levi at work).
-  - **Needs:** sign-in, a deploy, four accounts (S1–S4), and your go-ahead to publish.
-  - **Timing:** realistically **not today** without rushing security.
+### T1. ⛔ Today: deploy a small version for your grocery trip (in progress)
+**Goal:** live in about 2 hours, for you only. Levi is added tonight.
+**Status:** three specialists are building in parallel: the screens, the real AI, and online hosting with a simple lock. Then I merge, test, and deploy **with your go-ahead**.
+**Your part:** steps S1–S3 below. Answer here with "go" when you're ready for me to deploy, or "use the home Wi-Fi fallback" if time runs out.
 
-**Rec:** (a) today, and (b) as the next milestones. What you enter today will carry over when we go online.
+**What today's version does:**
+- You tell Kitchen what you have and what you made (pho), and the Kitchen widget updates.
+- You ask "what staples do I still need?", grouped by MD Oriental / Publix, and "what do I have?".
+- After shopping, you tell it what you bought.
+
+**What it doesn't do yet:** email sign-in (a private **access code** for now), meal ideas, recipes, the meal plan, or batches.
 
 > Answer:
 
@@ -32,12 +32,17 @@ Today's test needs the **real AI**. The stand-in can't answer "what staples do I
 
 > Answer:
 
-## Setup tasks for you (not blocking local building)
-These need **your** accounts, so I won't create them for you. They're needed before the real AI (b) or going online.
-- **S1. Anthropic Console (needed for today's test):** create an API workspace for **production** and one for **staging**, set spend limits of **$30** and **$10** (0020), and create a key for each. Keep the keys private, and I'll tell you where to paste them (a local file that's never committed).
-- **S2. Neon:** a free account (two projects later: production and staging).
-- **S3. Vercel:** a free account (only when we go online, with your go-ahead).
-- **S4. Resend:** a free account, plus the email address sign-in emails come from.
+## Setup tasks for you: do these now for today's deploy
+These need **your** accounts. Keep every key and code private: you paste them yourself, and I'll never ask you to send them in chat.
+- **S1. Anthropic (about 5 min):** at console.anthropic.com, create a workspace (for example "wellness-coach"), set its **monthly spend limit to $30**, and create an **API key**. Keep it somewhere safe for S3.
+- **S2. Neon (about 5 min):** at neon.com, sign up (free), create a project "wellness-coach" in a US East region, and copy the **connection string** from the dashboard.
+- **S3. Vercel (about 5 min):** at vercel.com, sign up for the free (Hobby) plan. Then, in the Terminal app, in the project folder, run `npx vercel login` and follow the browser prompt. When I ask, you'll add these settings in the Vercel dashboard (Project → Settings → Environment Variables):
+  - `DATABASE_URL`: the Neon connection string (S2)
+  - `ANTHROPIC_API_KEY`: your key (S1)
+  - `AI_MODE`: `real`
+  - `SESSION_SECRET`: generate one in Terminal with `openssl rand -base64 32`
+  - `ACCESS_CODES`: `vero=` followed by a long passphrase only you know. Levi's code gets added tonight.
+- **S4. Resend:** not needed today. It's for email sign-in later.
 
 ---
 
