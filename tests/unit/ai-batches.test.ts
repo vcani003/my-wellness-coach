@@ -27,7 +27,7 @@ function op(partial: Partial<ModelOp> & Pick<ModelOp, "action" | "evidence">): M
 }
 
 function respond(operations: ModelOp[]) {
-  const out: ModelOutput = { kind: "change", reply: "Got it.", operations, clarification: null, rememberPreference: null, listOfferAccepted: null, generate: null };
+  const out: ModelOutput = { kind: "change", reply: "Got it.", operations, clarification: null, rememberPreference: null, listOfferAccepted: null, generate: null, dish: null };
   const calls: Params[] = [];
   const messages: MessagesApi = {
     create: vi.fn(async (body: Params) => {

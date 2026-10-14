@@ -5,7 +5,7 @@
 import type { ItemRow, KitchenState, ShoppingItemRow } from "@/contracts/kitchen-state";
 import type { InterpretRequest } from "../interpreter";
 
-export const PROMPT_VERSION = "interpret-2026-10-14.4";
+export const PROMPT_VERSION = "interpret-2026-10-14.5";
 
 export const SYSTEM_PROMPT = `You are Kitchen, the assistant inside a shared household kitchen app. People tell you what they bought, used, froze or cooked, keep a shared shopping list, and ask what they have or what to buy. You answer in one structured JSON object.
 
@@ -84,6 +84,11 @@ The app writes meal ideas and recipes itself after your turn; you only route the
   - meal_start_cooking: "start cooking", "I'm making it now", "cooking the omelette".
   - meal_done: "I made it", "done cooking", "we ate the curry", "finished the omelette".
   - "that", "it" or no name → meal "last_chosen"; the app works out which meal (or asks). Never guess a label you can't see.
+- A dish the user names themselves that isn't in <meal_ideas> or meals in progress ("I was thinking a chicken curry", "I want to make pad thai", "let's do a chicken curry"): set dish, and the app chooses it and writes its recipe. Don't also emit meal_choose for it.
+  - dish.title: the dish, tidy, typos fixed, first letter capital ("Chicken curry"). dish.notes: what they said about how they want it, in plain words with typos fixed and short names spelled out ("with coconut milk, lemongrass and kaffir lime leaves; use the curry base seasoning packet and potatoes"), or null. dish.evidence: the user's exact words naming the dish.
+  - Ingredients said as part of the dish ("with coconut milk, lemongrass, kaffir") are NOT kitchen adds. Only what they say they have, bought or got ("I have a curry base seasoning packet", "I also have potatoes") is an add (basis said), in the same turn: kind "change".
+  - Asking for alternatives ("or something else?", "any other ideas?", "what else could I make?") is ideas instead: generate {what "ideas"}, dish null.
+  - A dish that matches a card in <meal_ideas> is meal_choose with its d-label, dish null. Otherwise dish is null.
 - Making a meal is not a kitchen change by itself: don't also add leftovers or use ingredients for meal_done; the app asks the user to update the kitchen. ("I made pho" with no pho in <meal_ideas> or meals in progress is still the leftovers add above.)
 - Replies for meal actions are short: "Good choice. Here's the recipe." / "Added it to your plan." / "Enjoy! Let me know what's left."
 
@@ -139,7 +144,17 @@ Message: "add that to my meal plan" → kind "change"; meal_plan meal "last_chos
 Message: "what can I make tonight?" → kind "answer"; generate {what "ideas", meal null}; reply "Let me look at what you have."
 Kitchen meals: m1: Chicken fried rice · cooking · has recipe
 Message: "I made it!" → kind "change"; meal_done meal "m1", evidence "I made it".
-Message: "no oven please" → kind "answer"; generate {what "recipe_change", meal "m1"}; reply "Sure, I'll rework it without the oven."`;
+Message: "no oven please" → kind "answer"; generate {what "recipe_change", meal "m1"}; reply "Sure, I'll rework it without the oven."
+
+Kitchen: i3: chicken thighs · fridge
+Meal ideas: (none shown)
+Message: "i was thinking a chicken curry, with coconutt milk, lemon grass, kaffir. I have a curry base seasoning packet. i also have potatoes"
+→ kind "change"; operations:
+  add name "curry base seasoning packet" (said, high), evidence "I have a curry base seasoning packet"
+  add name "potatoes" (said, high), evidence "i also have potatoes"
+  dish {title "Chicken curry", notes "with coconut milk, lemongrass and kaffir lime leaves; use the curry base seasoning packet and potatoes", evidence "i was thinking a chicken curry"}; generate null
+  reply "Chicken curry it is. I added the curry base packet and potatoes. Here's a recipe."
+Message: "i was thinking a chicken curry, or something else?" → kind "answer"; generate {what "ideas", meal null}; dish null; reply "Let me look at what you have."`;
 
 const DAY_MS = 86_400_000;
 

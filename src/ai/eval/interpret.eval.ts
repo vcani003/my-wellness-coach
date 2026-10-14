@@ -1,15 +1,15 @@
 /**
  * Real-model eval for the interpreter (ai.md §8), scored by exact rules, not by another AI.
  * Run with `npm run eval`; skipped unless ANTHROPIC_API_KEY is set. Costs real money: about
- * 31 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list (0027) and
- * older and newer batches (0025).
+ * 33 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list (0027),
+ * older and newer batches (0025) and a dish named in chat (MI1).
  */
 import { afterAll, describe, expect, it } from "vitest";
 import type { Operation, OperationOf, OperationType } from "@/contracts/operations";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult } from "../interpreter";
 import { createRealInterpreter, type UsageLog } from "../real";
-import { FIRST_TEST_MESSAGE, request, VERO_LIST, VERO_PANTRY, type ItemSpec, type ListSpec } from "./fixtures";
+import { CURRY_KITCHEN, FIRST_TEST_MESSAGE, NAMED_DISH_MESSAGE, request, VERO_LIST, VERO_PANTRY, type ItemSpec, type ListSpec } from "./fixtures";
 
 const usage: UsageLog[] = [];
 const interpreter = createRealInterpreter({
@@ -387,6 +387,34 @@ const cases: Case[] = [
       const [upd] = only(ops, "shopping.update");
       listTarget(upd, "shop-8", /coconut milk/i);
       expect(upd.fields.store?.value).toBe("Publix");
+    },
+  },
+  {
+    name: "Vero's named dish (MI1): adds what she has, chooses the curry directly, no idea cards",
+    text: NAMED_DISH_MESSAGE,
+    items: CURRY_KITCHEN,
+    check: (r, ops) => {
+      expect(r.kind).toBe("change");
+      expect(addNamed(ops, "curry base")).toBeDefined();
+      expect(addNamed(ops, "potato")).toBeDefined();
+      for (const n of ["coconut", "lemongrass", "lemon grass", "kaffir"]) expect(addNamed(ops, n), n).toBeUndefined();
+      expect(only(ops, "item.add").every((o) => o.fields.name.basis === "said")).toBe(true);
+      const [choose] = only(ops, "meal.choose");
+      expect(choose.target).toMatchObject({ title: expect.stringMatching(/chicken curry/i) });
+      const notes = "notes" in choose.target ? (choose.target.notes ?? "") : "";
+      for (const n of [/coconut milk/i, /lemon ?grass/i, /kaffir|lime lea/i]) expect(notes).toMatch(n);
+      expect(notes).not.toMatch(/coconutt/i); // typo fixed
+      expect(r.followUps).toEqual([expect.objectContaining({ kind: "recipe" })]);
+      expect(r.followUps?.some((f) => f.kind === "ideas")).toBe(false);
+    },
+  },
+  {
+    name: "a named dish 'or something else?' → ideas, nothing chosen",
+    text: "i was thinking a chicken curry, or something else?",
+    items: CURRY_KITCHEN,
+    check: (r, ops) => {
+      expect(only(ops, "meal.choose")).toHaveLength(0);
+      expect(r.followUps).toEqual([expect.objectContaining({ kind: "ideas" })]);
     },
   },
   {

@@ -32,13 +32,14 @@ export type MealPointer = { mealId: string } | { chooseOpId: string };
  * What the route does after apply, decided by code (never the model), in this order (ai.md §1).
  * - `ideas`: generate meal ideas; `request` is the user's words, for this request only (0012).
  * - `recipe`: write the recipe for a just-chosen meal (R2: suggested by default), or refine the
- *   current one ("no oven"); `refine` is the user's words.
+ *   current one ("no oven"); `refine` is the user's words. `notes`: for a dish the user named
+ *   (MI1), their own words about it ("with coconut milk, lemongrass, kaffir lime leaves").
  * - `meal-step`: plan or start cooking a meal this proposal just chose (it had no ID yet).
  * - `after-cooking`: open "Update your kitchen" for a meal just marked done (0013). UI, not AI.
  */
 export type TurnFollowUp =
   | { kind: "ideas"; request: string }
-  | { kind: "recipe"; meal: MealPointer; refine?: string }
+  | { kind: "recipe"; meal: MealPointer; refine?: string; notes?: string }
   | { kind: "meal-step"; meal: { chooseOpId: string }; to: "planned" | "cooking" }
   | { kind: "after-cooking"; mealId: string };
 

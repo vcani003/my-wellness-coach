@@ -220,6 +220,8 @@ export interface MealChosenPayload {
   mealId: string;
   title: string;
   ideaId?: string;
+  /** A dish named in chat (MI1): the user's own words about it. History only, not projected. */
+  notes?: string;
   /** false when an existing meal is chosen again (it becomes the most recently chosen). */
   isNew: boolean;
 }

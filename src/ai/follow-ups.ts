@@ -171,6 +171,7 @@ export async function* recipeStep(
   origin: FollowUpOrigin,
   mealId: string,
   refine?: string,
+  notes?: string,
 ): Step {
   const proposalId = `${origin.id}:recipe:${mealId}`;
   const state = await getKitchenState(deps.db, deps.scope);
@@ -185,7 +186,10 @@ export async function* recipeStep(
   yield { type: "status", phase: "recipe" };
   const ctx = await mealContext(deps, origin, state);
   const idea = meal.ideaId ? await getIdea(deps.db, deps.scope, meal.ideaId) : null;
-  const input: RecipeInput = { ...ctx, meal: { mealId, title: meal.title, ...(idea ? { idea } : {}) } };
+  const input: RecipeInput = {
+    ...ctx,
+    meal: { mealId, title: meal.title, ...(idea ? { idea } : {}), ...(notes?.trim() ? { notes: notes.trim() } : {}) },
+  };
   if (refine) {
     const current = await getRecipe(deps.db, deps.scope, mealId);
     if (current) {
@@ -254,7 +258,7 @@ export async function* runFollowUps(
           break;
         case "recipe": {
           const mealId = mealIdOf(f.meal, result);
-          if (mealId) reply = yield* recipeStep(deps, origin, mealId, f.refine);
+          if (mealId) reply = yield* recipeStep(deps, origin, mealId, f.refine, f.notes);
           break;
         }
         case "after-cooking": {
@@ -289,7 +293,8 @@ export function foldMealSteps(operations: Operation[], followUps: TurnFollowUp[]
       continue;
     }
     const choose = ops.find((o) => o.opId === f.meal.chooseOpId && o.type === "meal.choose");
-    if (!choose || choose.type !== "meal.choose") continue;
+    // A dish named in chat (`{title}`, MI1) has no idea to point at, so it can't be folded.
+    if (!choose || choose.type !== "meal.choose" || "title" in choose.target) continue;
     const target = choose.target;
     const evidence = choose.evidence ?? clip(text.trim(), 2000);
     const opId = `${choose.opId}:step`;

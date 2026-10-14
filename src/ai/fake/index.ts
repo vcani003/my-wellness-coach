@@ -4,7 +4,8 @@
  * Deterministic and tiny, so the app runs locally with no accounts and the end-to-end tests are
  * repeatable (backend-data.md §8). It understands only:
  *   "I bought X, Y and Z" · "I froze the X" · "I used the rest of the X" · "X is running low" ·
- *   "add X and Y to the list [for Store]" · "the old X are gone" · "I defrosted the X" · "undo"
+ *   "add X and Y to the list [for Store]" · "the old X are gone" · "I defrosted the X" · "undo" ·
+ *   "I was thinking a <dish>, with … I have X" / "I want to make <dish>" (MI1)
  * and answers anything else politely with no changes. Everything it proposes still goes through
  * the real backend validate → apply path. The AI specialist replaces this folder (ai.md §9).
  */
@@ -108,6 +109,7 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
             rememberPreference: null,
             listOfferAccepted: null,
             generate: null,
+            dish: null,
             operations: [
               { action: intent.action, meal: intent.label, evidence: req.message.text.trim(), item: null, name: null, quantity: null, location: null, frozen: null, stock: null, amountUsed: null, batch: null, store: null },
             ],
@@ -119,6 +121,38 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
           }
           const replies = { meal_choose: "Good choice. Here's the recipe.", meal_plan: "Added it to your plan.", meal_start_cooking: "Enjoy cooking!", meal_done: "Enjoy! Let me know what's left." };
           return { kind: "change", reply: replies[intent.action], proposal: { ...base, operations: m.operations }, followUps: m.followUps };
+        }
+        case "dish": {
+          // MI1: what they say they have goes into the kitchen, then the dish is chosen directly
+          // through the same code as the real interpreter (meal-ops.ts) and its recipe follows.
+          const out: ModelOutput = {
+            kind: "change",
+            reply: "",
+            clarification: null,
+            rememberPreference: null,
+            listOfferAccepted: null,
+            generate: null,
+            dish: { title: intent.title, notes: intent.notes || null, evidence: intent.evidence },
+            operations: [],
+          };
+          const m = mealOperations(out, req, new Date());
+          const adds: Op[] = intent.have.map((s, i) => ({
+            opId: `${req.message.id}:have${i + 1}`,
+            type: "item.add",
+            evidence: s.raw,
+            fields: { name: said(s.name), ...(s.quantity ? { quantity: said(s.quantity) } : {}) },
+          }));
+          const base = { proposalId: req.message.id, kitchenId: req.kitchenId, basedOnVersion: req.version, source: { via: "chat" as const, messageId: req.message.id } };
+          if (m.operations.length === 0) {
+            return { kind: "answer", proposal: null, reply: "Let me look at what you have.", followUps: m.followUps };
+          }
+          const added = adds.length ? ` I added ${list(intent.have.map((s) => s.name))}.` : "";
+          return {
+            kind: "change",
+            reply: `${intent.title} it is.${added} Here's a recipe.`,
+            proposal: { ...base, operations: [...adds, ...m.operations] },
+            followUps: m.followUps,
+          };
         }
         case "unknown":
           return { kind: "answer", proposal: null, reply: FALLBACK_REPLY };

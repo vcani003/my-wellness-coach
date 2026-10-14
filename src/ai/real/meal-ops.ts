@@ -7,10 +7,14 @@
  * - "I made it" with exactly one meal cooking = that meal.
  * - Code adds the follow-ups after apply: the recipe for a just-chosen meal (R2), plan/cook a
  *   just-chosen idea, and "Update your kitchen" after done (0013: UI, not the model).
+ * - A dish the user names ("I was thinking a chicken curry…", MI1 Rec, 0013 M1) is chosen
+ *   directly: `meal.choose {title, notes}` and its recipe, with no idea cards in between. It
+ *   becomes an idea or meal pick when its name matches one, and ideas when they ask for others.
  */
 import type { Clarification } from "@/contracts/proposed-change";
 import type { KitchenState, MealRow } from "@/contracts/kitchen-state";
 import type { Operation } from "@/contracts/operations";
+import { nameTokens, standardName } from "@/shared/text";
 import type { InterpretRequest, TurnFollowUp } from "../interpreter";
 import type { ModelOp, ModelOutput } from "./model-output";
 
@@ -76,6 +80,77 @@ export interface MealOutcome {
   clarification?: Clarification;
 }
 
+/** "Or something else?", "any other ideas?": the user wants options, not just the dish they named. */
+export const WANTS_ALTERNATIVES =
+  /\b(or something else|something else|any (other )?ideas|other ideas|what else|other options|or anything|suggestions?)\b/i;
+
+/** Words saying the user has it, so an ingredient they mention is a kitchen add (MI1). */
+const HAS_IT = /\b(have|has|got|bought|picked up|grabbed)\b/i;
+
+const sameDish = (a: string, b: string) => {
+  if (standardName(a) === standardName(b)) return true;
+  const ta = nameTokens(a);
+  const tb = new Set(nameTokens(b));
+  return ta.length > 0 && ta.length === tb.size && ta.every((t) => tb.has(t));
+};
+
+/**
+ * Ingredients said as part of a named dish ("with coconut milk, lemongrass") are not kitchen adds
+ * unless the user says they have them (MI1). Drops an `item.add` whose words are inside the
+ * dish's own words, or whose name is in the dish notes, when those words don't say "have / got".
+ */
+export function guardDishIngredients(ops: Operation[], out: ModelOutput, req: InterpretRequest): Operation[] {
+  const dish = out.dish;
+  if (!dish?.title.trim()) return ops;
+  const text = req.message.text.toLowerCase();
+  const dishWords = dish.evidence.trim().toLowerCase();
+  const dishSpan = dishWords && text.includes(dishWords) ? dishWords : "";
+  const notes = ` ${standardName(dish.notes ?? "")} `;
+  return ops.filter((o) => {
+    if (o.type !== "item.add") return true;
+    const evidence = (o.evidence ?? "").trim().toLowerCase();
+    if (evidence && HAS_IT.test(evidence)) return true;
+    const insideDish = dishSpan !== "" && evidence !== "" && dishSpan.includes(evidence);
+    const tokens = nameTokens(o.fields.name.value);
+    const inNotes = tokens.length > 0 && tokens.every((t) => notes.includes(` ${t} `));
+    return !(insideDish || inNotes);
+  });
+}
+
+/** The named dish (MI1): an idea or meal pick when it matches one, else a new chosen meal. */
+function dishOperations(out: ModelOutput, req: InterpretRequest, ops: Operation[], followUps: TurnFollowUp[]): void {
+  const dish = out.dish;
+  const title = dish?.title.trim().replace(/\s+/g, " ").slice(0, 200) ?? "";
+  if (!dish || !title) return;
+  // Already picked an idea or meal in this message, or already asked for ideas.
+  if (ops.some((o) => o.type === "meal.choose") || followUps.some((f) => f.kind === "ideas")) return;
+  const text = req.message.text.trim();
+  if (WANTS_ALTERNATIVES.test(text)) {
+    followUps.push({ kind: "ideas", request: text });
+    return;
+  }
+  const opId = `${req.message.id}:dish`;
+  const said = dish.evidence.trim();
+  const evidence = { evidence: (said && text.toLowerCase().includes(said.toLowerCase()) ? said : text).slice(0, 2000) };
+  const notes = dish.notes?.trim().slice(0, 2000) || undefined;
+
+  const idea = (req.ideas ?? []).find((i) => sameDish(i.name, title));
+  if (idea) {
+    ops.push({ opId, type: "meal.choose", target: { ideaId: idea.ideaId }, ...evidence });
+    const existing = req.state.meals.find((m) => m.ideaId === idea.ideaId && ACTIVE.has(m.status));
+    if (!existing?.recipe) followUps.push({ kind: "recipe", meal: { chooseOpId: opId }, ...(notes ? { notes } : {}) });
+    return;
+  }
+  const meal = req.state.meals.find((m) => ACTIVE.has(m.status) && sameDish(m.title, title));
+  if (meal) {
+    ops.push({ opId, type: "meal.choose", target: { mealId: meal.id }, ...evidence });
+    if (!meal.recipe) followUps.push({ kind: "recipe", meal: { mealId: meal.id }, ...(notes ? { notes } : {}) });
+    return;
+  }
+  ops.push({ opId, type: "meal.choose", target: { title, ...(notes ? { notes } : {}) }, ...evidence });
+  followUps.push({ kind: "recipe", meal: { chooseOpId: opId }, ...(notes ? { notes } : {}) });
+}
+
 export function mealOperations(out: ModelOutput, req: InterpretRequest, now: Date): MealOutcome {
   const operations: Operation[] = [];
   const followUps: TurnFollowUp[] = [];
@@ -134,5 +209,6 @@ export function mealOperations(out: ModelOutput, req: InterpretRequest, now: Dat
     if (meal) followUps.push({ kind: "recipe", meal: { mealId: meal.id }, refine: req.message.text.trim() });
     else ask(whichOne(req, WHICH_RECIPE, (m) => Boolean(m.recipe)));
   }
+  dishOperations(out, req, operations, followUps);
   return { operations, followUps, ...(clarification ? { clarification } : {}) };
 }

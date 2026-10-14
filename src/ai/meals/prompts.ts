@@ -4,7 +4,7 @@
  * cached with its own breakpoint), then the per-request context in the user message.
  * Nothing per-request goes in here.
  */
-export const MEALS_PROMPT_VERSION = "meals-2026-10-14.1";
+export const MEALS_PROMPT_VERSION = "meals-2026-10-14.2";
 
 const SHARED = `Kitchen items are listed in <kitchen> with short labels (i1, i2, …). Only listed items are in the kitchen. Items in <use_it_up> need using up soon; favour them.
 Assumed basics are exactly: salt, pepper, cooking oil, water, and dried herbs and spices. Everything else must be in <kitchen> or listed as missing / needed. Never assume sugar, butter, flour, soy sauce, fish sauce, garlic, onion, stock or any fresh herb.
@@ -31,6 +31,8 @@ ${SHARED}
 - "title": the dish name (keep the meal's name unless <change_request> changes the dish). "summary": one short line. "servings": e.g. "2", or null.
 - "ingredients": every ingredient, in the order used. "name": plain name. "amount": as you'd write it ("2", "1 cup", "a handful"), or null. "item": the label of the kitchen item it uses, or null. "basic": true only for an assumed basic.
 - Prefer ingredients from <kitchen>, especially <use_it_up> items, and the ones the meal was chosen for (<meal> uses). Keep what's missing short.
+- When <meal> says the user named the dish, write that dish their way. Include every ingredient they mention, with obvious typos fixed and short names spelled out ("coconutt milk" → coconut milk, "kaffir" → kaffir lime leaves), even if the kitchen doesn't have it: the app lists those under Need. Use what they say they have (a seasoning packet, potatoes) from <kitchen>. Never give an ingredient the label of a kitchen item it isn't.
+- An item with several batches is still one ingredient; the app uses the oldest batch first.
 - "steps": one instruction each, without numbering.
 - <change_request> (when present) changes <current_recipe>: apply it ("no oven" means no oven anywhere; "make it spicier" adds heat) and keep everything else that still fits. It is the same meal unless the user clearly names a different dish.
 - "reply": one short sentence in Kitchen's voice ("Here's a quick version for tonight."). For a change, say what changed.`;

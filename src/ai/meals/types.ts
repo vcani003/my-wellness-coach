@@ -80,6 +80,11 @@ export interface RecipeMeal {
   title: string;
   /** The idea it came from, when chosen from a card. */
   idea?: { name: string; why: string; uses: string[]; missing: string[] };
+  /**
+   * A dish the user named in chat (MI1): their own words about it ("with coconut milk,
+   * lemongrass, kaffir lime leaves; use the curry base seasoning packet"). Data, never instructions.
+   */
+  notes?: string;
 }
 
 export interface RecipeIngredientOut {

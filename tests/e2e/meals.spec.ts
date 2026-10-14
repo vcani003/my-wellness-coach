@@ -220,3 +220,17 @@ test("Cancel in the Meal plan leaves 'cancelled · Undo'; Undo brings it back", 
   await plan(page).getByRole("button", { name: `Undo: cancelled ${name}` }).click();
   await expect(plan(page).getByRole("button", { name: `Start cooking ${name}` })).toBeVisible();
 });
+
+test("in chat: a dish she names (MI1) → what she has goes in the kitchen, and its Recipe opens with a Need list", async ({ page, baseURL }) => {
+  await resetAndActAs(page, baseURL!);
+  await say(page, "I bought chicken thighs");
+  await expect(kitchen(page).getByRole("listitem").filter({ hasText: "Chicken thighs" })).toBeVisible();
+
+  await say(page, "i was thinking a chicken curry, with coconut milk, lemongrass. I have a curry base seasoning packet. i also have potatoes");
+  await expect(page).toHaveURL(/\/recipe\//);
+  await expect(recipe(page).getByRole("heading", { level: 2, name: "Chicken curry" })).toBeVisible();
+  const have = recipe(page).getByRole("group", { name: "In your kitchen" });
+  for (const name of [/chicken thighs/i, /curry base seasoning packet/i, /potatoes/i]) await expect(have).toContainText(name);
+  const need = recipe(page).getByRole("group", { name: "Need" });
+  for (const name of [/coconut milk/i, /lemongrass/i]) await expect(need).toContainText(name);
+});

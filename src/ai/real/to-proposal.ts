@@ -18,7 +18,7 @@ import { nameTokens, standardName } from "@/shared/text";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult } from "../interpreter";
 import type { ModelOp, ModelOutput } from "./model-output";
-import { mealOperations } from "./meal-ops";
+import { guardDishIngredients, mealOperations } from "./meal-ops";
 import { itemLabels, shoppingLabels } from "./prompt";
 
 type MetaFact = { basis: Fact<unknown>["basis"]; confidence: Fact<unknown>["confidence"] };
@@ -300,7 +300,8 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest, now: 
   out.operations.forEach((op, i) => {
     converted.push(...toOperation(op, `${req.message.id}:op${i + 1}`, req, labels));
   });
-  const operations = [...guardShopping(converted, out, req), ...meals.operations];
+  // Kitchen adds first, so the named dish's recipe sees what the user just said they have (MI1).
+  const operations = [...guardDishIngredients(guardShopping(converted, out, req), out, req), ...meals.operations];
 
   const pref = out.rememberPreference;
   if (pref && pref.statement.trim() && offeredToRemember(req) && inMessage(req.message.text, pref.evidence)) {

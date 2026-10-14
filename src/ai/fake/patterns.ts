@@ -15,6 +15,7 @@ export type FakeIntent =
   | { kind: "toList"; items: Segment[]; store?: string }
   | { kind: "mealIdeas" }
   | { kind: "meal"; action: "meal_choose" | "meal_plan" | "meal_start_cooking" | "meal_done"; label: string }
+  | { kind: "dish"; title: string; evidence: string; notes: string; have: Segment[] }
   | { kind: "unknown" };
 
 /** A piece of the message: `raw` is exactly as typed (used as evidence), `name` is cleaned. */
@@ -82,7 +83,29 @@ function segments(list: string): Segment[] {
 }
 
 /** Meals (0005, 0013): "what can I make?", "the second one", "add that to my plan", "start cooking", "I made it". */
-const IDEAS = /\b(what can (i|we) (make|cook)|meal ideas|dinner ideas|any ideas)\b/i;
+const IDEAS = /\b(what can (i|we) (make|cook)|meal ideas|dinner ideas|any (other )?ideas|something else)\b/i;
+
+/**
+ * A dish the user names (MI1): "I was thinking a chicken curry, with coconut milk…" · "I want to
+ * make pad thai" · "let's make a chicken curry". The dish runs to the first comma, full stop or
+ * "with"; the rest is its notes, and "I (also) have X" sentences are kitchen adds.
+ */
+const DISH = /^\s*((?:i\s+was\s+thinking(?:\s+(?:of|about))?|i\s+want\s+to\s+(?:make|cook)|let'?s\s+(?:make|cook|have))\s+(?:(?:a|an|some)\s+)?([^,.!?]+?))(?=\s*(?:[,.!?]|\bwith\b|$))([\s\S]*)$/i;
+const HAVE = /^\s*(?:and\s+)?(?:i|we)\s+(?:also\s+)?(?:have|'ve got|have got|got)\s+(?:also\s+)?(.+?)\s*$/i;
+
+function dishIntent(text: string): FakeIntent | null {
+  const m = DISH.exec(text);
+  if (!m) return null;
+  const dish = m[2].trim();
+  if (!dish) return null;
+  const notes = m[3].replace(/^\s*[,.]\s*/, "").trim();
+  const have = notes
+    .split(/[.!?]+/)
+    .map((sentence) => HAVE.exec(sentence)?.[1])
+    .filter((s): s is string => Boolean(s))
+    .flatMap((s) => segments(s));
+  return { kind: "dish", title: dish.replace(/^\w/, (c) => c.toUpperCase()), evidence: m[1].trim(), notes, have };
+}
 const ORDINALS: Record<string, number> = { first: 1, "1st": 1, second: 2, "2nd": 2, third: 3, "3rd": 3 };
 const CHOOSE = /^\s*(?:let'?s (?:do|go with|make) )?the (first|1st|second|2nd|third|3rd)(?: one)?\b/i;
 const PLAN = /\badd (?:that|it) to (?:my|the|our) (?:meal )?plan\b/i;
@@ -97,6 +120,8 @@ export function matchIntent(text: string): FakeIntent {
   if (PLAN.test(text)) return { kind: "meal", action: "meal_plan", label: "last_chosen" };
   if (START.test(text)) return { kind: "meal", action: "meal_start_cooking", label: "last_chosen" };
   if (DONE.test(text)) return { kind: "meal", action: "meal_done", label: "last_chosen" };
+  const dish = dishIntent(text);
+  if (dish) return dish;
   const toList = TO_LIST.exec(text);
   if (toList) return { kind: "toList", items: segments(toList[1]), ...(toList[2] ? { store: toList[2].trim() } : {}) };
   const bought = BOUGHT.exec(text);

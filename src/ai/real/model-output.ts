@@ -97,6 +97,12 @@ export const ModelOutput = z.object({
   generate: z
     .object({ what: z.enum(["ideas", "recipe_change"]), meal: z.string().nullable() })
     .nullable(),
+  /**
+   * A dish the user names themselves ("I was thinking a chicken curry…") that isn't an idea card
+   * or a meal in progress (MI1). Code chooses it and writes its recipe after apply. Null otherwise.
+   * `notes`: what they said about how they want it, typos fixed. `evidence`: their exact words.
+   */
+  dish: z.object({ title: z.string(), notes: z.string().nullable(), evidence: z.string() }).nullable(),
 });
 export type ModelOutput = z.infer<typeof ModelOutput>;
 

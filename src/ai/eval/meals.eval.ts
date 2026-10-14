@@ -9,7 +9,18 @@ import { RecipeSave } from "@/contracts/operations";
 import { createRealInterpreter } from "../real";
 import { createRealMealAI, type MealLog } from "../real/meals";
 import type { GeneratedIdea, IdeasResult } from "../meals/types";
-import { ideasInput, kitchen, LEVI_SEAFOOD, mealContext, NOW, request, SHRIMP_KITCHEN, VERO_WEEK, type ItemSpec } from "./fixtures";
+import {
+  CURRY_KITCHEN,
+  ideasInput,
+  kitchen,
+  LEVI_SEAFOOD,
+  mealContext,
+  NOW,
+  request,
+  SHRIMP_KITCHEN,
+  VERO_WEEK,
+  type ItemSpec,
+} from "./fixtures";
 
 const usage: MealLog[] = [];
 const meals = createRealMealAI({ now: () => NOW, log: (e) => (e.event === "ai.usage" ? usage.push(e) : console.warn(JSON.stringify(e))) });
@@ -89,6 +100,22 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("meal ideas and recipes (real mo
     if (!refined.ok) return;
     expect(refined.operation.target).toEqual({ mealId: "meal-1" });
     expect(refined.recipe.steps.join(" ")).not.toMatch(/\b(oven|bake|broil|grill)\b/i);
+  });
+
+  it("Vero's named chicken curry (MI1): her notes are followed; Need = coconut milk, lemongrass, kaffir lime leaves", async () => {
+    // The kitchen after her turn: what she said she has was just added.
+    const items: ItemSpec[] = [...CURRY_KITCHEN, { name: "curry base seasoning packet", daysAgo: 0 }, { name: "potatoes", daysAgo: 0 }];
+    const notes = "with coconut milk, lemongrass and kaffir lime leaves; use the curry base seasoning packet and potatoes";
+    const r = await meals.generateRecipe({ ...mealContext(items, { restrictions: [LEVI_SEAFOOD] }), meal: { mealId: "meal-curry", title: "Chicken curry", notes } });
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+    if (!r.ok) return;
+    const group = (g: string) => r.recipe.ingredients.filter((i) => i.group === g);
+    expect(group("kitchen").map((i) => i.itemId)).toEqual(expect.arrayContaining(["item-1", "item-3", "item-4"]));
+    const need = group("need").map((i) => i.name).join(" | ");
+    for (const n of [/coconut milk/i, /lemon ?grass/i, /kaffir|makrut|lime lea/i]) expect(need).toMatch(n);
+    expect(need).not.toMatch(/potato|chicken|curry base/i);
+    expect(r.recipe.allergenFlags.length === 0 || r.recipe.ingredients.some((i) => SEAFOOD.test(i.name))).toBe(true);
+    expect(r.reply).not.toMatch(FORBIDDEN);
   });
 
   it("a pasted recipe with an injection only becomes recipe.save, stored as pasted", async () => {

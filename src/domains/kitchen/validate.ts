@@ -702,6 +702,10 @@ function mealChoose(op: OperationOf<"meal.choose">, env: OpEnv): OpOutcome {
     payload = meal
       ? { mealId: meal.id, title: meal.title, isNew: false }
       : { mealId: env.ctx.newId(), title: idea.name, ideaId, isNew: true };
+  } else if ("title" in op.target) {
+    // A dish named in chat (MI1): always a new meal, with no idea behind it.
+    const notes = op.target.notes?.trim();
+    payload = { mealId: env.ctx.newId(), title: op.target.title.trim(), ...(notes ? { notes } : {}), isNew: true };
   } else {
     meal = env.kitchen.meals[op.target.mealId];
     if (!meal) return reject("UNKNOWN_TARGET");

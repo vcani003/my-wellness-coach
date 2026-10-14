@@ -65,6 +65,7 @@ function mealSection(input: MealContext & { meal: RecipeInput["meal"] }): string
     if (uses.length) lines.push(`Uses: ${uses.join(", ")}`);
     if (idea.missing.length) lines.push(`Missing: ${idea.missing.join(", ")}`);
   }
+  if (input.meal.notes) lines.push(`The user named this dish and said: ${input.meal.notes}`);
   return section("meal", lines.join("\n"));
 }
 

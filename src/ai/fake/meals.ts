@@ -7,6 +7,7 @@
 import { askedAllergies } from "../meals/allergen-guard";
 import { basicsNote } from "../meals/basics";
 import { labelMaps } from "../meals/context";
+import { matchKitchenItem } from "../meals/match";
 import type { IdeaOut, RecipeOutput } from "../meals/model-output";
 import { toIdea } from "../meals/to-ideas";
 import { toRecipeResult } from "../meals/to-recipe";
@@ -22,6 +23,38 @@ import type {
 } from "../meals/types";
 import { allergenExcusedIds, rankUseItUp } from "../meals/use-it-up";
 import { collectIdeas, collectRecipe } from "../real/meals";
+
+/**
+ * A named dish's ingredients (MI1), the fake way: kitchen items a word of the title names
+ * ("chicken" → chicken thighs), then everything listed in the notes ("with X, Y and Z", "I have
+ * X"), as said. Code then sorts them into In your kitchen / Need, as for the real model.
+ */
+function dishIngredients(input: RecipeInput, toLabel: Map<string, string>): RecipeOutput["ingredients"] {
+  const fromTitle = input.meal.title
+    .split(/\s+/)
+    .map((word) => matchKitchenItem(input.state, word))
+    .filter((i): i is NonNullable<typeof i> => Boolean(i));
+  const named = (input.meal.notes ?? "")
+    .split(/[.!?;]+/)
+    .map((s) => s.trim().replace(/^(?:and\s+)?(?:with|(?:i|we)\s+(?:also\s+)?(?:have|'ve got|got)|use)\s+(?:also\s+)?/i, ""))
+    .flatMap((s) => s.split(/\s*,\s*(?:and\s+)?|\s+and\s+/i))
+    .map((s) => s.trim().replace(/^(?:a|an|some|the)\s+/i, ""))
+    .filter(Boolean);
+  const out: RecipeOutput["ingredients"] = [];
+  const seen = new Set<string>();
+  for (const item of fromTitle) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push({ name: item.name.value, amount: null, item: toLabel.get(item.id) ?? null, basic: false });
+  }
+  for (const name of named) {
+    const item = matchKitchenItem(input.state, name);
+    if (item && seen.has(item.id)) continue;
+    if (item) seen.add(item.id);
+    out.push({ name, amount: null, item: item ? (toLabel.get(item.id) ?? null) : null, basic: false });
+  }
+  return out;
+}
 
 const title = (s: string) => s.replace(/\s*\(.*?\)\s*/g, " ").trim().replace(/^\w/, (c) => c.toUpperCase());
 
@@ -93,6 +126,7 @@ export function createFakeMealAI(now: () => Date = () => new Date()): MealAI {
           summary: "A quick suggestion from your kitchen.",
           servings: "2",
           ingredients: [
+            ...(!idea ? dishIngredients(input, toLabel) : []),
             ...(idea?.uses ?? []).map((id) => ({ name: input.state.items.find((i) => i.id === id)?.name.value ?? "", amount: null, item: toLabel.get(id) ?? null, basic: false })),
             ...(idea?.missing ?? []).map((name) => ({ name, amount: null, item: null, basic: false })),
             { name: "salt", amount: "a pinch", item: null, basic: true },

@@ -151,6 +151,16 @@ export const FIRST_TEST_MESSAGE =
 
 // ─── Meal ideas and recipes (ai.md §5, 0019, 0025) ─────────────────────────────────────
 
+/** Vero's named dish from her local test (MI1), exactly as typed. */
+export const NAMED_DISH_MESSAGE =
+  "i was thinking a chicken curry, with coconutt milk, lemon grass, kaffir. I have a curry base seasoning packet. i also have potatoes";
+
+/** Her kitchen for it: chicken thighs bought twice (0025), so the older batch goes first. */
+export const CURRY_KITCHEN: ItemSpec[] = [
+  { name: "chicken thighs", location: "fridge", batches: [3, 0] },
+  { name: "jasmine rice", location: "pantry" },
+];
+
 export const MEMBERS = [
   { userId: "u-vero", name: "Vero" },
   { userId: "u-levi", name: "Levi" },

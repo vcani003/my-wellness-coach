@@ -146,10 +146,21 @@ export const ItemDefrost = z.object({
   fields: z.object({ defrostedOn: optionalFact(z.iso.datetime({ offset: true })) }).optional(),
 });
 
+/**
+ * A dish the user names in chat that isn't on an idea card (MI1 Rec, 0013 M1: naming it counts as
+ * choosing it): a new `chosen` meal with this title and no idea. `notes` are the user's own words
+ * about it ("with coconut milk, lemongrass, kaffir lime leaves"), kept in the event for the recipe.
+ */
+export const NamedDish = z.strictObject({
+  title: z.string().trim().min(1).max(200),
+  notes: z.string().max(2000).optional(),
+});
+export type NamedDish = z.infer<typeof NamedDish>;
+
 export const MealChoose = z.object({
   ...common,
   type: z.literal("meal.choose"),
-  target: z.union([z.strictObject({ ideaId: Id }), z.strictObject({ mealId: Id })]),
+  target: z.union([z.strictObject({ ideaId: Id }), z.strictObject({ mealId: Id }), NamedDish]),
 });
 
 export const MealPlan = z.object({
