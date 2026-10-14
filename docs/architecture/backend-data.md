@@ -34,10 +34,11 @@ Each environment has its own Neon project, Anthropic workspace, key and spend li
 - Resend's free tier allows 100 emails a day.
 - Better Auth's magic-link plugin has a `disableSignUp` option.
 
+**Pinned on 2026-10-14 (npm registry), exact versions in `package.json`:** Next.js 16.4.0, React 19.3.0, Zod 4.6.7, **drizzle-orm 0.45.4 + drizzle-kit 0.31.11** (1.0 is still `beta.22`, so not used), PGlite 0.5.9, Vitest 5.0.4, TypeScript 5.9.3 (what create-next-app 16.4 scaffolds; TypeScript 7 exists but wasn't tried), ESLint 10.12.0.
+
 **Not confirmed:**
-- **Drizzle:** sources conflict on whether 1.0 is final. Pin 0.45.x.
 - **Neon storage:** listed as both 0.5 GB and 1 GB. Either is ample.
-- **Patch versions:** check exact versions when building starts.
+- **Neon driver:** Neon's HTTP driver can't run interactive transactions, which the write path needs (lock, then write). Use its WebSocket `Pool` driver (or `pg`) with Drizzle. Check when S2 lands; only `src/db/client.ts` changes.
 
 ## 3. Event model (spec §4, decisions 0007 and 0011)
 Every change is saved as a permanent **event** (a record of something that happened). The current kitchen is computed from the events. Nothing is overwritten or deleted, apart from the privacy exceptions in §7.
@@ -217,7 +218,7 @@ The stream is one JSON object per line (NDJSON), checked with the shared Zod sch
 
 ## 8. Testing
 - **Unit tests (Vitest)** cover `apply` and the validator, using the primary journey (0005) as fixtures. The key check: **replaying all events gives the same state as the step-by-step updates.**
-- **Integration tests** run on real Postgres (Docker locally, a Neon branch in CI). They cover cross-kitchen denial, retries, two people writing at once, and Undo conflicts.
+- **Integration tests** run on real Postgres: **PGlite** locally (an embedded Postgres compiled to WebAssembly, running inside the test process, so there's no Docker and no account), and a Neon branch in CI later. They use the same migrations. They cover cross-kitchen denial, retries, two people writing at once, and Undo conflicts. *PGlite runs one transaction at a time, so the kitchen row lock (`SELECT … FOR UPDATE`) is exercised for correctness but not under true concurrency. Re-run the two-writer test on a Neon branch.*
 - **Contract tests:** every example in the AI specialist's test set must produce a ProposedChange that passes the shared Zod schema.
 - **End-to-end tests (Frontend, with Playwright)** use a fake interpreter with fixed answers, so runs are repeatable. The tester agents use the real model.
 - **Regressions:** every bug gets a test that fails without the fix.
@@ -235,9 +236,27 @@ src/ai/               AI specialist: interpreter, prompts, model client, eval se
 src/ui/               Frontend: widgets, chat, useKitchenSync
 src/db/               Drizzle schema, migrations, client
 src/lib/              env, rate limits, i18n, logging
-tests/  scripts/      integration and e2e tests; seed, reset, rebuild-projections
+tests/  scripts/      unit + integration tests; migrate, seed/reset (scripts/scenarios.ts)
 ```
 The UI and AI code reach the domains only through `commands` and `queries`. Domains reach each other only through `public.ts`.
+
+## 10. Local development
+No accounts or Docker needed: the database is **PGlite**, an embedded Postgres that runs inside Node and stores its files in `.data/pglite` (git-ignored). The same migrations will run on Neon.
+
+| Step | Command |
+|---|---|
+| Install (Node 24+; npm) | `npm install` |
+| Optional settings | `cp .env.example .env.local` (only `PGLITE_DIR`; leave `DATABASE_URL` empty) |
+| Create or update the local database | `npm run db:migrate` |
+| Load a test kitchen (resets it first) | `npm run db:seed -- single` (add `--after-shopping` for journey step 1 done) or `npm run db:seed -- household` |
+| Checks | `npm run typecheck` · `npm run lint` · `npm test` |
+| After changing `src/db/schema.ts` | `npm run db:generate` (writes SQL to `src/db/migrations`; commit it) |
+| Start the app | `npm run dev` (placeholder page only in this milestone) |
+
+- Tests open their own in-memory PGlite per test file, so they never touch `.data/`.
+- To start over locally, delete `.data/pglite`.
+- The seed and migrate scripts refuse to run when `DATABASE_URL` is set or `NODE_ENV=production`.
+- Seeding resets only `isTest` kitchens and `isTest` users (`tester-1`, `tester-2`). Resetting a scenario also clears its testers' profiles.
 
 ## Questions for Vero
 Tracked in `OPEN-QUESTIONS.md`. H2 and H3: answered → 0017. B14: answered → 0021. Still open: **D1** (Rec: a deleted member's items stay, credited to "a former member").
@@ -273,3 +292,22 @@ Tracked in `OPEN-QUESTIONS.md`. H2 and H3: answered → 0017. B14: answered → 
 | AI pipeline: draft, re-word, generate after save | **Accepted.** The draft is only sent after apply, so interpret → apply → reply holds. |
 | Added by Backend | `src/contracts/`; `meal.choose` creates a `chosen` meal; `/changes?since=` for "Since your last visit"; `offer` and `recipe.saved` stream events |
 | **2026-10-14 pass** | `item.use.usedUp` → `stock: low\|out` (0013); `meal.transition.note` for after-cooking; review kind `used-up` → `after-cooking`; `ALREADY_USED_UP` → `ALREADY_OUT`; restriction `note` + `.update` (0019); code-computed `AllergenFlag` on ideas, recipes and meals; 1-year rolling session + Sign out everywhere (FE1 Rec); 4 accounts; `single` / `household` test scenarios (0021); defensive reads (0018) |
+| **Milestone 1 build (2026-10-14)** | What changed while building, so this doc stays true: |
+| Local database | **PGlite** replaces Docker for local dev and integration tests (Docker isn't available; no accounts yet). Same schema and migrations. Two DB triggers: events can't be updated; tester accounts can only join `isTest` kitchens. |
+| Change-set ledger | New `change_sets` table: the `proposalId` idempotency record (unique per kitchen), the "Since your last visit" feed, and the list of entities each change set touched (for Undo conflicts and STALE_TARGET). |
+| Version | `kitchens.version` goes up by one per change set that saved anything. A profile change made through a kitchen (an allergy) bumps that kitchen too, so the other member's poll sees the new allergen flags. `seq` stays per stream. |
+| Undo mechanics | `changeset.reverted` carries `restore`: each touched entity's value just before the change set (or null). Restored rows read "updated by whoever undid it". An Undo can't itself be undone (`UNDO_OF_UNDO`; its result has `undoable: false`). A later change that was itself undone no longer blocks an Undo. |
+| STALE_TARGET | Only for operations that name an **ID** changed after `basedOnVersion`. Name targets are simply re-matched against the latest state. |
+| Rejection codes | Added `UNKNOWN_TARGET` (bad meal, idea, review, change-set or event ID), `UNDO_CONFLICT`, `ALREADY_UNDONE`, `UNDO_OF_UNDO`, `INVALID_OPERATION` (e.g. setting and clearing one field, a note without `to: done`). `UNKNOWN_ITEM` stays item IDs only. |
+| Name matching | Exact standard name first, then "all the words you said" ("the chicken" → chicken thighs). Items still on the list beat `out` ones. |
+| `item.add` again | If exactly one item with that name is low or out, it's restocked (stock cleared) instead of duplicated. |
+| `item.use` | A same-unit remainder of 0 also sets `stock: out` (basis `inferred`). Using an `out` item → `ALREADY_OUT`. |
+| After cooking, "Do later" | `meal.transition {to: done, note}` on a meal that's already done only saves the note (event `meal.noted`). Otherwise the note couldn't be added from To review. |
+| Evidence | Chat operations without `evidence` → `EVIDENCE_NOT_FOUND`. If the message has pasted parts and a non-recipe operation's evidence isn't found in the typed part → `NOT_ALLOWED`. The command takes the message text as `messageText`; without it, profile changes via chat are refused. |
+| Restrictions | `.update` / `.remove` find the restriction by person + kind + subject (no ID in the contract). Adding one that already exists only updates the note (owner) or does nothing. The "Save this to [Husband]'s profile?" confirmation is the AI's step (AI7 Rec); the backend checks membership and ownership. |
+| `review.queue.items` | Typed as `[{name, itemId?}]`. |
+| Meal ideas | Stored in a `meal_ideas` table (chat messages don't exist yet), with `recordMealIdeas`. "Choose" on the same idea twice returns the same meal. |
+| KitchenState shape | Adds `kitchenId`. Actor fields are `{id, name}` or `{id, missing: true}`. `meals` = chosen/planned/cooking; `plan` = meal IDs, cooking first; `ticks` = ticked only, each with a `meal` ref; `toReview` = pending only. Recipes come from `getRecipe(mealId)` (`RecipeView`); meals carry a `recipe` summary. |
+| Stream | `applied` nests the ApplyResult under `result`. |
+| Allergen words | A small starter list in `src/shared/profile/allergens.ts`; the AI specialist owns the full list and should replace it there (one list, not two). |
+| Not built yet | `getEvents(userId, …)` from §5; the 4-account cap and Better Auth tables (sign-in milestone); route handlers. |

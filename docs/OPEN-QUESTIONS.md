@@ -12,7 +12,8 @@
 ## Outstanding
 
 ### P1. ⛔ What should come after the backend foundation? (asked as building starts)
-Now building: **backend foundation** (project skeleton, event history, kitchen state, change checking, tests), plus **UX's calm visual direction** (you'll get a preview to pick from).
+✅ **Backend foundation is done** (65 tests passing, committed locally). UX's visual directions are ready (V1).
+Built: **backend foundation** (project skeleton, event history, kitchen state, change checking, tests), plus **UX's calm visual direction** (you'll get a preview to pick from).
 Pick the next milestone, or put them in order:
 - **(a) The app on screen:** layout, chat dock (Peek / Full / Minimized + button), and the Kitchen widget, using a stand-in "fake AI" so it works without an AI key. It needs the visual direction (**V1**).
 - **(b) The real AI:** Kitchen actually understanding your messages, plus the test set of example messages. This needs an Anthropic API key (S1).
@@ -39,6 +40,18 @@ Plum is used **only** for allergy flags, so it always means "allergy" and never 
 
 > Answer:
 
+### K3. 🟡 "I bought eggs" when eggs are already in the kitchen
+*(From the Backend specialist, found while building)* Right now this creates a **second** "eggs" entry, which makes "use the eggs" ambiguous later.
+**Rec:** one entry per item. Buying more of something you already have updates that entry (and clears "Low" / "Out"). Separate entries only when you say they're different ("eggs in the freezer" vs "eggs in the fridge").
+
+> Answer:
+
+### K4. ⚪ Using up a measured amount marks it "Out" automatically?
+*(From the Backend specialist)* For example, you had "2 lbs chicken" and used 2 lbs.
+**Rec:** yes, mark it Out automatically, with the usual "What changed" and Undo. You can always correct it.
+
+> Answer:
+
 ### AI6. 🟡 Allergen dishes in meal ideas you didn't ask for?
 Decision 0019: allergies are always considered and always flagged, with the person's own note (for example, [Husband]'s seafood allergy plus "can eat shellfish if medicine is on hand").
 The open part is **unprompted** suggestions ("What can I make?"):
@@ -51,7 +64,7 @@ The open part is **unprompted** suggestions ("What can I make?"):
 
 ### AI7. 🟡 Can you save your husband's allergy for him?
 *(From the integration pass; follows from 0019)* Say you tell Kitchen "[Husband] is allergic to seafood."
-**Rec:** Kitchen asks you, "Save this to [Husband]'s profile?". If you say yes, it's saved and starts being considered right away. In his Settings it shows as **"Added by Vero"**, and **only he** can edit its note or remove it.
+**Rec:** Kitchen asks you, "Save this to [Husband]'s profile?". (Backend will record your "yes" with the allergy, as it does for preferences.) If you say yes, it's saved and starts being considered right away. In his Settings it shows as **"Added by Vero"**, and **only he** can edit its note or remove it.
 
 > Answer:
 
