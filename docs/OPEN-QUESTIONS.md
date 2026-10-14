@@ -11,6 +11,18 @@
 
 ## Outstanding
 
+### P2. ⛔ What to build next (no deploys today; progress shown on localhost)
+What MVP 1 still lacks, roughly smallest first. Pick, or put them in order:
+- **(a) Chat history survives a reload.** Right now the conversation disappears if you reload or reopen the app, and Kitchen loses the context of what you just said. Small, and it matters for today's test.
+- **(b) Settings:** the privacy and terms pages, "Sign out everywhere", and see/delete your data (0015, 0017). Small, and required for MVP 1.
+- **(c) Older/newer batches (K3, 0025),** e.g. "Eggs · 2 batches". Medium.
+- **(d) Meal ideas → recipe → meal plan → cooking → "Update your kitchen"** (journey steps 5–7, 0005/0013/0025), including allergy badges. The biggest piece, and the heart of the original spec.
+- **(e) Staging and the two tester agents (0021),** so every change gets tested on a safe copy before it reaches you. Medium.
+
+**Rec:** (a) now, since it's small and helps today. Then (d), the core spec journey. Then (b), (e), (c). "Do later" for the shopping list is already being built in its own session.
+
+> Answer:
+
 ### GH1. 🟡 Make the GitHub repo public?
 It's **private** for now: [github.com/vcani003/my-wellness-coach](https://github.com/vcani003/my-wellness-coach). There are no secrets anywhere in its history (checked). But it does contain personal details: **Levi's seafood allergy and medicine note** (used as a test case), your names, your stores, and your Gmail address on every commit.
 **Rec:** keep it private. If you want it public later (for a portfolio, say), first replace those details with made-up ones and use a GitHub "noreply" commit email. Going public can't be fully undone.

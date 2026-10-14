@@ -5,6 +5,7 @@
  * moves a row (ux.md §2: nothing moves while you tick).
  */
 import type { ShoppingItemRow } from "@/contracts/kitchen-state";
+import type { PendingTick } from "./tick-queue";
 
 export const ANYWHERE = "__anywhere__";
 
@@ -47,3 +48,7 @@ export function withGhosts<T>(rows: T[], ghosts: readonly { index: number; row: 
   for (const g of [...ghosts].sort((a, b) => a.index - b.index)) out.splice(Math.min(g.index, out.length), 0, g.row);
   return out;
 }
+
+/** Shown ticked = a pending tap on this phone, else what the kitchen has. */
+export const shownTicked = (item: Pick<ShoppingItemRow, "ticked">, p?: PendingTick) =>
+  p && p.status !== "failed" ? p.ticked : Boolean(item.ticked);

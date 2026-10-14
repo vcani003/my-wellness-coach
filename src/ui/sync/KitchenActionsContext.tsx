@@ -13,6 +13,10 @@ export interface KitchenActions {
   tickShopping(shoppingItemId: string, ticked: boolean): Promise<ActionResult>;
   removeShopping(shoppingItemId: string): Promise<ActionResult>;
   finishShopping(shoppingItemIds: string[]): Promise<ActionResult>;
+  /** "Do later" on the Done-shopping sheet: the chosen items wait in the Kitchen's To review. */
+  queueShoppingForLater(shoppingItemIds: string[]): Promise<ActionResult>;
+  /** Add (`done`, with the chosen list items) or Skip on a To review card. */
+  resolveReview(reviewId: string, outcome: "done" | "skipped", shoppingItemIds?: string[]): Promise<ActionResult>;
   undo(changeSetId: string): Promise<ActionResult>;
   /** Show a saved button change now; `highlight` marks its rows New / Updated. */
   showOwn(result: ApplyResult, opts?: { highlight?: boolean }): void;

@@ -53,7 +53,15 @@
     "new": "New",
     "updated": "Updated",
     "byPerson": "{name} · {when}",
-    "justNow": "just now"
+    "justNow": "just now",
+    "review": {
+      "title": "To review",
+      "titleCount": "To review · {count}",
+      "shoppingList": "Shopping list",
+      "addItems": "{count, plural, one {# item to add} other {# items to add}} · {from}",
+      "update": "Update your kitchen · {from}",
+      "skipped": "Skipped. Your list is as it was."
+    }
   },
   "chat": {
     "label": "Chat",
@@ -101,7 +109,8 @@
   "fallback": {
     "unknownItem": "Unknown item",
     "someone": "Someone",
-    "formerMember": "a former member"
+    "formerMember": "a former member",
+    "unknownMeal": "Unknown meal"
   },
   "location": {
     "fridge": "fridge",
@@ -199,6 +208,9 @@
     "done": "Added {count} to your kitchen. {left, plural, =0 {Your list is clear.} one {# thing is still on your list.} other {# things are still on your list.}}",
     "doneUndoLabel": "Undo: added {names} to your kitchen",
     "doneFailed": "Couldn't add those to your kitchen, so nothing changed. Try again.",
+    "savedForLater": "Saved for later. It's in To review in your Kitchen.",
+    "laterFailed": "Couldn't save that for later, so nothing changed. Try again.",
+    "skipFailed": "Couldn't skip that. Try again.",
     "undone": "Undone.",
     "cantUndo": "Can't undo this now. Tell me what to fix.",
     "sheet": {

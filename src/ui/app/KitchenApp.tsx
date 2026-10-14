@@ -12,7 +12,9 @@ import { useLocale, useNow, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   finishShopping,
+  queueShoppingForLater,
   removeShoppingListItem,
+  resolveToReview,
   tickShoppingListItem,
   undoChange,
   untickShoppingListItem,
@@ -173,7 +175,7 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState }: Ki
     }
   }, []);
 
-  // Buttons that change the kitchen without chat (the shopping list's tick, Remove, Done shopping).
+  // Buttons that change the kitchen without chat (the shopping list's tick, Remove, Done shopping, To review).
   const actions = useMemo<KitchenActions>(() => {
     const tap = () => ({
       kitchenId,
@@ -186,6 +188,9 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState }: Ki
         (ticked ? tickShoppingListItem : untickShoppingListItem)({ ...tap(), shoppingItemId }),
       removeShopping: (shoppingItemId) => removeShoppingListItem({ ...tap(), shoppingItemId }),
       finishShopping: (ids) => finishShopping({ ...tap(), items: ids.map((shoppingItemId) => ({ shoppingItemId })) }),
+      queueShoppingForLater: (shoppingItemIds) => queueShoppingForLater({ ...tap(), shoppingItemIds }),
+      resolveReview: (reviewId, outcome, shoppingItemIds) =>
+        resolveToReview({ ...tap(), reviewId, outcome, ...(shoppingItemIds ? { shoppingItemIds } : {}) }),
       undo: (changeSetId) => undoChange({ ...tap(), changeSetId }),
       showOwn(result, opts) {
         sync.applyOwn(result.state);

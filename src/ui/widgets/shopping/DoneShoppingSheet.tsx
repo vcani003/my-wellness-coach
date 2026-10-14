@@ -1,12 +1,16 @@
 "use client";
 /**
  * "Add to your kitchen?" from the shopping list (ux.md §5, §10, SL2): a bottom sheet on a phone,
- * a centred dialog on desktop. "Got it" items are pre-selected; "Not ticked" ones start
- * unselected in case you forgot to tick. Add N items → into the kitchen and off the list.
- * Do later, Skip, Esc and tapping outside change nothing: the ticks stay on the list.
+ * a centred dialog on desktop. Add N items → into the kitchen and off the list.
+ * - From "Done shopping": "Got it" items are pre-selected; "Not ticked" ones start unselected in
+ *   case you forgot to tick. **Do later** saves the chosen items to the Kitchen's To review
+ *   (`onLater`); Esc, swipe-down and tapping outside count as Do later, so nothing is lost (ux.md §5).
+ *   Skip changes nothing.
+ * - From a To review card: its items are all pre-selected. Do later just closes (it's still in
+ *   To review); Skip closes the card (`onSkip`).
  */
 import { useTranslations } from "next-intl";
-import { useId, useState, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { Dialog } from "@/ui/primitives/Dialog";
 
 export interface SheetItem {
@@ -15,33 +19,57 @@ export interface SheetItem {
   ticked: boolean;
 }
 
-export function DoneShoppingSheet(props: {
+export interface DoneShoppingSheetProps {
   open: boolean;
   items: SheetItem[];
   onClose: () => void;
   onAdd: (ids: string[]) => Promise<boolean>;
+  /** Do later with the chosen items. Absent = Do later only closes. */
+  onLater?: (ids: string[]) => Promise<boolean>;
+  /** Skip. Absent = Skip only closes (nothing changes). */
+  onSkip?: () => Promise<boolean>;
+  /** Which items start selected: the ticked ones (Done shopping) or all (a To review card). */
+  preselect?: "ticked" | "all";
   finalFocus?: RefObject<HTMLElement | null>;
-}) {
+}
+
+export function DoneShoppingSheet(props: DoneShoppingSheetProps) {
+  // Esc, swipe-down and tapping outside run the open sheet's Do later.
+  const dismissRef = useRef(props.onClose);
   return (
-    <Dialog.Root open={props.open} onOpenChange={(open) => !open && props.onClose()}>
+    <Dialog.Root open={props.open} onOpenChange={(open) => !open && dismissRef.current()}>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-40 bg-text-default/30" />
         {/* A new key on each open, so the pre-selection is fresh each time. */}
-        <SheetBody key={props.open ? "open" : "closed"} {...props} />
+        <SheetBody key={props.open ? "open" : "closed"} {...props} dismissRef={dismissRef} />
       </Dialog.Portal>
     </Dialog.Root>
   );
 }
 
-function SheetBody({ items, onClose, onAdd, finalFocus }: Parameters<typeof DoneShoppingSheet>[0]) {
+type Failure = "add" | "later" | "skip";
+
+function SheetBody({
+  items,
+  onClose,
+  onAdd,
+  onLater,
+  onSkip,
+  preselect = "ticked",
+  finalFocus,
+  dismissRef,
+}: DoneShoppingSheetProps & { dismissRef: RefObject<() => void> }) {
   const t = useTranslations("shopping.sheet");
   const tShop = useTranslations("shopping");
-  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set(items.filter((i) => i.ticked).map((i) => i.id)));
+  const [selected, setSelected] = useState<ReadonlySet<string>>(
+    () => new Set(items.filter((i) => preselect === "all" || i.ticked).map((i) => i.id)),
+  );
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<Failure | null>(null);
   const errorId = useId();
   const got = items.filter((i) => i.ticked);
   const notTicked = items.filter((i) => !i.ticked);
+  const chosen = () => items.filter((i) => selected.has(i.id)).map((i) => i.id);
   const toggle = (id: string) =>
     setSelected((s) => {
       const next = new Set(s);
@@ -49,15 +77,29 @@ function SheetBody({ items, onClose, onAdd, finalFocus }: Parameters<typeof Done
       else next.add(id);
       return next;
     });
-  const add = async () => {
+
+  /** Run a step; close when it saved, else keep the sheet open with a plain error. */
+  const run = async (kind: Failure, step: () => Promise<boolean>) => {
+    if (busy) return;
     setBusy(true);
-    setFailed(false);
-    const ids = items.filter((i) => selected.has(i.id)).map((i) => i.id);
-    const ok = await onAdd(ids);
+    setFailed(null);
+    const ok = await step();
     setBusy(false);
     if (ok) onClose();
-    else setFailed(true);
+    else setFailed(kind);
   };
+  const add = () => run("add", () => onAdd(chosen()));
+  const later = () => {
+    if (busy) return;
+    const ids = chosen();
+    // Nothing chosen: nothing to keep for later.
+    if (!onLater || ids.length === 0) return onClose();
+    return run("later", () => onLater(ids));
+  };
+  const skip = () => (onSkip ? run("skip", onSkip) : onClose());
+  useEffect(() => {
+    dismissRef.current = () => void later();
+  });
 
   const section = (key: "gotIt" | "notTicked", list: SheetItem[]) =>
     list.length > 0 && (
@@ -102,7 +144,7 @@ function SheetBody({ items, onClose, onAdd, finalFocus }: Parameters<typeof Done
       </div>
       {failed && (
         <p id={errorId} role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-small text-error-text">
-          {tShop("doneFailed")}
+          {tShop(failed === "add" ? "doneFailed" : failed === "later" ? "laterFailed" : "skipFailed")}
         </p>
       )}
       <button
@@ -114,10 +156,10 @@ function SheetBody({ items, onClose, onAdd, finalFocus }: Parameters<typeof Done
         {busy ? t("adding") : t("add", { count: selected.size })}
       </button>
       <div className="flex items-center justify-between">
-        <button type="button" onClick={onClose} disabled={busy} className="min-h-tap rounded-button px-3 text-body font-medium text-accent-text">
+        <button type="button" onClick={() => void later()} disabled={busy} className="min-h-tap rounded-button px-3 text-body font-medium text-accent-text">
           {t("doLater")}
         </button>
-        <button type="button" onClick={onClose} disabled={busy} className="min-h-tap rounded-button px-3 text-body font-medium text-accent-text">
+        <button type="button" onClick={() => void skip()} disabled={busy} className="min-h-tap rounded-button px-3 text-body font-medium text-accent-text">
           {t("skip")}
         </button>
       </div>

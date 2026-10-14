@@ -2,7 +2,8 @@
  * Shopping list (0027, ux.md §10) on the FAKE interpreter, at phone and desktop size, with axe at
  * each checkpoint: items said in chat → grouped by store, receipt grouped by store → tick ("got
  * it", saved for everyone) → ⋯ Remove with Undo → offline tick queued and synced (SL4 Rec) →
- * Done shopping → "Add to your kitchen?" → the ticked item moves into the Kitchen.
+ * Done shopping → "Add to your kitchen?" → the ticked item moves into the Kitchen; Do later → To
+ * review in the Kitchen → Add from there.
  * Set SHOPPING_SCREENSHOTS=1 to save docs/design/screenshots/shopping-phone.png.
  */
 import { expect, test, type Page } from "@playwright/test";
@@ -101,8 +102,8 @@ test("shopping list: add in chat → tick → remove → Done shopping moves it 
   await expect(sheet.getByRole("checkbox", { name: "Ginger" })).toBeChecked();
   await expect(sheet.getByRole("checkbox", { name: "Lemongrass" })).not.toBeChecked();
   await expectAccessible(page, "done shopping sheet");
-  // Do later changes nothing.
-  await sheet.getByRole("button", { name: "Do later" }).click();
+  // Skip changes nothing (Do later has its own test below).
+  await sheet.getByRole("button", { name: "Skip" }).click();
   await expect(sheet).toHaveCount(0);
   await expect(box(page, "Garlic")).toBeChecked();
 
@@ -127,6 +128,61 @@ test("shopping list: add in chat → tick → remove → Done shopping moves it 
   await list(page).getByRole("button", { name: /^Undo: added garlic, ginger(,)? and lemongrass to your kitchen$/ }).click();
   await expect(box(page, "Garlic")).toBeChecked();
   await expect(kitchen(page).getByRole("listitem").filter({ hasText: "Lemongrass" })).toHaveCount(0);
+});
+
+test("Do later: Done shopping → Do later → To review in the Kitchen → Add puts them in the kitchen and off the list", async ({ page, baseURL }) => {
+  await resetAndActAs(page, baseURL!);
+  await say(page, "Add garlic, ginger and shallot to the list for MD Oriental Market");
+  await expect(box(page, "Shallot")).toBeVisible();
+  await box(page, "Garlic").click();
+  await box(page, "Ginger").click();
+  await expect(box(page, "Ginger")).toBeChecked();
+
+  // Done shopping → Do later: saved for later; the list stays as it was, ticks included.
+  await list(page).getByRole("button", { name: "Done shopping" }).click();
+  const sheet = page.getByRole("dialog", { name: "Add to your kitchen?" });
+  await expect(sheet.getByRole("checkbox", { name: "Garlic" })).toBeChecked();
+  await expect(sheet.getByRole("checkbox", { name: "Shallot" })).not.toBeChecked();
+  await sheet.getByRole("button", { name: "Do later" }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(list(page)).toContainText("Saved for later. It's in To review in your Kitchen.");
+  await expect(page.getByTestId("announcer")).toContainText("Saved for later.");
+  await expect(box(page, "Garlic")).toBeChecked();
+  await expect(box(page, "Shallot")).not.toBeChecked();
+  await expectAccessible(page, "after do later");
+
+  // To review in the Kitchen shows them, and it's saved (survives a reload).
+  await page.reload();
+  await expandIfCollapsed(page, kitchen(page));
+  const review = kitchen(page).getByRole("region", { name: "To review" });
+  const card = review.getByRole("button", { name: "2 items to add · Shopping list" });
+  await expect(card).toBeVisible();
+  await expect(review.getByRole("heading")).toContainText("To review · 1");
+  await expectAccessible(page, "to review");
+
+  // Tapping it reopens the sheet with those items chosen; Add moves them.
+  await card.click();
+  await expect(sheet.getByRole("checkbox", { name: "Garlic" })).toBeChecked();
+  await expect(sheet.getByRole("checkbox", { name: "Ginger" })).toBeChecked();
+  await expect(sheet.getByRole("checkbox", { name: "Shallot" })).toHaveCount(0);
+  await expectAccessible(page, "to review sheet");
+  await sheet.getByRole("button", { name: "Add 2 items" }).click();
+  await expect(sheet).toHaveCount(0);
+
+  await expect(kitchen(page)).toContainText("Added 2 to your kitchen. 1 thing is still on your list.");
+  await expect(review).toHaveCount(0);
+  for (const name of ["Garlic", "Ginger"]) {
+    await expect(kitchen(page).getByRole("listitem").filter({ hasText: name })).toContainText("New");
+    await expect(box(page, name)).toHaveCount(0);
+  }
+  await expect(box(page, "Shallot")).toBeVisible();
+  await expectAccessible(page, "after add from to review");
+
+  // One Undo: back on the list (ticked), out of the kitchen, and the card is back in To review.
+  await kitchen(page).getByRole("button", { name: "Undo: added garlic and ginger to your kitchen" }).click();
+  await expect(box(page, "Garlic")).toBeChecked();
+  await expect(kitchen(page).getByRole("listitem").filter({ hasText: "Ginger" })).toHaveCount(0);
+  await expect(card).toBeVisible();
 });
 
 test("SL4: a tick made with no signal is kept on the phone, marked 'Not synced yet', and syncs when back online", async ({ page, baseURL, context }) => {

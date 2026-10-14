@@ -1,16 +1,18 @@
 "use client";
 /**
- * The Kitchen widget (ux.md §3, decisions 0011 and 0017): items grouped Fridge / Freezer /
+ * The Kitchen widget (ux.md §3, decisions 0011 and 0017): To review at the top, then items grouped Fridge / Freezer /
  * Pantry / Not sure where, "added X days ago", Running low, "New" / "Updated" after your own
  * message, and "Levi · just now" for the other person's changes. Empty, loading, error and
  * stale states stay inside the widget (0018).
  */
 import { useFormatter, useLocale, useTranslations } from "next-intl";
+import { useRef } from "react";
 import type { ItemRow } from "@/contracts/kitchen-state";
 import { actorName, itemName } from "@/ui/fallbacks";
 import { useKitchenData, type ChangeMark } from "@/ui/sync/KitchenDataContext";
 import type { WidgetProps } from "@/ui/workspace/types";
 import { calendarDaysSince, groupItems } from "./model";
+import { ToReview } from "./ToReview";
 
 export function KitchenSummary() {
   const t = useTranslations("kitchen");
@@ -24,6 +26,8 @@ export function KitchenWidget({ onRetry }: WidgetProps) {
   const format = useFormatter();
   const { snapshot, marks, remoteIds, me, now } = useKitchenData();
   const { state, status, syncedAt } = snapshot;
+  // Where focus goes when a To review sheet closes (the card it came from may be gone).
+  const rootRef = useRef<HTMLDivElement>(null);
 
   if (!state) {
     if (status === "error") {
@@ -48,12 +52,13 @@ export function KitchenWidget({ onRetry }: WidgetProps) {
 
   const groups = groupItems(state.items);
   return (
-    <div className="flex flex-col gap-4">
+    <div ref={rootRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
       {status === "stale" && syncedAt !== null && (
         <p className="rounded-sm bg-surface-sunken px-3 py-2 text-small text-text-muted">
           {t("stale", { time: format.dateTime(new Date(syncedAt), { hour: "numeric", minute: "2-digit" }) })}
         </p>
       )}
+      <ToReview reviews={state.toReview} finalFocus={rootRef} />
       {groups.length === 0 ? (
         <p className="text-body text-text-muted">{t("empty")}</p>
       ) : (

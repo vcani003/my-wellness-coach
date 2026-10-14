@@ -6,9 +6,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { KitchenState } from "@/contracts/kitchen-state";
 import type { SyncSnapshot } from "@/ui/sync/kitchen-sync";
+import { KitchenActionsProvider } from "@/ui/sync/KitchenActionsContext";
 import { KitchenDataProvider, type ChangeMark } from "@/ui/sync/KitchenDataContext";
 import { KitchenWidget } from "@/ui/widgets/kitchen/KitchenWidget";
 import { item, kitchen, LEVI, said, VERO } from "../support/kitchen-rows";
+import { fakeActions } from "../support/fake-actions";
 import { renderWithIntl } from "../support/intl";
 
 afterEach(cleanup);
@@ -20,9 +22,11 @@ function show(
 ) {
   const snapshot: SyncSnapshot = { state, status: opts.status ?? (state ? "ok" : "loading"), syncedAt: NOW.getTime() };
   renderWithIntl(
-    <KitchenDataProvider value={{ me: VERO, snapshot, marks: opts.marks ?? {}, remoteIds: new Set(opts.remote ?? []), now: NOW }}>
-      <KitchenWidget onRetry={opts.onRetry ?? (() => {})} />
-    </KitchenDataProvider>,
+    <KitchenActionsProvider value={fakeActions()}>
+      <KitchenDataProvider value={{ me: VERO, snapshot, marks: opts.marks ?? {}, remoteIds: new Set(opts.remote ?? []), now: NOW }}>
+        <KitchenWidget onRetry={opts.onRetry ?? (() => {})} />
+      </KitchenDataProvider>
+    </KitchenActionsProvider>,
   );
 }
 

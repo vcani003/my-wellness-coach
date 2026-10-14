@@ -4,7 +4,8 @@
  * with "Anywhere" last. A row is a big "got it" checkbox (whole row is the tap target), the name
  * and quantity as said, who ticked it when it wasn't you, and ⋯ → Remove. Ticks show at once and
  * are kept on this phone when there's no signal (SL4 Rec). "Done shopping" opens "Add to your
- * kitchen?". Empty, loading, error and stale states stay inside the widget (0018).
+ * kitchen?", whose Do later waits in the Kitchen's To review. Empty, loading, error and stale
+ * states stay inside the widget (0018).
  */
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useRef, useState } from "react";
@@ -17,14 +18,12 @@ import { useKitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { useKitchenData, type ChangeMark } from "@/ui/sync/KitchenDataContext";
 import type { WidgetProps } from "@/ui/workspace/types";
 import { DoneShoppingSheet } from "./DoneShoppingSheet";
-import { ANYWHERE, groupShopping, withGhosts } from "./model";
+import { ANYWHERE, groupShopping, shownTicked, withGhosts } from "./model";
 import type { PendingTick } from "./tick-queue";
+import { useAddFromList } from "./useAddFromList";
 import { useTickQueue } from "./useTickQueue";
 
 export const SHOPPING_WIDGET_ID = "shopping.list";
-
-/** Shown ticked = a pending tap on this phone, else what the kitchen has. */
-const shownTicked = (item: ShoppingItemRow, p?: PendingTick) => (p && p.status !== "failed" ? p.ticked : Boolean(item.ticked));
 
 export function ShoppingSummary() {
   const t = useTranslations("shopping");
@@ -60,6 +59,7 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
   const actions = useKitchenActions();
   const { snapshot, marks, remoteIds, me, turn = 0 } = useKitchenData();
   const { queue, pending } = useTickQueue();
+  const addFromList = useAddFromList();
   const { state, status, syncedAt } = snapshot;
   const rootRef = useRef<HTMLDivElement>(null);
   const [ghosts, setGhosts] = useState<Ghost[]>([]);
@@ -92,7 +92,6 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
 
   const list = state.shoppingList;
   const name = (n: string | undefined) => itemName(n, t, locale);
-  const listFormat = (names: string[]) => new Intl.ListFormat(locale, { type: "conjunction" }).format(names);
   const liveGhosts = ghosts.filter((g) => g.turn === turn && !list.some((i) => i.id === g.id));
   const rows: Row[] = withGhosts<Row>(
     list.map((item) => ({ kind: "item", item })),
@@ -155,23 +154,22 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
   /** Add the chosen items to the kitchen. Unticked ones are ticked first (the backend needs that). */
   const finish = async (ids: string[]): Promise<boolean> => {
     actions.touched(SHOPPING_WIDGET_ID);
+    const added = await addFromList(ids);
+    if (!added) return false;
+    setNotice({ text: added.text, undo: { changeSetId: added.changeSetId, label: added.undoLabel }, turn });
+    announce(added.text);
+    return true;
+  };
+
+  /** Do later: the chosen items wait in the Kitchen's To review; the list stays as it is. */
+  const later = async (ids: string[]): Promise<boolean> => {
+    actions.touched(SHOPPING_WIDGET_ID);
     try {
-      await queue.idle();
-      for (const id of ids) {
-        const item = list.find((i) => i.id === id);
-        if (item && !item.ticked) {
-          const res = await actions.tickShopping(id, true);
-          if (!res.ok || !res.result.state.shoppingList.find((i) => i.id === id)?.ticked) return false;
-          actions.showOwn(res.result);
-        }
-      }
-      const res = await actions.finishShopping(ids);
+      const res = await actions.queueShoppingForLater(ids);
       if (!res.ok || !res.result.applied.length) return false;
-      actions.showOwn(res.result, { highlight: true });
-      // Names as said ("garlic"), so the Undo label reads as a sentence.
-      const names = listFormat(ids.map((id) => list.find((i) => i.id === id)?.name.value.trim() || t("fallback.unknownItem")));
-      const text = t("shopping.done", { count: ids.length, left: res.result.state.shoppingList.length });
-      setNotice({ text, undo: { changeSetId: res.result.changeSetId, label: t("shopping.doneUndoLabel", { names }) }, turn });
+      actions.showOwn(res.result);
+      const text = t("shopping.savedForLater");
+      setNotice({ text, turn });
       announce(text);
       return true;
     } catch {
@@ -277,6 +275,7 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
         items={list.map((item) => ({ id: item.id, name: name(item.name.value), ticked: shownTicked(item, pending.get(item.id)) }))}
         onClose={() => setSheetOpen(false)}
         onAdd={finish}
+        onLater={later}
         finalFocus={rootRef}
       />
     </div>

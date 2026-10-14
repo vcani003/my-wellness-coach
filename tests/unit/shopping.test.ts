@@ -343,8 +343,8 @@ describe("Do later → To review (shopping-list card)", () => {
     const garlic = entry(k, "garlic").id;
     k.tap([{ type: "shopping.remove", target: { name: "shallot" } }]);
     const shallot = Object.values(k.kitchen.shopping).find((e) => e.name.value === "shallot")!.id;
-    const q = (items: OpInput extends never ? never : unknown[], kind: "add-to-kitchen" | "after-cooking" = "add-to-kitchen") =>
-      codes(k.tap([{ type: "review.queue", kind, items } as OpInput]));
+    const q = (items: unknown[], kind: "add-to-kitchen" | "after-cooking" = "add-to-kitchen") =>
+      codes(k.tap([{ type: "review.queue", kind, items } as unknown as OpInput]));
     expect(q([])).toEqual(["INVALID_OPERATION"]);
     expect(q([{ shoppingItemId: garlic }], "after-cooking")).toEqual(["INVALID_OPERATION"]);
     expect(q([{ shoppingItemId: garlic }, { shoppingItemId: garlic }])).toEqual(["INVALID_OPERATION"]);
