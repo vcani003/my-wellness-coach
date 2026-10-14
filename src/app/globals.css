@@ -200,6 +200,24 @@
   bottom: calc(env(safe-area-inset-bottom) + var(--spacing-4));
 }
 
+/*
+ * /unlock: a card centred on the page, clear of the notch and home indicator. On iPhone the
+ * keyboard doesn't shrink the page, so the bottom padding grows by --keyboard-inset and the card
+ * re-centres in the space above it (`safe center`: if it can't fit, it scrolls instead of being
+ * cut off at the top). The form also scrolls the Unlock button into view (unlock-form.tsx).
+ */
+.unlock-page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  padding-top: max(var(--spacing-5), env(safe-area-inset-top));
+  padding-bottom: calc(var(--keyboard-inset) + max(var(--spacing-5), env(safe-area-inset-bottom)));
+  padding-left: max(var(--spacing-4), env(safe-area-inset-left));
+  padding-right: max(var(--spacing-4), env(safe-area-inset-right));
+}
+
 @media (width < 56.25rem) {
   html {
     scroll-padding-top: var(--topbar-height);

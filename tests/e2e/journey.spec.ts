@@ -6,8 +6,8 @@
  * Plus the dock states (phone), the desktop split, and a two-person cue.
  * Set M2_SCREENSHOTS=1 to save docs/design/screenshots/m2-<project>.png after step 1.
  */
-import AxeBuilder from "@axe-core/playwright";
 import { expect, request, test, type Page } from "@playwright/test";
+import { expectAccessible } from "../support/axe";
 
 const KITCHEN_ID = "test-kitchen-demo";
 const COOKIE = "dev_acting_as"; // DEV_ACTING_AS_COOKIE (src/lib/auth/current-user.ts)
@@ -17,15 +17,6 @@ async function resetAndActAs(page: Page, baseURL: string, userId: "demo-vero" | 
   expect(res.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: userId, url: baseURL }]);
   await page.goto("/");
-}
-
-/** Fails on serious or critical WCAG 2.2 A/AA issues (frontend.md §6). */
-async function expectAccessible(page: Page, checkpoint: string) {
-  const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
-  const blocking = results.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
-  const minor = results.violations.filter((v) => !blocking.includes(v));
-  if (minor.length) console.log(`[axe ${checkpoint}] minor:`, minor.map((v) => `${v.id} (${v.impact})`).join(", "));
-  expect(blocking.map((v) => `${v.id}: ${v.help} → ${v.nodes.map((n) => n.target.join(" ")).join(" | ")}`), checkpoint).toEqual([]);
 }
 
 const kitchen = (page: Page) => page.getByRole("region", { name: "Kitchen" });

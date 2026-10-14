@@ -11,3 +11,7 @@ export { ChatCircleDots as ChatIcon } from "@phosphor-icons/react/dist/csr/ChatC
 export { Check as CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 export { Minus as MinusIcon } from "@phosphor-icons/react/dist/csr/Minus";
 export { PaperPlaneRight as SendIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneRight";
+export { CircleNotch as SpinnerIcon } from "@phosphor-icons/react/dist/csr/CircleNotch";
+export { CookingPot as KitchenMarkIcon } from "@phosphor-icons/react/dist/csr/CookingPot";
+export { Eye as ShowIcon } from "@phosphor-icons/react/dist/csr/Eye";
+export { EyeSlash as HideIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";

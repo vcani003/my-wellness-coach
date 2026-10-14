@@ -69,7 +69,7 @@
     "assistant": "Kitchen",
     "writing": "Kitchen is writing…",
     "composerLabel": "Message Kitchen",
-    "composerPlaceholder": "Tell me what changed, or ask what to make",
+    "composerPlaceholder": "Tell me what changed…",
     "send": "Send",
     "welcome": "Hi! Tell me what you bought, froze or used up. I save things as soon as you tell me, and you can always Undo.",
     "suggestionsLabel": "Ideas to start with",
@@ -140,11 +140,17 @@
     "ITEM_MOVED": "{name} moved to the {location}"
   },
   "unlock": {
+    "pageTitle": "Unlock · Kitchen",
     "title": "Kitchen",
-    "intro": "Enter your access code to continue. You'll stay signed in on this device.",
+    "intro": "Welcome in. Enter your access code to open your kitchen.",
     "label": "Access code",
+    "show": "Show",
+    "hide": "Hide",
+    "showLabel": "Show access code",
+    "hideLabel": "Hide access code",
     "submit": "Unlock",
     "checking": "Checking…",
+    "staySignedIn": "You'll stay signed in on this device.",
     "errors": {
       "empty": "Enter your access code.",
       "failed": "Something went wrong. Please try again.",
