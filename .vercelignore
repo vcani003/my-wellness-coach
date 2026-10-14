@@ -4,7 +4,8 @@
 .data/
 .claude/
 .next/
-.next-e2e/
+# Every local Next.js build cache (.next-e2e, .next-e2e-auth, …)
+.next-*/
 node_modules/
 test-results/
 playwright-report/
