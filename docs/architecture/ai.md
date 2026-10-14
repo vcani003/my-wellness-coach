@@ -189,3 +189,10 @@ eval/            cases · runner · matchers
 6. **`item.use` gets `usedUp` and `amountUsed`.** Apply leaves the remainder unknown when it can't compute it. (`usedUp` became `stock: low|out` on 2026-10-14; backend changelog.)
 7. **`profile.restriction.add` / `.remove`** (allergy or diet) replaces `profile.allergy.add`.
 8. **`/api/chat` accepts `pastedRanges`** from the composer's paste events. Without them, messages over 1,500 characters count as pasted.
+
+## Build notes: minimum real interpreter (2026-10-14, for the 0026 grocery trip)
+- **Built:** `src/ai/interpreter.ts` (shared interface), `src/ai/real/` (Claude Opus 5.5, one structured-output call, `fallbacks: "default"` on refusals, medium effort for interpret and low for reword, both overridable with `AI_INTERPRET_EFFORT` / `AI_REWORD_EFFORT`, 8,000 output-token cap, a 40 s timeout plus 1 retry, and a cached system prompt). `src/ai/index.ts` `getInterpreter()` returns the real interpreter only when `AI_MODE=real` and `ANTHROPIC_API_KEY` are set.
+- **Simplified for now:** a single fixed prompt, with no separate `context/` or `guards/` folders yet. Recent chat is sent as data inside the turn rather than as role turns. There's no allergy context, because `InterpretRequest` carries no profiles, and no retry on bad output.
+- **Names:** non-English names are kept as said, with the English name in parentheses when it's obvious ("nước mắm (fish sauce)"), because the contract has no separate English-name field. Restocks reuse the listed name so the backend matches them.
+- **Schema:** the JSON schema is built with Zod's `toJSONSchema`, not the SDK's `betaZodOutputFormat`. SDK 0.133.0 moves `enum` into the description, so the API wouldn't enforce the values.
+- **Eval:** `npm run eval` runs `src/ai/eval/interpret.eval.ts` (17 cases); it's skipped without a key.
