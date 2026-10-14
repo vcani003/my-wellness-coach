@@ -12,7 +12,7 @@ Full design: [ux.md](../architecture/ux.md) §3 and §5.
 
 - **One home:** the Meal plan list holds planned *and* cooking meals, with cooking ones first.
 - **"Add that":** the most recently chosen meal, or "Which one?" if that's unclear.
-- **Recipes (R1):** the user can provide their own or get an AI-suggested one, and refine it in chat. (R2: whether to suggest by default or ask is still open.)
+- **Recipes (R1, R2):** choosing a meal opens an **AI-suggested recipe by default** (labelled as a suggestion), with a **"Use my own recipe"** link to paste or type your own instead. Refine it in chat ("no oven", "make it spicier"). There's no question each time.
 
 ## Ingredient checklist (M2, M6)
 - One list per recipe, labelled **In your kitchen** / **Need**. Ticking ≠ buying.
@@ -21,7 +21,8 @@ Full design: [ux.md](../architecture/ux.md) §3 and §5.
 
 ## After cooking (M4, M7)
 - Finishing a meal records that its ingredients were **used in that meal**.
-- The after-cooking step lets the user say, per ingredient, whether it's **out** or **running low**, and leave an optional **note** about what was used in that cooking session. Vero found "What did you use up?" too broad. The exact wording and defaults are in OPEN-QUESTIONS **M8**.
+- **"Update your kitchen" step (M8, approved):** under "Cooked: <meal>", each ingredient the meal used gets one choice: **Still have some** (default, nothing changes), **Running low**, or **Out**. Nothing is pre-selected beyond the default. An optional note, "Anything to remember about what you used?", is saved with that cooking session. Then **Done**, **Skip** or **Do later**.
+- **Skip** records the ingredients as "used in this meal, amount unknown".
 - This step is required but **skippable** or **do later**.
 - **"Do later"** items wait in **To review** at the top of the Kitchen widget.
 - **No reserving** ingredients when planning (0008).

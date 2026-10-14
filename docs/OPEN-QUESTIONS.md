@@ -11,37 +11,14 @@
 
 ## Outstanding
 
-### ARCH1. ⛔ Approve the architecture and start the first UI build?
-Read the [one-page overview](architecture/README.md). The four specialist sections hold the detail, and you don't need to read them unless you want to.
-Approving means:
-- the build follows [frontend.md §10](architecture/frontend.md), step by step
-- each outstanding question is needed only **by the build step that uses it**
-- the specialists make technical calls as they go (decision 0016)
-- **nothing is pushed or deployed online** without your go-ahead
+### P1. ⛔ What should come after the backend foundation? (asked as building starts)
+Now building: **backend foundation** (project skeleton, event history, kitchen state, change checking, tests), plus **UX's calm visual direction** (you'll get a preview to pick from).
+Pick the next milestone, or put them in order:
+- **(a) The app on screen:** layout, chat dock (Peek / Full / Minimized + button), and the Kitchen widget, using a stand-in "fake AI" so it works without an AI key. It needs the visual direction (V1).
+- **(b) The real AI:** Kitchen actually understanding your messages, plus the test set of example messages. This needs an Anthropic API key (S1).
+- **(c) Sign-in:** email link + code. This needs Resend and a sign-in email (S1).
 
-Your latest answers are being written into the specialist sections now. Approve after that, or approve now "subject to those updates".
-**Rec:** approve.
-
-> Answer:
-
-### M8. 🟡 The after-cooking step (refines your M7 answer)
-Proposed wording: **"Update your kitchen"**, with "Cooked: Spinach omelette" underneath. For each ingredient the meal used, one choice:
-- **Still have some** (nothing changes)
-- **Running low**
-- **Out**
-
-Below that, an optional note: **"Anything to remember about what you used?"** It's saved with that cooking session. Then **Done**, **Skip** or **Do later**.
-
-**Rec:** nothing is pre-selected; every ingredient starts at "Still have some". You tap only what's low or out, so you never claim "used up" by accident. Skipping records the ingredients as "used in this meal, amount unknown", consistent with not faking precision.
-
-> Answer:
-
-### R2. 🟡 Recipe: suggest by default, or ask?
-You said "ask the user if they want to provide their own, or if they want help creating one."
-The specialist suggests a version with **no question each time**: choosing a meal opens a **suggested recipe** (labelled AI-written), with a small **"Use my own recipe"** link. You refine it in chat ("no oven", "make it spicier").
-The alternative is to ask once, on your first meal, and remember the answer.
-
-**Rec:** suggested by default with a "Use my own recipe" link. It's one less step every time, and your own option is always one tap away. *This differs from your wording, so it's your call.*
+**Rec:** (a) → (b) → (c). You see and feel the app first; sign-in matters only once it's online.
 
 > Answer:
 
@@ -127,6 +104,15 @@ A **"Sign out everywhere"** button in Settings covers the urgent case.
 
 ---
 
+## Setup tasks for you (not blocking local building)
+These need **your** accounts, so I won't create them for you. They're needed before the real AI (b) or going online.
+- **S1. Anthropic Console:** create an API workspace for **production** and one for **staging**, set spend limits of **$30** and **$10** (0020), and create a key for each. Keep the keys private, and I'll tell you where to paste them (a local file that's never committed).
+- **S2. Neon:** a free account (two projects later: production and staging).
+- **S3. Vercel:** a free account (only when we go online, with your go-ahead).
+- **S4. Resend:** a free account, plus the email address sign-in emails come from.
+
+---
+
 ## Technical defaults (confirmed by Vero 2026-10-14)
 
 These are engineering calls, so they're not questions for you. Each will be explained in plain language in the architecture doc, and you can veto any of them.
@@ -172,5 +158,10 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | AI1, AI3 | Allergies with nuance; assumed basics | [0019](decisions/0019-allergies-with-nuance-and-basics.md) |
 | C2, AI5, B10 | Budget, model, name and voice | [0020](decisions/0020-ai-cost-and-model.md): $40 cap, $20 target; Opus; "Kitchen" |
 | B14 | Tester agents | [0021](decisions/0021-tester-agents.md): 2 testers; single-person + household test kitchens |
+| ARCH1 | Approve architecture | [0023](decisions/0023-saved-specialist-agents.md): approved; building begins |
+| M8 | After-cooking step | [0013](decisions/0013-meal-lifecycle.md): "Update your kitchen"; Still have some / Running low / Out + note |
+| R2 | Recipe default | [0013](decisions/0013-meal-lifecycle.md): suggested by default + "Use my own recipe" |
+| C5 (revisited) | Saved specialists | [0023](decisions/0023-saved-specialist-agents.md): saved in `.claude/agents/` |
+| — | Look and feel | [0022](decisions/0022-ux-owns-look-and-feel.md): UX owns visual design; start calm |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |

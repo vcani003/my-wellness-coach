@@ -16,8 +16,8 @@ One line per decision. Read the full record only when it's relevant to your task
 | [0010](0010-recipe-sources-and-basics.md) | Own recipe or AI-suggested; AI may assume basics but reminds the user |
 | [0011](0011-visible-changes-and-kitchen-fields.md) | "What changed" shown; only item name required; fridge/freezer/pantry; "added X days ago" |
 | [0012](0012-allergies-and-preferences.md) | Allergies only when stated explicitly, never inferred; "Want me to remember that?" |
-| [0013](0013-meal-lifecycle.md) | Meal lifecycle (idea → chosen → plan → cooking → done); shared ticks; after-cooking out/low/note |
-| [0014](0014-project-setup.md) | Start fresh; Claude; own repo; no saved specialists yet; vision is a stub |
+| [0013](0013-meal-lifecycle.md) | Meal lifecycle (idea → chosen → plan → cooking → done); suggested recipe by default; shared ticks; "Update your kitchen" after cooking |
+| [0014](0014-project-setup.md) | Start fresh; Claude; own repo; vision is a stub (saved specialists: see 0023) |
 | [0015](0015-language-units-policies-data.md) | English only, translation-ready; units as said; policies and data controls in Settings |
 | [0016](0016-team-and-technical-delegation.md) | Accessibility folded into Frontend; technical decisions delegated to specialists; Next.js preferred |
 | [0017](0017-shared-kitchen-and-layout.md) | Private chats; Undo own changes only; See all is view-only; docked chat + minimize button; link + code sign-in; design tokens |
@@ -25,3 +25,5 @@ One line per decision. Read the full record only when it's relevant to your task
 | [0019](0019-allergies-with-nuance-and-basics.md) | Every member's allergies always considered, with personal nuance notes; no medical advice; assumed basics list |
 | [0020](0020-ai-cost-and-model.md) | $40 cap, $20 target; Opus 5.5; model is a per-task server setting; name "Kitchen" |
 | [0021](0021-tester-agents.md) | Two tester agents on staging; single-person and household test kitchens; tests gate hand-off |
+| [0022](0022-ux-owns-look-and-feel.md) | UX owns visual design (tone, mood, tokens); start calm |
+| [0023](0023-saved-specialist-agents.md) | Architecture approved; specialists saved in `.claude/agents/`; build order decided with Vero per milestone |
