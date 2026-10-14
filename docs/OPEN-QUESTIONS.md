@@ -11,6 +11,12 @@
 
 ## Outstanding
 
+### DF1. 🟡 Where does defrosted food go?
+*(Found by the tester agent)* "I defrosted the chicken" currently leaves it under **Freezer**.
+**Rec (being built on this):** defrosting moves it to **Fridge**, marked as *inferred* (since that's where people defrost), with "Defrosted" and the date. If you say otherwise ("defrosting on the counter"), it follows what you said.
+
+> Answer:
+
 ### GH1. 🟡 Make the GitHub repo public?
 It's **private** for now: [github.com/vcani003/my-wellness-coach](https://github.com/vcani003/my-wellness-coach). There are no secrets anywhere in its history (checked). But it does contain personal details: **Levi's seafood allergy and medicine note** (used as a test case), your names, your stores, and your Gmail address on every commit.
 **Rec:** keep it private. If you want it public later (for a portfolio, say), first replace those details with made-up ones and use a GitHub "noreply" commit email. Going public can't be fully undone.
