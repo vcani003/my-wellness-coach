@@ -18,7 +18,7 @@ import {
 import { createFakeMealAI } from "@/ai/fake/meals";
 import { getMealAI, notConfiguredMealAI } from "@/ai/meals";
 import { isBasic } from "@/ai/meals/basics";
-import { rankUseItUp } from "@/ai/meals/use-it-up";
+import { allergenExcusedIds, LOW_EXCUSES_ALLERGEN, rankUseItUp } from "@/ai/meals/use-it-up";
 import type { IdeasOutput, RecipeOutput } from "@/ai/meals/model-output";
 import type { RecipeEvent, RecipeInput } from "@/ai/meals/types";
 import { computeAllergenFlags } from "@/shared/profile/allergens";
@@ -83,7 +83,7 @@ async function collect<T>(gen: AsyncGenerator<T>): Promise<T[]> {
   return out;
 }
 
-// SHRIMP_KITCHEN labels: i1 shrimp (defrosted yesterday) · i2 jasmine rice · i3 eggs · i4 spinach · i5 limes
+// SHRIMP_KITCHEN labels: i1 shrimp (added 3 days ago, defrosted yesterday) · i2 jasmine rice · i3 eggs · i4 spinach · i5 limes
 
 describe("use it up (0025)", () => {
   it("ranks defrosted, leftovers, Low and old fridge food; pantry and freezer age alone don't count", () => {
@@ -102,12 +102,33 @@ describe("use it up (0025)", () => {
     expect(ranked[0].reasons).toEqual(["leftovers from 2 days ago"]);
   });
 
+  it("with batches: ranks on the oldest batch's age and the 'defrosted on' date (0025)", () => {
+    const state = kitchen([
+      // a fresh carton next to a 12-day-old one: the old one still needs using up
+      { name: "eggs", location: "fridge", batches: [12, 0] },
+      // added long ago in the freezer, defrosted today: counts from the thaw, not the purchase
+      { name: "chicken thighs", location: "freezer", frozen: false, daysAgo: 20, defrostedDaysAgo: 0 },
+      // defrosted, then frozen again: no longer counts
+      { name: "shrimp", location: "freezer", frozen: true, daysAgo: 10, defrostedDaysAgo: 3 },
+      // defrosted 2 days ago, more urgent than today's thaw
+      { name: "pork", location: "fridge", frozen: false, daysAgo: 5, defrostedDaysAgo: 2 },
+      { name: "milk", location: "fridge", batches: [2, 0] },
+    ]);
+    const ranked = rankUseItUp(state, NOW);
+    expect(ranked.map((r) => [r.name, r.reasons])).toEqual([
+      ["pork", ["defrosted 2 days ago"]],
+      ["eggs", ["the oldest of 2 batches, in the fridge for 12 days"]],
+      ["chicken thighs", ["defrosted today"]],
+    ]);
+    expect(ranked.every((r) => r.perishable)).toBe(true);
+  });
+
   it("puts use-it-up items in the prompt, and ideas that use them say so", async () => {
     const { meals, calls } = setup({
       json: ideas({ name: "Shrimp fried rice", why: "Uses the shrimp you defrosted yesterday", uses: ["i1", "i2", "i3"], basics: ["cooking oil"] }),
     });
     const result = await meals.generateMealIdeas(ideasInput(SHRIMP_KITCHEN, "what can I make tonight?"));
-    expect(userText(calls[0].body)).toContain("<use_it_up>\ni1: shrimp · defrosted, added 1 day ago\n</use_it_up>");
+    expect(userText(calls[0].body)).toContain("<use_it_up>\ni1: shrimp · defrosted yesterday\n</use_it_up>");
     expect(result.ok && result.ideas[0].useItUp).toEqual(["item-1"]);
   });
 });
@@ -229,12 +250,27 @@ describe("allergens in ideas (0019, AI6, 0025): computed and enforced by code", 
     expect(userText(calls[0].body)).toContain('Levi: allergic to seafood. Their own note: "I can eat crab and shrimp if my medicine is on hand"');
   });
 
-  it("a Low allergen item counts as use-it-up too (0025 as written; one switch, LOW_EXCUSES_ALLERGEN)", async () => {
+  it("Low alone doesn't bring an allergen dish back (AI9 Rec: no; one switch, LOW_EXCUSES_ALLERGEN)", async () => {
+    expect(LOW_EXCUSES_ALLERGEN).toBe(false);
     const items = [{ name: "nước mắm (fish sauce)", location: "pantry" as const, stock: "low" as const }, ...SHRIMP_KITCHEN.slice(1)];
-    const { meals } = setup({ json: ideas({ name: "Nuoc cham rice bowl", uses: ["i1", "i2"] }) });
+    const answer = { json: ideas({ name: "Nuoc cham rice bowl", uses: ["i1", "i2"] }) };
+    const { meals } = setup(answer, answer);
+    const result = await meals.generateMealIdeas(ideasInput(items, null, { ...levi, count: 1 }));
+    expect(result).toMatchObject({ ok: true, ideas: [], droppedForAllergens: 1 });
+
+    // Low still nudges ordinary ideas: it's ranked, just not excused from the allergen filter.
+    const ranked = rankUseItUp(kitchen(items), NOW);
+    expect(ranked.find((r) => r.name.startsWith("nước mắm"))).toMatchObject({ perishable: false, reasons: ["running low"] });
+    expect(allergenExcusedIds(ranked).has("item-1")).toBe(false);
+    expect(allergenExcusedIds(ranked, true).has("item-1")).toBe(true); // the switch, if Vero says yes
+  });
+
+  it("a Low allergen item that also needs using up (defrosted) is still suggested, flagged", async () => {
+    const items = [{ name: "shrimp", location: "fridge" as const, stock: "low" as const, frozen: false, defrostedDaysAgo: 1 }, ...SHRIMP_KITCHEN.slice(1)];
+    const { meals } = setup({ json: ideas({ name: "Shrimp rice bowl", uses: ["i1", "i2"] }) });
     const result = await meals.generateMealIdeas(ideasInput(items, null, levi));
-    expect(result.ok && result.ideas.map((i) => i.name)).toEqual(["Nuoc cham rice bowl"]);
-    expect(result.ok && result.ideas[0].allergenFlags.length).toBeGreaterThan(0);
+    expect(result.ok && result.ideas.map((i) => i.name)).toEqual(["Shrimp rice bowl"]);
+    expect(result.ok && result.ideas[0].allergenFlags.map((f) => f.subject)).toContain("seafood");
   });
 
   it("a direct request ('shrimp tacos?') is allowed and flagged; pasted text never counts as asking", async () => {

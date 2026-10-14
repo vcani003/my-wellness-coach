@@ -16,19 +16,44 @@ export interface ItemSpec {
   frozen?: boolean;
   quantity?: string;
   daysAgo?: number;
+  /** Open batches (0025), as days ago, oldest first: `[12, 0]` = "2 batches (Oct 2, today)". */
+  batches?: number[];
+  /** "Defrosted on" (0025), days ago. */
+  defrostedDaysAgo?: number;
 }
 
+const daysBack = (days: number) => new Date(NOW.getTime() - days * 86_400_000).toISOString();
+
 export function item(spec: ItemSpec, index: number): ItemRow {
-  const at = new Date(NOW.getTime() - (spec.daysAgo ?? 1) * 86_400_000).toISOString();
+  const at = daysBack(spec.batches?.[0] ?? spec.daysAgo ?? 1);
   const f = <T>(value: T) => ({ value, basis: "said" as const, confidence: "high" as const });
+  const id = `item-${index + 1}`;
+  const defrostedOn = spec.defrostedDaysAgo !== undefined ? { value: daysBack(spec.defrostedDaysAgo), basis: "inferred" as const, confidence: "high" as const } : undefined;
+  const batches = spec.batches?.map((days, b) => {
+    const added = daysBack(days);
+    return {
+      id: b === 0 ? id : `${id}-b${b + 1}`,
+      addedAt: added,
+      ...(spec.location && { location: f(spec.location) }),
+      ...(spec.frozen !== undefined && { frozen: f(spec.frozen) }),
+      ...(spec.stock === "low" && { stock: f("low" as const) }),
+      ...(defrostedOn && b === spec.batches!.length - 1 && { defrostedOn }),
+      createdAt: added,
+      createdBy: actor,
+      updatedAt: added,
+      updatedBy: actor,
+    };
+  });
   return {
-    id: `item-${index + 1}`,
+    id,
     name: f(spec.name),
     standardName: standardName(spec.name),
     ...(spec.location && { location: f(spec.location) }),
     ...(spec.stock && { stock: f(spec.stock) }),
     ...(spec.frozen !== undefined && { frozen: f(spec.frozen) }),
     ...(spec.quantity && { quantity: f({ asSaid: spec.quantity }) }),
+    ...(defrostedOn && { defrostedOn }),
+    ...(batches && { batches }),
     addedAt: at,
     createdAt: at,
     createdBy: actor,
@@ -169,7 +194,7 @@ export const VERO_WEEK: ItemSpec[] = [
 
 /** A household kitchen where Levi is allergic to seafood and shrimp was defrosted yesterday. */
 export const SHRIMP_KITCHEN: ItemSpec[] = [
-  { name: "shrimp", location: "fridge", frozen: false, daysAgo: 1 },
+  { name: "shrimp", location: "fridge", frozen: false, daysAgo: 3, defrostedDaysAgo: 1 },
   { name: "jasmine rice", location: "pantry" },
   { name: "eggs", location: "fridge", daysAgo: 2 },
   { name: "spinach", location: "fridge", daysAgo: 1 },

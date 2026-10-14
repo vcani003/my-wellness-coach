@@ -33,7 +33,7 @@ State lives in the database, not in chat memory (spec §4). Each call is built f
 |---|---|---|
 | **Fixed instructions** (cached) | Role, name "Kitchen" and voice (0020), the rules in §3–§6, basics list (0019), about 12 worked examples | ~4,000 |
 | Recent chat | This user's last 10 turns. The other member's chat is never included (0017). | ≤1,500 |
-| Kitchen | One line per item with a short label: `i7: chicken thighs · freezer · 2d ago · by Levi` | ~1,000 |
+| Kitchen | One line per item with a short label: `i7: chicken thighs · freezer · 2d ago · by Levi`. An item with several batches (0025) stays one line: `eggs · fridge · 2 batches (Oct 2, today)`; a thaw shows as `defrosted Oct 13`. No batch IDs. | ~1,000 |
 | Profile | **Every member's** allergies, each with whose it is and their own note; the asker's diets and preferences (0019) | ~150 |
 | Recent changes | Last 5 change sets, before → after, so corrections can point at them | ~300 |
 | Session | Current ideas, the most recently chosen meal, open meals | ~200 |
@@ -55,6 +55,7 @@ Short labels (`i7`) keep the prompt small and stop the model inventing IDs. Code
 | **References** | "The chicken": match by name. "That" or "it": the item or meal from the previous turn. Two matches: prefer the one just mentioned or changed, otherwise ask. |
 | **"Add that"** (0005, 0013) | The model outputs "last chosen"; **code** resolves it to the meal this user chose most recently this session (no gap over 3 h). If there's none, it asks "Which one?". It's never a model guess. |
 | **Corrections** (0007) | "No, I froze the yogurt" restores the chicken's previous values and moves the yogurt, both with `corrects`. A later change can't block this the way it can block Undo. |
+| **Batches** (0025) | "I bought eggs" with eggs in: a plain add (the backend adds the batch). "The new eggs" / "the ones I just bought" → `which: "newest"`; "the old eggs" → `"oldest"`. A batch is targeted **only when the user's words name one** (code checks old/new/fresh/just bought…), so "we're out of eggs" still means every batch. "The old eggs are gone" / "we finished the older ones" → `item.batch.close` (oldest unless they named the newer ones). "I defrosted the chicken" → `item.defrost` (plus a move to the fridge when it was in the freezer). Anything untargeted goes to the oldest batch, the backend's default. |
 | **Unknown items** (0011) | "Used the feta" with no feta: recorded without asking ("wasn't in your kitchen"). |
 | **One-off vs lasting** (0012) | "Thai tonight" applies to this request only. "I don't like mushrooms" applies now and offers "Want me to remember that?". Ignoring the offer means no, and it isn't repeated for 30 days. "Remember that…" counts as yes. |
 | **Allergies and diets** (0012, 0019) | Saved only when stated as ongoing ("I'm allergic to peanuts", "I'm vegetarian"), with a receipt and Undo. "Peanuts upset my stomach" is never saved as an allergy, only offered as a preference. A qualifier the person adds ("but I can eat crab and shrimp if my medicine is on hand") is saved as that allergy's `note`, in their own words, never turned into a rule. |
@@ -219,6 +220,29 @@ eval/            cases · runner · matchers
 - **Log:** `{ event: "ai.budget_exhausted", task, reason, status, requestId }`, with no key or message text.
 - **Known cost:** the SDK still retries the spend-cap 429 once before we see it (a few seconds' delay, no charge).
 
+## Build notes: batches, AI half (2026-10-14, P2 (c), 0025, prompt `interpret-2026-10-14.4`)
+**Interpreter.** The model schema gains two actions, `batch_gone` and `defrost`, and one field, `batch` (`oldest` / `newest` / null). `to-proposal.ts` maps them to the contract:
+- `use` / `update` with a named batch → target `{itemId | name, which}`. Code keeps `which` only when the operation's quoted words contain a batch word (`BATCH_WORDS`: old, older, new, newest, fresh, latest, just bought…). Otherwise the target has no batch and the backend default applies (use: the oldest first; Out: every batch).
+- `batch_gone` → `item.batch.close {…, which}`, defaulting to `oldest`.
+- `defrost` → `item.defrost` (date left to the backend: now, inferred), plus an `item.update {location}` when the model says it moved to the fridge, the item isn't already there, and both surely land on the same batch (one batch, or a named one). An older-style `update frozen: false` whose words say defrost/thaw is converted to `item.defrost`.
+- `item.batch.keep` stays button-only (backend-data.md §6).
+- Batches show in the per-turn kitchen line only, so the cached system prompt stays byte-identical (tested). The prompt text changed once for the new rules and examples, hence the version bump.
+
+**Use it up** (`src/ai/meals/use-it-up.ts`) now reads `computeUseItUpSignals` (the pure half of `getUseItUpSignals`), so the ages are the **oldest open batch's**. Scores, highest first (ties: oldest batch first):
+- defrosted with a "defrosted on" date: 4 + days since (max 4), "defrosted yesterday". It doesn't count once the item (one batch) is frozen again.
+- defrosted without a date (saved before batches): 3, as before.
+- leftovers: 2 + age (max 5).
+- other fridge food 4+ days: 1 + up to 4, "the oldest of 2 batches, in the fridge for 12 days".
+- Low: +2, "running low".
+
+**AI9 (Rec "no", outstanding):** `LOW_EXCUSES_ALLERGEN = false`. Low alone no longer lets an allergen dish back into unprompted ideas. A Low allergen item that also needs using up (say, defrosted shrimp) is still suggested and flagged. If Vero answers yes, set the switch to `true`; nothing else changes.
+
+**Fake interpreter:** "the old X are/is gone" → `item.batch.close {name, which: "oldest"}`; "I defrosted / thawed the X" → `item.defrost {name}`.
+
+**Tests:** `tests/unit/ai-batches.test.ts` covers each phrase with a mocked client: contract-valid, then applied by the real kitchen validator (MemoryKitchen) with no rejections. It also checks the compact line and the stable cached prefix, and runs the fake's two phrases end to end. `ai-meals.test.ts` covers ranking with batches and a "defrosted on" date, and the AI9 switch both ways. The eval set has 8 batch cases (not run: no real API calls in this pass).
+
+**Not done:** "I defrosted it yesterday" records today, because the model schema has no date field yet. That's a small, separate addition if it matters for the ranking.
+
 ## Build notes: meal ideas and recipes (2026-10-14, P2 (d), prompts `interpret-2026-10-14.3` + `meals-2026-10-14.1`)
 **Entry points** (`src/ai/meals/index.ts`): `getMealAI(selectInterpreterKind())` returns the real, fake or not-configured `MealAI`:
 - `streamMealIdeas(input)` yields `{type:"idea", idea}` per card as soon as it's complete, then `{type:"done", result}`. `generateMealIdeas` returns just the result.
@@ -232,7 +256,7 @@ eval/            cases · runner · matchers
 - **Uses / Missing:** unknown labels are dropped, and a "missing" item the kitchen has moves to Uses.
 - **Basics** (0019) are exactly salt, pepper, cooking oil (olive/vegetable/neutral…), water, and dried herbs and spices (`basics.ts`). A "basic" outside the list counts as Need. The reminder is `BASICS_ASSUMED` ("Assumes salt and olive oil. Tell me if you don't have them.").
 - **Checklist groups:** "In your kitchen" when the label is real or the name matches exactly one item; else basic; else Need.
-- **Use it up** (`use-it-up.ts`, 0025): defrosted (`frozen: false` in the fridge), leftovers 1+ day old, other fridge food 4+ days old, and Low. Pantry and freezer food never needs using up by age alone. There's no batch or "defrosted on" data in the contract yet, so age is days since added.
+- **Use it up** (`use-it-up.ts`, 0025): defrosted, leftovers 1+ day old, other fridge food 4+ days old, and Low. Pantry and freezer food never needs using up by age alone. Now read from the batch signals; see "Build notes: batches" below.
 - **Allergens** (`allergen-guard.ts`): flags come from the shared word list over the idea's name, the items it uses and its missing items. An unprompted allergen idea is dropped, unless the user's typed words hit the same allergy, or a used use-it-up item is that allergen. One regeneration replaces dropped ideas. I added Vietnamese seafood words to the shared list (nước mắm, mắm, tôm, cua, mực, cá, plus dashi, bonito, surimi), because names are kept as said.
 
 **Chat** (prompt v3, `meal-ops.ts`): the model routes the request, and code resolves everything.

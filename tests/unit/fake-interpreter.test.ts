@@ -18,6 +18,10 @@ describe("fake interpreter patterns", () => {
     ["The yogurt is running low", "low", ["yogurt"]],
     ["the milk's running low", "low", ["milk"]],
     ["We're running low on eggs", "low", ["eggs"]],
+    ["The old eggs are gone", "oldGone", ["eggs"]],
+    ["the older milk is gone.", "oldGone", ["milk"]],
+    ["I defrosted the chicken", "defrosted", ["chicken"]],
+    ["Just thawed the shrimp", "defrosted", ["shrimp"]],
   ])("%s → %s", (text, kind, names) => {
     const intent = matchIntent(text);
     expect(intent.kind).toBe(kind);

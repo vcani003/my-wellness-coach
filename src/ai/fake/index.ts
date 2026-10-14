@@ -4,7 +4,7 @@
  * Deterministic and tiny, so the app runs locally with no accounts and the end-to-end tests are
  * repeatable (backend-data.md §8). It understands only:
  *   "I bought X, Y and Z" · "I froze the X" · "I used the rest of the X" · "X is running low" ·
- *   "add X and Y to the list [for Store]" · "undo"
+ *   "add X and Y to the list [for Store]" · "the old X are gone" · "I defrosted the X" · "undo"
  * and answers anything else politely with no changes. Everything it proposes still goes through
  * the real backend validate → apply path. The AI specialist replaces this folder (ai.md §9).
  */
@@ -58,6 +58,20 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
           operations = itemOps(intent.targets, "item.use", { stock: said("out") });
           reply = `Got it: marked the ${names(intent.targets)} as used up.`;
           break;
+        case "oldGone":
+          // "The old eggs are gone" (0025): the oldest batch closes; newer ones stay.
+          operations = intent.targets.map((s) => ({
+            opId: "",
+            type: "item.batch.close",
+            evidence: s.raw,
+            target: { name: s.name, which: "oldest" },
+          }));
+          reply = `Got it: the older ${names(intent.targets)} ${intent.targets.length > 1 ? "are" : "is"} gone.`;
+          break;
+        case "defrosted":
+          operations = intent.targets.map((s) => ({ opId: "", type: "item.defrost", evidence: s.raw, target: { name: s.name } }));
+          reply = `Noted: the ${names(intent.targets)} ${intent.targets.length > 1 ? "are" : "is"} defrosted.`;
+          break;
         case "low":
           operations = itemOps(intent.targets, "item.use", { stock: said("low") });
           reply = `Noted: the ${names(intent.targets)} running low.`;
@@ -95,7 +109,7 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
             listOfferAccepted: null,
             generate: null,
             operations: [
-              { action: intent.action, meal: intent.label, evidence: req.message.text.trim(), item: null, name: null, quantity: null, location: null, frozen: null, stock: null, amountUsed: null, store: null },
+              { action: intent.action, meal: intent.label, evidence: req.message.text.trim(), item: null, name: null, quantity: null, location: null, frozen: null, stock: null, amountUsed: null, batch: null, store: null },
             ],
           };
           const m = mealOperations(out, req, new Date());

@@ -7,10 +7,13 @@
  * - Shopping list (0027): "need to buy X" never lands in the kitchen; a pasted list's repeats are
  *   added once; nothing goes on the list from an Out/Low alone (SL3) or from a "yes" unless
  *   Kitchen offered those items in its last turn.
+ * - Batches (0025): a batch ("the new eggs") is targeted only when the user's words name one;
+ *   otherwise the backend's default applies (the oldest first). "Those are gone" closes one batch
+ *   (the oldest unless they said otherwise); "I defrosted X" is `item.defrost`.
  * - The result must pass the contract's Zod schema, or nothing is proposed.
  */
-import type { Fact, ShoppingSource } from "@/contracts/common";
-import type { Operation, ShoppingTarget } from "@/contracts/operations";
+import type { BatchWhich, Fact, ShoppingSource } from "@/contracts/common";
+import type { ItemBatchTarget, Operation, ShoppingTarget } from "@/contracts/operations";
 import { nameTokens, standardName } from "@/shared/text";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult } from "../interpreter";
@@ -66,13 +69,38 @@ function mentions(text: string, name: string): boolean {
 
 type Labels = { items: Map<string, string>; shopping: Map<string, string> };
 
+/**
+ * Words that name one of an item's batches (0025): "the old eggs", "the newer ones", "the ones I
+ * just bought". The model's `batch` is used only when the user's own words say one of these, so a
+ * plain "we're out of eggs" still means every batch.
+ */
+export const BATCH_WORDS =
+  /\b(old|older|oldest|new|newer|newest|fresh|earlier|latest|(just|recently) (bought|got|picked up|grabbed))\b/i;
+
+/** "Defrosted" / "thawed": an update that only unfreezes becomes `item.defrost` (0025). */
+const DEFROST_WORDS = /\b(defrost(ed|ing)?|thaw(ed|ing)?|unfroze)\b/i;
+
+function namedBatch(op: ModelOp, evidenceOk: boolean): BatchWhich | undefined {
+  if (!op.batch || !evidenceOk) return undefined;
+  return BATCH_WORDS.test(op.evidence) ? op.batch : undefined;
+}
+
+function withBatch(target: { itemId: string } | { name: string }, which: BatchWhich | undefined): ItemBatchTarget {
+  return which ? { ...target, which } : target;
+}
+
 function shoppingTarget(op: ModelOp, labels: Labels, name: Fact<string> | undefined): ShoppingTarget | null {
   const id = op.item ? labels.shopping.get(op.item.trim()) : undefined;
   if (id) return { shoppingItemId: id };
   return name ? { name: name.value } : null;
 }
 
-function toOperation(op: ModelOp, opId: string, req: InterpretRequest, labels: Labels): Operation | null {
+function toOperation(op: ModelOp, opId: string, req: InterpretRequest, labels: Labels): Operation[] {
+  const one = toOperationOrNull(op, opId, req, labels);
+  return Array.isArray(one) ? one : one ? [one] : [];
+}
+
+function toOperationOrNull(op: ModelOp, opId: string, req: InterpretRequest, labels: Labels): Operation | Operation[] | null {
   const evidenceOk = inMessage(req.message.text, op.evidence);
   const evidence = op.evidence.trim() || undefined;
   const itemId = op.item ? labels.items.get(op.item.trim()) : undefined;
@@ -84,8 +112,15 @@ function toOperation(op: ModelOp, opId: string, req: InterpretRequest, labels: L
   const frozen = keep(op.frozen, (f) => f.value, evidenceOk);
   const common = { opId, ...(evidence ? { evidence } : {}) };
   const store = keep(op.store, (f) => storeName(f.value), evidenceOk);
+  const which = namedBatch(op, evidenceOk);
 
-  switch (op.action) {
+  // An older-style "update frozen: false" for "I defrosted the chicken" is a defrost (0025).
+  const action =
+    op.action === "update" && frozen?.value === false && !quantity && DEFROST_WORDS.test(op.evidence)
+      ? "defrost"
+      : op.action;
+
+  switch (action) {
     case "list_add": {
       if (!name) return null;
       const fields = { name, ...(quantity && { quantity }), ...(store && store.value && { store }) };
@@ -128,13 +163,29 @@ function toOperation(op: ModelOp, opId: string, req: InterpretRequest, labels: L
       if (!target) return null;
       const fields = { ...(quantity && { quantity }), ...(location && { location }), ...(frozen && { frozen }) };
       if (Object.keys(fields).length === 0) return null;
-      return { ...common, type: "item.update", target, fields };
+      return { ...common, type: "item.update", target: withBatch(target, which), fields };
     }
     case "use": {
       if (!target) return null;
       const stock = keep(op.stock, (f) => f.value, evidenceOk);
       const amountUsed = keep(op.amountUsed, quantityOf, evidenceOk);
-      return { ...common, type: "item.use", target, fields: { stock, amountUsed } };
+      return { ...common, type: "item.use", target: withBatch(target, which), fields: { stock, amountUsed } };
+    }
+    case "batch_gone":
+      // "The old eggs are gone": one batch closes, the oldest unless they named the newer one.
+      if (!target) return null;
+      return { ...common, type: "item.batch.close", target: { ...target, which: which ?? "oldest" } };
+    case "defrost": {
+      if (!target) return null;
+      // The date is left to the backend (now, inferred); a later "yesterday" isn't read yet.
+      const defrost: Operation = { ...common, type: "item.defrost", target: withBatch(target, which) };
+      // "Took the chicken out to thaw" may also say (or imply) where it is now. Only when the move
+      // surely lands on the same batch the defrost does (one batch, or a named one).
+      const row = itemId ? req.state.items.find((i) => i.id === itemId) : undefined;
+      const sameBatch = !!which || (row?.batches?.length ?? 1) <= 1;
+      if (!location || !sameBatch || row?.location?.value === location.value) return defrost;
+      const moved: Operation = { ...common, opId: `${opId}:where`, type: "item.update", target: withBatch(target, which), fields: { location } };
+      return [defrost, moved];
     }
     case "remove":
       if (!target) return null;
@@ -247,8 +298,7 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest, now: 
   const labels = { items: itemLabels(req.state), shopping: shoppingLabels(req.state) };
   const converted: Operation[] = [];
   out.operations.forEach((op, i) => {
-    const o = toOperation(op, `${req.message.id}:op${i + 1}`, req, labels);
-    if (o) converted.push(o);
+    converted.push(...toOperation(op, `${req.message.id}:op${i + 1}`, req, labels));
   });
   const operations = [...guardShopping(converted, out, req), ...meals.operations];
 

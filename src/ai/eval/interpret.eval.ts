@@ -1,7 +1,8 @@
 /**
  * Real-model eval for the interpreter (ai.md §8), scored by exact rules, not by another AI.
  * Run with `npm run eval`; skipped unless ANTHROPIC_API_KEY is set. Costs real money: about
- * 23 calls at ~3–6¢ each. Includes the first grocery-trip test (0026) and the shopping list (0027).
+ * 31 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list (0027) and
+ * older and newer batches (0025).
  */
 import { afterAll, describe, expect, it } from "vitest";
 import type { Operation, OperationOf, OperationType } from "@/contracts/operations";
@@ -47,6 +48,11 @@ const answerOnly = (r: InterpretResult) => {
   expect(r.kind).toBe("answer");
   expect(r.proposal).toBeNull();
 };
+
+const EGGS: ItemSpec[] = [
+  { name: "eggs", location: "fridge", batches: [12, 0] },
+  { name: "chicken thighs", location: "freezer", frozen: true, daysAgo: 6 },
+];
 
 // VERO_PANTRY labels: item-1 nước mắm (low) · 2 jasmine rice · 3 hoisin · 4 sriracha · 5 pho leftovers
 // · 6 limes · 7 eggs (low) · 8 beef (fridge) · 9 star anise (no location)
@@ -135,13 +141,103 @@ const cases: Case[] = [
     },
   },
   {
-    name: "I defrosted the beef",
+    name: "I defrosted the beef (item.defrost, 0025)",
     text: "I defrosted the beef",
     items: [{ name: "beef", location: "freezer", frozen: true }],
     check: (r, ops) => {
+      const [thaw] = only(ops, "item.defrost");
+      targets(thaw, "item-1");
+      expect(only(ops, "item.use")).toHaveLength(0);
+    },
+  },
+  // Batches (0025). EGGS: item-1 eggs, 2 batches (Oct 2, today) · item-2 chicken thighs, frozen
+  {
+    name: "I bought eggs, with eggs already in: one plain add (the backend adds the batch)",
+    text: "I bought a dozen eggs",
+    items: EGGS,
+    check: (r, ops) => {
+      expect(only(ops, "item.add")).toHaveLength(1);
+      expect(addNamed(ops, "eggs")?.fields.name.value).toBe("eggs");
+      expect(only(ops, "item.update")).toHaveLength(0);
+      expect(only(ops, "item.batch.close")).toHaveLength(0);
+    },
+  },
+  {
+    name: "the new eggs → newest batch",
+    text: "I used 3 of the new eggs",
+    items: EGGS,
+    check: (r, ops) => {
+      const [use] = only(ops, "item.use");
+      expect(use.target).toEqual({ itemId: "item-1", which: "newest" });
+      expect(use.fields.amountUsed?.value.amount).toBe(3);
+    },
+  },
+  {
+    name: "the ones I just bought → newest batch",
+    text: "the ones I just bought go in the fridge",
+    items: EGGS,
+    history: [
+      { role: "user", text: "I bought eggs" },
+      { role: "assistant", text: "Got it: added eggs. You also had eggs from Oct 2." },
+    ],
+    check: (r, ops) => {
       const [upd] = only(ops, "item.update");
-      targets(upd, "item-1");
-      expect(upd.fields.frozen?.value).toBe(false);
+      expect(upd.target).toEqual({ itemId: "item-1", which: "newest" });
+      expect(upd.fields.location?.value).toBe("fridge");
+    },
+  },
+  {
+    name: "I used the old eggs → oldest batch only",
+    text: "I used the old eggs",
+    items: EGGS,
+    check: (r, ops) => {
+      const closes = only(ops, "item.batch.close");
+      const uses = only(ops, "item.use");
+      // either reading closes only the oldest batch
+      if (closes.length) expect(closes[0].target).toEqual({ itemId: "item-1", which: "oldest" });
+      else expect(uses[0].target).toEqual({ itemId: "item-1", which: "oldest" });
+    },
+  },
+  {
+    name: "the old eggs are gone → close the oldest batch",
+    text: "the old eggs are gone",
+    items: EGGS,
+    check: (r, ops) => {
+      const [close] = only(ops, "item.batch.close");
+      expect(close.target).toEqual({ itemId: "item-1", which: "oldest" });
+      expect(only(ops, "item.remove")).toHaveLength(0);
+    },
+  },
+  {
+    name: "we finished the older ones (a reference) → close the oldest batch",
+    text: "we finished the older ones",
+    items: EGGS,
+    history: [
+      { role: "user", text: "I bought eggs" },
+      { role: "assistant", text: "Got it: added eggs. You also had eggs from Oct 2." },
+    ],
+    check: (r, ops) => {
+      const [close] = only(ops, "item.batch.close");
+      expect(close.target).toEqual({ itemId: "item-1", which: "oldest" });
+    },
+  },
+  {
+    name: "we're out of eggs → every batch (no batch named)",
+    text: "we're out of eggs",
+    items: EGGS,
+    check: (r, ops) => {
+      const [use] = only(ops, "item.use");
+      targets(use, "item-1");
+      expect(use.fields.stock?.value).toBe("out");
+    },
+  },
+  {
+    name: "I defrosted the chicken, next to the eggs' batches",
+    text: "I defrosted the chicken",
+    items: EGGS,
+    check: (r, ops) => {
+      const [thaw] = only(ops, "item.defrost");
+      targets(thaw, "item-2");
     },
   },
   {

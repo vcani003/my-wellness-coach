@@ -5,7 +5,7 @@
  * limits here: structured outputs don't support them, and the contract checks them afterwards.
  */
 import { z } from "zod";
-import { Basis, Confidence, Location, StockLevel } from "@/contracts/common";
+import { Basis, BatchWhich, Confidence, Location, StockLevel } from "@/contracts/common";
 
 const meta = { basis: Basis, confidence: Confidence };
 
@@ -18,14 +18,17 @@ const QuantityFact = z.object({
 });
 
 /**
- * Kitchen actions (add/update/use/remove) and shopping-list actions (list_*, 0027). A list action
- * never touches the kitchen; "I bought X" is a kitchen add (the backend takes it off the list, SL5).
+ * Kitchen actions (add/update/use/remove, plus batch_gone and defrost for batches, 0025) and
+ * shopping-list actions (list_*, 0027). A list action never touches the kitchen; "I bought X" is a
+ * kitchen add (the backend takes it off the list, SL5, and adds a batch when X is already there).
  */
 export const ModelAction = z.enum([
   "add",
   "update",
   "use",
   "remove",
+  "batch_gone",
+  "defrost",
   "list_add",
   "list_update",
   "list_tick",
@@ -53,6 +56,12 @@ export const ModelOp = z.object({
   stock: z.object({ value: StockLevel, ...meta }).nullable(),
   /** use: how much was used, when said. */
   amountUsed: QuantityFact.nullable(),
+  /**
+   * update/use/batch_gone/defrost: which of the item's batches the user named (0025): "oldest" for
+   * "the old eggs", "newest" for "the new eggs" / "the ones I just bought". Null when they didn't
+   * say; code then leaves the backend's default (the oldest first).
+   */
+  batch: BatchWhich.nullable(),
   /** list_add / list_update: the store to buy it at, as said (SL1). */
   store: TextFact.nullable(),
   /**

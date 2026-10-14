@@ -9,6 +9,8 @@ export type FakeIntent =
   | { kind: "froze"; targets: Segment[] }
   | { kind: "usedUp"; targets: Segment[] }
   | { kind: "low"; targets: Segment[] }
+  | { kind: "oldGone"; targets: Segment[] }
+  | { kind: "defrosted"; targets: Segment[] }
   | { kind: "undo" }
   | { kind: "toList"; items: Segment[]; store?: string }
   | { kind: "mealIdeas" }
@@ -37,6 +39,10 @@ const LOW = [
   new RegExp(String.raw`\blow\s+on\s+(.+?)` + END, "i"),
   new RegExp(String.raw`^\s*(.+?)(?:\s+(?:is|are)|'s)\s+(?:running|getting)\s+low` + END, "i"),
 ];
+
+/** Batches (0025): "the old eggs are gone" · "I defrosted the chicken" / "thawed the shrimp". */
+const OLD_GONE = new RegExp(String.raw`^\s*(?:the\s+)?old(?:er)?\s+(.+?)\s+(?:are|is)\s+gone` + END, "i");
+const DEFROSTED = new RegExp(String.raw`\b(?:just\s+)?(?:defrosted|thawed)\s+(.+?)` + END, "i");
 
 /** "add garlic and ginger to the list" · "put oatmilk on my shopping list for Publix" (0027). */
 const TO_LIST = new RegExp(
@@ -95,6 +101,10 @@ export function matchIntent(text: string): FakeIntent {
   if (toList) return { kind: "toList", items: segments(toList[1]), ...(toList[2] ? { store: toList[2].trim() } : {}) };
   const bought = BOUGHT.exec(text);
   if (bought) return { kind: "bought", items: segments(bought[1]) };
+  const oldGone = OLD_GONE.exec(text);
+  if (oldGone) return { kind: "oldGone", targets: segments(oldGone[1]) };
+  const defrosted = DEFROSTED.exec(text);
+  if (defrosted) return { kind: "defrosted", targets: segments(defrosted[1]) };
   const froze = FROZE.exec(text);
   if (froze) return { kind: "froze", targets: segments(froze[1]) };
   for (const re of USED_UP) {

@@ -32,7 +32,7 @@ function message(text: string): Message {
 }
 
 function mealOp(action: ModelOp["action"], meal: string | null, evidence: string): ModelOp {
-  return { action, evidence, meal, item: null, name: null, quantity: null, location: null, frozen: null, stock: null, amountUsed: null, store: null };
+  return { action, evidence, meal, item: null, name: null, quantity: null, location: null, frozen: null, stock: null, amountUsed: null, batch: null, store: null };
 }
 
 function output(partial: Partial<ModelOutput>): ModelOutput {
@@ -83,7 +83,7 @@ describe("what the model sees", () => {
     const user = body.messages[0].content as string;
     expect(user).toContain("<meal_ideas>\nd1: Spinach omelette\nd2: Shrimp fried rice\nd3: Lime rice\n</meal_ideas>");
     expect(user).toContain("m1: Lime rice · cooking · has recipe");
-    expect(PROMPT_VERSION).toBe("interpret-2026-10-14.3");
+    expect(PROMPT_VERSION).toBe("interpret-2026-10-14.4");
     const system = body.system as Anthropic.Beta.Messages.BetaTextBlockParam[];
     expect(system[0].text).toContain("# Meals (ideas, choosing, plan, cooking)");
     expect(system[0].text).not.toContain("Shrimp fried rice"); // nothing per-request in the cached prefix
