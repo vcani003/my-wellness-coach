@@ -78,7 +78,7 @@ describe("chat turn with the fake interpreter", () => {
   it("anything it doesn't understand: a polite reply and no changes", async () => {
     const k = await newKitchen(db, ["Vero"]);
     const vero = await k.scope("Vero");
-    const out = await turn(vero, "What can I make tonight?");
+    const out = await turn(vero, "Is it going to rain later?");
     expect(out.types).toEqual(["ack", "status", "status", "text", "done"]);
     expect(out.reply).toBe(FALLBACK_REPLY);
     expect((await getKitchenState(db, vero)).version).toBe(0);

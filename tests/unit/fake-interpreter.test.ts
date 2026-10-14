@@ -38,7 +38,16 @@ describe("fake interpreter patterns", () => {
   it("undo, and anything else is not understood", () => {
     expect(matchIntent("undo").kind).toBe("undo");
     expect(matchIntent("Undo that.").kind).toBe("undo");
-    expect(matchIntent("What can I make tonight?").kind).toBe("unknown");
+    expect(matchIntent("Is it going to rain?").kind).toBe("unknown");
     expect(matchIntent("hello").kind).toBe("unknown");
+  });
+
+  it("meal phrases (0005, 0013): ideas, the Nth one, add that to my plan, start cooking, I made it", () => {
+    expect(matchIntent("What can I make tonight?").kind).toBe("mealIdeas");
+    expect(matchIntent("the second one")).toEqual({ kind: "meal", action: "meal_choose", label: "d2" });
+    expect(matchIntent("Let's do the first one!")).toEqual({ kind: "meal", action: "meal_choose", label: "d1" });
+    expect(matchIntent("add that to my meal plan")).toEqual({ kind: "meal", action: "meal_plan", label: "last_chosen" });
+    expect(matchIntent("start cooking")).toEqual({ kind: "meal", action: "meal_start_cooking", label: "last_chosen" });
+    expect(matchIntent("I made it!")).toEqual({ kind: "meal", action: "meal_done", label: "last_chosen" });
   });
 });

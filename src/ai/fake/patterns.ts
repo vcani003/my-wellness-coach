@@ -11,6 +11,8 @@ export type FakeIntent =
   | { kind: "low"; targets: Segment[] }
   | { kind: "undo" }
   | { kind: "toList"; items: Segment[]; store?: string }
+  | { kind: "mealIdeas" }
+  | { kind: "meal"; action: "meal_choose" | "meal_plan" | "meal_start_cooking" | "meal_done"; label: string }
   | { kind: "unknown" };
 
 /** A piece of the message: `raw` is exactly as typed (used as evidence), `name` is cleaned. */
@@ -73,8 +75,22 @@ function segments(list: string): Segment[] {
     .filter((s) => s.name.length > 0);
 }
 
+/** Meals (0005, 0013): "what can I make?", "the second one", "add that to my plan", "start cooking", "I made it". */
+const IDEAS = /\b(what can (i|we) (make|cook)|meal ideas|dinner ideas|any ideas)\b/i;
+const ORDINALS: Record<string, number> = { first: 1, "1st": 1, second: 2, "2nd": 2, third: 3, "3rd": 3 };
+const CHOOSE = /^\s*(?:let'?s (?:do|go with|make) )?the (first|1st|second|2nd|third|3rd)(?: one)?\b/i;
+const PLAN = /\badd (?:that|it) to (?:my|the|our) (?:meal )?plan\b/i;
+const START = /\b(start(?:ing)? cooking|cooking it now)\b/i;
+const DONE = /\b(i|we) (made|cooked) it\b|\bdone cooking\b/i;
+
 export function matchIntent(text: string): FakeIntent {
   if (UNDO.test(text)) return { kind: "undo" };
+  if (IDEAS.test(text)) return { kind: "mealIdeas" };
+  const choose = CHOOSE.exec(text);
+  if (choose) return { kind: "meal", action: "meal_choose", label: `d${ORDINALS[choose[1].toLowerCase()]}` };
+  if (PLAN.test(text)) return { kind: "meal", action: "meal_plan", label: "last_chosen" };
+  if (START.test(text)) return { kind: "meal", action: "meal_start_cooking", label: "last_chosen" };
+  if (DONE.test(text)) return { kind: "meal", action: "meal_done", label: "last_chosen" };
   const toList = TO_LIST.exec(text);
   if (toList) return { kind: "toList", items: segments(toList[1]), ...(toList[2] ? { store: toList[2].trim() } : {}) };
   const bought = BOUGHT.exec(text);

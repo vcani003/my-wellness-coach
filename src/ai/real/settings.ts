@@ -22,10 +22,16 @@ function effortFrom(value: string | undefined, fallback: Effort): Effort {
   return value === "low" || value === "medium" || value === "high" ? value : fallback;
 }
 
-export function taskSettings(
-  task: "interpret" | "reword",
-  source: Record<string, string | undefined> = process.env,
-): TaskSettings {
+export type Task = "interpret" | "reword" | "ideas" | "recipe";
+
+export function taskSettings(task: Task, source: Record<string, string | undefined> = process.env): TaskSettings {
+  if (task === "ideas") {
+    // Streamed, so a generous cap costs nothing unless used; thinking counts toward it.
+    return { model: MODEL, effort: effortFrom(source.AI_IDEAS_EFFORT, "medium"), maxTokens: 12_000, timeoutMs: 90_000 };
+  }
+  if (task === "recipe") {
+    return { model: MODEL, effort: effortFrom(source.AI_RECIPE_EFFORT, "medium"), maxTokens: 16_000, timeoutMs: 90_000 };
+  }
   if (task === "interpret") {
     // Medium is the design default (ai.md §7); `low` is the first thing to try if it's slow.
     return { model: MODEL, effort: effortFrom(source.AI_INTERPRET_EFFORT, "medium"), maxTokens: 8000, timeoutMs: 40_000 };

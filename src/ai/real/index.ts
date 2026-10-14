@@ -149,7 +149,7 @@ export function createRealInterpreter(options: RealInterpreterOptions = {}): Int
         const parsed = ModelOutput.safeParse(json);
         if (!parsed.success) return fail("interpret", `output failed the schema: ${parsed.error.message}`);
 
-        const outcome = toInterpretResult(parsed.data, req);
+        const outcome = toInterpretResult(parsed.data, req, now());
         return outcome.ok ? outcome.result : fail("interpret", outcome.reason);
       } catch (error) {
         if (budgetExhausted("interpret", error)) return { kind: "answer", proposal: null, reply: BUDGET_EXHAUSTED_REPLY };

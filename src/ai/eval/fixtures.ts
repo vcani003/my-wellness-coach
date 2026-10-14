@@ -2,7 +2,9 @@
 import type { Location, StockLevel } from "@/contracts/common";
 import { KitchenState, type ItemRow } from "@/contracts/kitchen-state";
 import { standardName } from "@/shared/text";
+import type { Restriction } from "@/shared/profile/state";
 import type { InterpretRequest } from "../interpreter";
+import type { MealContext, MealIdeasInput } from "../meals/types";
 
 export const NOW = new Date("2026-10-14T16:00:00.000Z");
 const actor = { id: "u-vero", name: "Vero" };
@@ -121,3 +123,81 @@ export const VERO_LIST: ListSpec[] = [
 export const FIRST_TEST_MESSAGE =
   "I've made a beef pho. I need to shop for some staple pantry items and other ingredients for other dishes ill be making this week. " +
   "MD Oriental Market: garlic, ginger, green onion, shallot, culantro, lemongrass, sweet potato, ginger, coconut milk / Publix: oatmilk";
+
+// ─── Meal ideas and recipes (ai.md §5, 0019, 0025) ─────────────────────────────────────
+
+export const MEMBERS = [
+  { userId: "u-vero", name: "Vero" },
+  { userId: "u-levi", name: "Levi" },
+];
+
+/** A profile restriction as the shared profile stores it (0019). */
+export function restriction(spec: {
+  userId: string;
+  subject: string;
+  note?: string;
+  kind?: "allergy" | "diet";
+}): Restriction {
+  const at = NOW.toISOString();
+  const f = <T>(value: T) => ({ value, basis: "said" as const, confidence: "high" as const });
+  return {
+    id: `r-${spec.userId}-${standardName(spec.subject)}`,
+    userId: spec.userId,
+    kind: spec.kind ?? "allergy",
+    subject: f(spec.subject),
+    subjectKey: standardName(spec.subject),
+    ...(spec.note ? { note: f(spec.note) } : {}),
+    createdAt: at,
+    createdBy: spec.userId,
+    updatedAt: at,
+    updatedBy: spec.userId,
+  };
+}
+
+/** Levi's seafood allergy, in his own words (0019, AI7). */
+export const LEVI_SEAFOOD = restriction({
+  userId: "u-levi",
+  subject: "seafood",
+  note: "I can eat crab and shrimp if my medicine is on hand",
+});
+
+/** Vero's kitchen this week: beef pho leftovers, her pantry, and the MD Oriental list, bought. */
+export const VERO_WEEK: ItemSpec[] = [
+  ...VERO_PANTRY.map((i) => (i.name === "pho (leftovers)" ? { ...i, daysAgo: 2 } : i)),
+  ...VERO_LIST.map((l) => ({ name: l.name, location: l.name === "oatmilk" ? ("fridge" as const) : undefined, daysAgo: 1 })),
+];
+
+/** A household kitchen where Levi is allergic to seafood and shrimp was defrosted yesterday. */
+export const SHRIMP_KITCHEN: ItemSpec[] = [
+  { name: "shrimp", location: "fridge", frozen: false, daysAgo: 1 },
+  { name: "jasmine rice", location: "pantry" },
+  { name: "eggs", location: "fridge", daysAgo: 2 },
+  { name: "spinach", location: "fridge", daysAgo: 1 },
+  { name: "limes", location: "fridge", daysAgo: 1 },
+];
+
+export function mealContext(
+  items: ItemSpec[],
+  opts: { restrictions?: Restriction[]; userId?: string } = {},
+): MealContext {
+  const state = kitchen(items);
+  return {
+    kitchenId: state.kitchenId,
+    userId: opts.userId ?? "u-vero",
+    state,
+    members: MEMBERS,
+    restrictions: opts.restrictions ?? [],
+  };
+}
+
+export function ideasInput(
+  items: ItemSpec[],
+  request: string | null,
+  opts: { restrictions?: Restriction[]; userId?: string; count?: number } = {},
+): MealIdeasInput {
+  return {
+    ...mealContext(items, opts),
+    request: request === null ? null : { messageId: "msg-ideas", text: request },
+    ...(opts.count ? { count: opts.count } : {}),
+  };
+}

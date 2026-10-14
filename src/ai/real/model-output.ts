@@ -31,6 +31,10 @@ export const ModelAction = z.enum([
   "list_tick",
   "list_untick",
   "list_remove",
+  "meal_choose",
+  "meal_plan",
+  "meal_start_cooking",
+  "meal_done",
 ]);
 export type ModelAction = z.infer<typeof ModelAction>;
 
@@ -51,6 +55,11 @@ export const ModelOp = z.object({
   amountUsed: QuantityFact.nullable(),
   /** list_add / list_update: the store to buy it at, as said (SL1). */
   store: TextFact.nullable(),
+  /**
+   * meal_*: which meal. An idea label ("d2"), a meal label ("m1"), or "last_chosen" for "that" /
+   * "it" (code resolves it, never the model, 0005). Null for every other action.
+   */
+  meal: z.string().nullable(),
 });
 export type ModelOp = z.infer<typeof ModelOp>;
 
@@ -72,6 +81,13 @@ export const ModelOutput = z.object({
    * now says yes: which offer it was. Code checks the offer really happened (0027, SL3).
    */
   listOfferAccepted: z.enum(["staples", "stock-offer"]).nullable(),
+  /**
+   * "What can I make?" → "ideas". A change to the open recipe ("no oven", "make it spicier") →
+   * "recipe_change" with `meal`. Code turns it into a follow-up after apply. Otherwise null.
+   */
+  generate: z
+    .object({ what: z.enum(["ideas", "recipe_change"]), meal: z.string().nullable() })
+    .nullable(),
 });
 export type ModelOutput = z.infer<typeof ModelOutput>;
 

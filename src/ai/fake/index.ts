@@ -11,6 +11,8 @@
 import type { ChangeSetSummary } from "@/contracts/apply-result";
 import type { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult, Interpreter } from "../interpreter";
+import { mealOperations } from "../real/meal-ops";
+import type { ModelOutput } from "../real/model-output";
 import { matchIntent, type Segment } from "./patterns";
 
 const said = <T>(value: T) => ({ value, basis: "said" as const, confidence: "high" as const });
@@ -80,6 +82,29 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
           operations = [{ opId: "", type: "changeset.revert", evidence: req.message.text.trim(), target: { changeSetId: last.changeSetId } }];
           reply = "No problem, that's undone.";
           break;
+        }
+        case "mealIdeas":
+          return { kind: "answer", proposal: null, reply: "Let me look at what you have.", followUps: [{ kind: "ideas", request: req.message.text.trim() }] };
+        case "meal": {
+          // The same code resolution as the real interpreter (labels, "last chosen", follow-ups).
+          const out: ModelOutput = {
+            kind: "change",
+            reply: "",
+            clarification: null,
+            rememberPreference: null,
+            listOfferAccepted: null,
+            generate: null,
+            operations: [
+              { action: intent.action, meal: intent.label, evidence: req.message.text.trim(), item: null, name: null, quantity: null, location: null, frozen: null, stock: null, amountUsed: null, store: null },
+            ],
+          };
+          const m = mealOperations(out, req, new Date());
+          const base = { proposalId: req.message.id, kitchenId: req.kitchenId, basedOnVersion: req.version, source: { via: "chat" as const, messageId: req.message.id } };
+          if (m.clarification) {
+            return { kind: "clarify", reply: m.clarification.question, proposal: { ...base, operations: [], clarification: m.clarification } };
+          }
+          const replies = { meal_choose: "Good choice. Here's the recipe.", meal_plan: "Added it to your plan.", meal_start_cooking: "Enjoy cooking!", meal_done: "Enjoy! Let me know what's left." };
+          return { kind: "change", reply: replies[intent.action], proposal: { ...base, operations: m.operations }, followUps: m.followUps };
         }
         case "unknown":
           return { kind: "answer", proposal: null, reply: FALLBACK_REPLY };

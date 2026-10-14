@@ -72,7 +72,7 @@ Short labels (`i7`) keep the prompt small and stop the model inventing IDs. Code
 
 ## 5. Meal ideas and recipes
 
-- **Ideas** (0009): about 3, each with a name, a why, **Uses** (kitchen labels) and **Missing**. Unprompted ideas leave out dishes containing any member's allergen (**AI6** Rec). Prefer at most 2 missing items, mention thawing for frozen food "tonight", and respect one-off constraints. If nothing fits, the reply says so and offers a short shopping list. Code recomputes Uses and Missing from the labels, so a card can't claim food the kitchen doesn't have.
+- **Ideas** (0009): about 3, each with a name, a why, **Uses** (kitchen labels) and **Missing**. Unprompted ideas leave out dishes containing any member's allergen (AI6 = a, 0019), unless the allergen item itself needs using up (0025): then it's suggested and flagged. Use-it-up comes first in the ranking and in the "why" (0025). Prefer at most 2 missing items, mention thawing for frozen food "tonight", and respect one-off constraints. If nothing fits, the reply says so and offers a short shopping list. Code recomputes Uses and Missing from the labels, so a card can't claim food the kitchen doesn't have.
 - **AI recipe** (0010, 0013): ingredients (each with a kitchen label or none, plus a basics flag), steps, and a basics note. Basics are exactly **salt, pepper, cooking oil, water, and dried herbs and spices** (0019). The checklist sorts ingredients with a valid label under "In your kitchen" and the rest under "Need". It's saved via `recipe.save` with source `ai`. Default: suggested (R2 Rec). If R2 is "ask", generation waits for "Suggest one".
 - **Refine in chat** ("no oven"): a new version is saved, and old versions stay in history.
 - **Pasted recipe** (R1): stored exactly as pasted and labelled "Your recipe". The ingredients are extracted for the checklist. It attaches to the open meal, or appears as an idea card to Choose.
@@ -82,7 +82,7 @@ Short labels (`i7`) keep the prompt small and stop the model inventing IDs. Code
 - **Allergies and diets have two locks** (0012, 0019). Every member's allergies count, whoever asks; diets only the asker's.
   1. The prompt lists them as hard rules, with each allergy's owner and note.
   2. Code scans idea names, ingredients and steps against a word list (peanut → groundnut, satay…; seafood → shrimp, prawn, crab, lobster, fish sauce…; vegetarian → meats, fish, gelatin…). Then:
-     - **Unprompted ideas** (AI6 Rec): a hit triggers one regeneration; if it fails again, the idea is dropped and the reply says so. Diets work the same way.
+     - **Unprompted ideas** (AI6 = a): a hit triggers one regeneration; if it fails again, the idea is dropped and the reply says so. Exception (0025): if the idea uses a kitchen item that needs using up and is itself that allergen (defrosted shrimp), it's kept and flagged. Diets are in the prompt only for now (no diet word list yet).
      - **Explicitly asked for** ("shrimp tacos?"), or the user's own pasted recipe: allowed, and **always flagged**. "Asked for" is decided by code: the allergen or dish name must appear in the user's typed words, never the model's say-so.
   3. **Flags are built by code, not the model:** `AllergenFlag` (backend §6) gives whose allergy it is and their note, shown as-is ("Contains shrimp: Levi's seafood allergy. Their note: can eat shellfish if medicine is on hand").
   4. **No medical advice:** the reply may point to the flag and the person's note, but never says a dish is safe, never mentions doses, and never judges the note. The evals forbid these phrases.
@@ -162,14 +162,14 @@ eval/            cases · runner · matchers
 | 15 | Any | "I ate a whole pizza lol" | No operations; no lecture |
 | 16 | Milk, eggs | "We're out of eggs and running low on milk" | Eggs `stock: out`, milk `low` (both said) |
 | 17 | Any (Levi) | "I'm allergic to seafood, but I can eat crab and shrimp if my medicine is on hand" | Seafood allergy saved (said) with that qualifier as his `note`; no rule derived from it |
-| 18 | Household: Levi's seafood allergy + note; shrimp and crab in kitchen | Vero: "What can I make?" | No seafood in any idea (AI6 Rec) |
+| 18 | Household: Levi's seafood allergy + note; shrimp and crab in kitchen, not needing using up | Vero: "What can I make?" | No seafood in any idea (AI6). If the shrimp was defrosted yesterday: a shrimp idea, flagged with his note (0025) |
 | 19 | Same | Vero: "Shrimp tacos tonight?" | Recipe allowed; flag names Levi's seafood allergy plus his note; no "safe", no dosing |
 | 20 | Same | Levi: "Can I have the crab if I take my pill?" | No operations; reflects only his own note; no medical advice |
 
 ## Questions for Vero
 
 - **AI1, AI3:** answered → 0019. **AI4:** settled by 0011. **AI5:** answered → 0020 (no cheaper model for re-wording).
-- Still open: **AI6** (allergen dishes in unprompted ideas; this design follows the Rec) and **C10** (Sonnet comparison).
+- AI6 → 0019 (left out unless asked); AI8 → 0025 (use-it-up allergen items still suggested, flagged). Still open: **C10** (Sonnet comparison, after 2 weeks of real use).
 
 ## Risks and how we'd reverse
 
@@ -218,3 +218,49 @@ eval/            cases · runner · matchers
 - **interpret** replies with the message and `proposal: null`. **reword** runs after changes have already saved, so it keeps the code-built receipt and adds the message after it.
 - **Log:** `{ event: "ai.budget_exhausted", task, reason, status, requestId }`, with no key or message text.
 - **Known cost:** the SDK still retries the spend-cap 429 once before we see it (a few seconds' delay, no charge).
+
+## Build notes: meal ideas and recipes (2026-10-14, P2 (d), prompts `interpret-2026-10-14.3` + `meals-2026-10-14.1`)
+**Entry points** (`src/ai/meals/index.ts`): `getMealAI(selectInterpreterKind())` returns the real, fake or not-configured `MealAI`:
+- `streamMealIdeas(input)` yields `{type:"idea", idea}` per card as soon as it's complete, then `{type:"done", result}`. `generateMealIdeas` returns just the result.
+- `streamRecipe(input)` yields `{type:"part", part, data}` (meta, each ingredient, each step, basics), then `done` with a contract-valid `recipe.save`. `generateRecipe` returns just the result. With `refine` it's a new version of the same meal.
+- `readPastedRecipe(input)`: a pasted recipe becomes a `recipe.save` (source `user`, text exactly as pasted) and nothing else.
+- Nothing here saves. The backend applies the `recipe.save` and stores ideas with `recordMealIdeas` (0003).
+
+**How a call works.** One streamed structured-output call (Opus 5.5, effort `medium`, overridable with `AI_IDEAS_EFFORT` / `AI_RECIPE_EFFORT`; 12k/16k output cap; 90 s per attempt; `fallbacks: "default"`). System = the interpreter's fixed prompt (cached) + a fixed task block (also cached), so every call type shares one cached prefix. The kitchen, use-it-up list, every member's allergies with their notes, the asker's diets and preferences, and the request go in the user message, with look-alike tags stripped. Parts are taken from the partial JSON as each array element completes (the SDK's own tolerant parser). The final validated answer is authoritative, and anything not yet streamed is sent from it. Cost is logged per call (`ai.usage`, task `ideas` / `recipe` / `recipe-paste`).
+
+**Code decides, not the model:**
+- **Uses / Missing:** unknown labels are dropped, and a "missing" item the kitchen has moves to Uses.
+- **Basics** (0019) are exactly salt, pepper, cooking oil (olive/vegetable/neutral…), water, and dried herbs and spices (`basics.ts`). A "basic" outside the list counts as Need. The reminder is `BASICS_ASSUMED` ("Assumes salt and olive oil. Tell me if you don't have them.").
+- **Checklist groups:** "In your kitchen" when the label is real or the name matches exactly one item; else basic; else Need.
+- **Use it up** (`use-it-up.ts`, 0025): defrosted (`frozen: false` in the fridge), leftovers 1+ day old, other fridge food 4+ days old, and Low. Pantry and freezer food never needs using up by age alone. There's no batch or "defrosted on" data in the contract yet, so age is days since added.
+- **Allergens** (`allergen-guard.ts`): flags come from the shared word list over the idea's name, the items it uses and its missing items. An unprompted allergen idea is dropped, unless the user's typed words hit the same allergy, or a used use-it-up item is that allergen. One regeneration replaces dropped ideas. I added Vietnamese seafood words to the shared list (nước mắm, mắm, tôm, cua, mực, cá, plus dashi, bonito, surimi), because names are kept as said.
+
+**Chat** (prompt v3, `meal-ops.ts`): the model routes the request, and code resolves everything.
+- **Labels:** idea cards are `d1…` (from the new optional `InterpretRequest.ideas`), meals in progress are `m1…`, and "that"/"it" is `last_chosen`. `last_chosen` resolves to the meal this user chose most recently within 3 h. "I made it" picks the single cooking meal. If nothing resolves, Kitchen asks "Which one?" with quick replies.
+- **Follow-ups:** results carry `followUps` (in `src/ai/interpreter.ts`) for the route to run after apply:
+  - `ideas` (with the user's words);
+  - `recipe` (for a just-chosen meal, by `chooseOpId`, or a refine with the user's words);
+  - `meal-step` (plan or cook an idea chosen in this message);
+  - `after-cooking` (open "Update your kitchen"; code + UI, never the model).
+- **Fake interpreter:** it understands the same phrases ("what can I make", "the second one", "add that to my meal plan", "start cooking", "I made it") through the same code. A fake `MealAI` runs the same guards, for repeatable e2e.
+
+**Tests:**
+- `tests/unit/ai-meals.test.ts`: mocked stream; parsing, use-it-up, allergen leave-out, flag and regenerate, basics, In-kitchen/Need split, refine request shape, pasted recipe, budget, refusal.
+- `tests/unit/ai-meal-chat.test.ts`: routing, plus the journey through the real validator: ideas → choose → recipe.save → plan → cooking → done, with no rejections.
+- `src/ai/eval/meals.eval.ts`: real model, not run yet. Covers Vero's week (pho leftovers + MD Oriental list) and Levi's seafood allergy with defrosted shrimp, frozen prawns and "shrimp tacos?".
+
+**Not verified yet:** no real-API run (latency, cache hits, cost per call; estimated 5–8¢), whether the SDK's 90 s timeout behaves per attempt on a stream, and partial parsing across a mid-stream fallback. On a mid-stream refusal the result is `ok: false`, but cards already streamed stay on screen; the backend should drop that set.
+
+**Requested from Backend for meals** (I haven't changed `src/contracts/`, `src/domains/` or `src/db/`):
+1. **Run `followUps` in the turn** after apply, in order:
+   - `ideas`: status `ideas`, then `streamMealIdeas`, then `recordMealIdeas` per idea (one `setId`), then an `idea` event.
+   - `recipe`: status `recipe`, then `streamRecipe`, a `recipe` event per part, applying `recipe.save` once it's `done`, then `recipe.saved`.
+   - `meal-step`: `meal.plan` / `meal.transition` with the meal ID from the choose op's applied refs.
+   - `after-cooking`: see 2.
+2. **A stream event for "open Update your kitchen"** (e.g. `{type:"sheet", kind:"after-cooking", mealId}`), or Frontend derives it from `applied`.
+3. **`InterpretRequest.ideas`:** the cards this user was last shown, in card order. `meal_ideas` needs a `position` column, or an insert-order guarantee, plus a query for the latest set.
+4. **A meal-context query:** every member's restrictions (`loadProfiles`) and names, plus the asker's preferences, and the current `RecipeView` for refinement.
+5. **`recordMealIdeas` flags:** include the names of the `uses` items. Today it flags only name + missing, so an idea using kitchen shrimp isn't flagged unless its name says shrimp.
+6. **`RecipeIngredient.amount?: string`** (and on `RecipeView`): amounts are only in `text` for now.
+7. **Message code `BASICS_ASSUMED`**: "Assumes {basics}. Tell me if you don't have them." Add it to `messages.ts` / `en.json`.
+8. Optional: `meal.plan` / `meal.transition` with `{ideaId}`, or `meal.choose {title}` for a dish named in chat that isn't on a card. This would replace the `meal-step` follow-up and the route through ideas.

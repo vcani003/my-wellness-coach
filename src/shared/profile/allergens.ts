@@ -11,9 +11,11 @@ import type { Restriction } from "./state";
 
 /** Category → ingredient words that belong to it. Keys and words are standard names. */
 export const CATEGORY_TERMS: Record<string, string[]> = {
-  seafood: ["fish", "shellfish", "shrimp", "prawn", "crab", "lobster", "crayfish", "scallop", "mussel", "clam", "oyster", "squid", "calamari", "octopus", "salmon", "tuna", "cod", "anchovy", "sardine"],
-  shellfish: ["shrimp", "prawn", "crab", "lobster", "crayfish", "scallop", "mussel", "clam", "oyster"],
-  fish: ["salmon", "tuna", "cod", "anchovy", "sardine", "trout", "halibut", "tilapia", "mackerel"],
+  // Vietnamese names are kept as said (0015), so the common ones are listed too (ai.md §6):
+  // nước mắm / mắm = fish sauce or fermented fish, tôm = shrimp, cua = crab, mực = squid, cá = fish.
+  seafood: ["fish", "shellfish", "shrimp", "prawn", "crab", "lobster", "crayfish", "scallop", "mussel", "clam", "oyster", "squid", "calamari", "octopus", "salmon", "tuna", "cod", "anchovy", "sardine", "dashi", "bonito", "surimi", "nước mắm", "mắm", "tôm", "cua", "mực", "cá"],
+  shellfish: ["shrimp", "prawn", "crab", "lobster", "crayfish", "scallop", "mussel", "clam", "oyster", "tôm", "cua"],
+  fish: ["salmon", "tuna", "cod", "anchovy", "sardine", "trout", "halibut", "tilapia", "mackerel", "fish sauce", "nước mắm", "mắm", "cá"],
   nut: ["almond", "walnut", "cashew", "pecan", "pistachio", "hazelnut", "macadamia", "brazil nut"],
   "tree nut": ["almond", "walnut", "cashew", "pecan", "pistachio", "hazelnut", "macadamia"],
   peanut: ["peanut", "peanut butter", "groundnut"],

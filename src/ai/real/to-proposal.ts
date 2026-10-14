@@ -15,6 +15,7 @@ import { nameTokens, standardName } from "@/shared/text";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult } from "../interpreter";
 import type { ModelOp, ModelOutput } from "./model-output";
+import { mealOperations } from "./meal-ops";
 import { itemLabels, shoppingLabels } from "./prompt";
 
 type MetaFact = { basis: Fact<unknown>["basis"]; confidence: Fact<unknown>["confidence"] };
@@ -138,6 +139,9 @@ function toOperation(op: ModelOp, opId: string, req: InterpretRequest, labels: L
     case "remove":
       if (!target) return null;
       return { ...common, type: "item.remove", target };
+    default:
+      // meal_* actions are resolved by meal-ops.ts.
+      return null;
   }
 }
 
@@ -206,7 +210,7 @@ function guardShopping(ops: Operation[], out: ModelOutput, req: InterpretRequest
 
 export type ProposalOutcome = { ok: true; result: InterpretResult } | { ok: false; reason: string };
 
-export function toInterpretResult(out: ModelOutput, req: InterpretRequest): ProposalOutcome {
+export function toInterpretResult(out: ModelOutput, req: InterpretRequest, now: Date = new Date()): ProposalOutcome {
   const reply = out.reply.trim();
   if (!reply) return { ok: false, reason: "empty reply" };
 
@@ -216,8 +220,19 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest): Prop
     basedOnVersion: req.version,
     source: { via: "chat" as const, messageId: req.message.id },
   };
+  // Meal actions and "what can I make?" / "no oven" (0005, 0013): resolved by code.
+  const meals = mealOperations(out, req, now);
+  const followUps = meals.followUps.length ? { followUps: meals.followUps } : {};
 
-  if (out.kind === "answer") return { ok: true, result: { kind: "answer", proposal: null, reply } };
+  if (out.kind === "answer" && !meals.clarification && meals.operations.length === 0) {
+    return { ok: true, result: { kind: "answer", proposal: null, reply, ...followUps } };
+  }
+
+  const clarifyOnly = (c: { question: string; options: Array<{ label: string; reply: string }> }, text: string): ProposalOutcome => {
+    const parsed = ProposedChange.safeParse({ ...base, operations: [], clarification: c });
+    if (!parsed.success) return { ok: false, reason: `clarification failed the contract: ${parsed.error.message}` };
+    return { ok: true, result: { kind: "clarify", proposal: parsed.data, reply: text } };
+  };
 
   if (out.kind === "clarify") {
     const c = out.clarification;
@@ -226,9 +241,7 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest): Prop
       .filter((o) => o.label.trim() && o.reply.trim())
       .slice(0, 4)
       .map((o) => ({ label: o.label.trim(), reply: o.reply.trim() }));
-    const parsed = ProposedChange.safeParse({ ...base, operations: [], clarification: { question, options } });
-    if (!parsed.success) return { ok: false, reason: `clarification failed the contract: ${parsed.error.message}` };
-    return { ok: true, result: { kind: "clarify", proposal: parsed.data, reply } };
+    return clarifyOnly({ question, options }, reply);
   }
 
   const labels = { items: itemLabels(req.state), shopping: shoppingLabels(req.state) };
@@ -237,7 +250,7 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest): Prop
     const o = toOperation(op, `${req.message.id}:op${i + 1}`, req, labels);
     if (o) converted.push(o);
   });
-  const operations = guardShopping(converted, out, req);
+  const operations = [...guardShopping(converted, out, req), ...meals.operations];
 
   const pref = out.rememberPreference;
   if (pref && pref.statement.trim() && offeredToRemember(req) && inMessage(req.message.text, pref.evidence)) {
@@ -250,9 +263,19 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest): Prop
     });
   }
 
-  if (operations.length === 0) return { ok: true, result: { kind: "answer", proposal: null, reply: NOTHING_TO_CHANGE_REPLY } };
+  // Code couldn't tell which meal: ask, and don't claim it happened (one question, 0005).
+  if (meals.clarification && operations.length === 0) return clarifyOnly(meals.clarification, meals.clarification.question);
 
-  const parsed = ProposedChange.safeParse({ ...base, operations: operations.slice(0, 50) });
+  if (operations.length === 0) {
+    if (meals.followUps.length) return { ok: true, result: { kind: "answer", proposal: null, reply, ...followUps } };
+    return { ok: true, result: { kind: "answer", proposal: null, reply: NOTHING_TO_CHANGE_REPLY } };
+  }
+
+  const parsed = ProposedChange.safeParse({
+    ...base,
+    operations: operations.slice(0, 50),
+    ...(meals.clarification ? { clarification: meals.clarification } : {}),
+  });
   if (!parsed.success) return { ok: false, reason: `proposal failed the contract: ${parsed.error.message}` };
-  return { ok: true, result: { kind: "change", proposal: parsed.data, reply } };
+  return { ok: true, result: { kind: "change", proposal: parsed.data, reply, ...followUps } };
 }
