@@ -8,6 +8,8 @@
  * Your own change updates the widgets from the ApplyResult before the reply arrives; the other
  * person's changes arrive through `useKitchenSync`.
  */
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useLocale, useNow, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import {
@@ -29,6 +31,8 @@ import { MessageList } from "@/ui/chat/MessageList";
 import { useChat } from "@/ui/chat/useChat";
 import { sentenceCase } from "@/ui/fallbacks";
 import { CaretDownIcon, CaretUpIcon, ChatIcon, MinusIcon } from "@/ui/primitives/icons";
+import { ConfirmBanner, ConfirmPromptProvider } from "@/ui/settings/ConfirmPrompt";
+import type { PendingConfirm } from "@/ui/settings/model";
 import { DevBar } from "@/ui/shell/DevBar";
 import { DESKTOP_QUERY, useMediaQuery } from "@/ui/shell/useMediaQuery";
 import { useKeyboardInset } from "@/ui/shell/viewport";
@@ -51,7 +55,9 @@ export interface KitchenAppProps {
   initialState: KitchenState | null;
   /** Your latest saved chat (P2 a), read on the server; null if that failed (the chat retries). */
   initialHistory?: ChatHistoryPage | null;
-  /** The route's page: null on `/`, the Recipe on `/recipe/[mealId]` (shown in the workspace). */
+  /** Your allergies or diets someone else added that you haven't confirmed (AI7): the home banner. */
+  initialPendingConfirm?: PendingConfirm[];
+  /** The route's page: null on `/`, the Recipe or Settings on their routes (shown in the workspace). */
   children?: ReactNode;
 }
 
@@ -94,7 +100,18 @@ export function KitchenApp(props: KitchenAppProps) {
   );
 }
 
-function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, initialHistory = null, children }: KitchenAppProps) {
+const NO_PENDING: PendingConfirm[] = [];
+
+function KitchenScreen({
+  kitchenId,
+  me,
+  members,
+  devActingAs,
+  initialState,
+  initialHistory = null,
+  initialPendingConfirm = NO_PENDING,
+  children,
+}: KitchenAppProps) {
   const t = useTranslations();
   const locale = useLocale();
   const announce = useAnnounce();
@@ -153,13 +170,13 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, init
       }
     },
     focusWidget,
-    fillComposer(text) {
-      if (dockNow.current === "minimized") changeDock("peek");
-      composerRef.current?.fill(text);
-    },
+    fillComposer: (text) => fillComposer(text),
     ownRecipeText: (title) => t("meals.recipe.ownRecipePrefix", { title }),
   });
-  const recipeOpen = meals.openMealId !== null;
+  const pathname = usePathname();
+  const settingsOpen = pathname === "/settings" || Boolean(pathname?.startsWith("/settings/"));
+  // A route page (the Recipe, Settings) replaces the widgets; they stay mounted underneath.
+  const routeOpen = meals.openMealId !== null || settingsOpen;
 
   const chat = useChat({
     kitchenId,
@@ -296,6 +313,12 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, init
     if (target === "composer") composerRef.current?.focus();
   }, [dock]);
 
+  /** Open the chat with text in the composer (Use my own recipe, Edit note in Settings). */
+  const fillComposer = (text: string) => {
+    if (dockNow.current === "minimized") changeDock("peek");
+    composerRef.current?.fill(text);
+  };
+
   const changeDock = (next: DockState, focus: "fab" | "composer" | null = null) => {
     focusAfterDock.current = focus;
     if (next !== "minimized") setNewReply(false);
@@ -331,6 +354,7 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, init
     <KitchenActionsProvider value={actions}>
     <KitchenDataProvider value={{ me, snapshot, marks, remoteIds, now, turn }}>
     <MealsProvider value={meals.value}>
+    <ConfirmPromptProvider initial={initialPendingConfirm} fillComposer={fillComposer}>
       <div className="app-shell min-h-dvh desk:grid desk:h-dvh desk:grid-cols-[1fr_2fr] desk:grid-rows-[auto_minmax(0,1fr)] desk:overflow-hidden">
         <a href="#workspace" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-sm focus:bg-surface-raised focus:p-2">
             {t("app.skipToWorkspace")}
@@ -343,15 +367,20 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, init
           {devActingAs && <DevBar meId={me.id} members={members} />}
           <div className="flex min-h-tap items-center gap-3 px-4 py-2 desk:px-6">
             <h1 className="text-heading font-strong">{t("app.name")}</h1>
-            <span className="ml-auto flex items-center">
+            <Link
+              href="/settings"
+              data-settings-link=""
+              aria-label={t("app.openSettings", { name: me.name })}
+              aria-current={settingsOpen ? "page" : undefined}
+              className="-my-[calc((var(--spacing-avatar)-var(--spacing-tap))/-2)] -mr-[calc((var(--spacing-avatar)-var(--spacing-tap))/-2)] ml-auto flex size-tap items-center justify-center rounded-full"
+            >
               <span
                 aria-hidden="true"
                 className="flex size-avatar items-center justify-center rounded-full bg-accent-soft text-small font-strong text-accent-text"
               >
                 {sentenceCase(me.name, locale).charAt(0)}
               </span>
-              <span className="sr-only">{t("app.signedInAs", { name: me.name })}</span>
-            </span>
+            </Link>
           </div>
         </header>
 
@@ -362,8 +391,9 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, init
           inert={phoneFull}
           className="workspace px-4 pt-2 desk:col-start-2 desk:row-start-2 desk:overflow-y-auto desk:px-6 desk:pt-4"
         >
-          {/* Kept mounted under the Recipe, so Back returns to the same place. */}
-          <div hidden={recipeOpen}>
+          {/* Kept mounted under the Recipe and Settings, so Back returns to the same place. */}
+          <div hidden={routeOpen}>
+            <ConfirmBanner />
             <Workspace
               registry={registry}
               state={workspace}
@@ -457,6 +487,7 @@ function KitchenScreen({ kitchenId, me, members, devActingAs, initialState, init
           </button>
         )}
       </div>
+    </ConfirmPromptProvider>
     </MealsProvider>
     </KitchenDataProvider>
     </KitchenActionsProvider>

@@ -11,7 +11,7 @@ import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import type { ShoppingItemRow } from "@/contracts/kitchen-state";
 import { useAnnounce } from "@/ui/a11y/Announcer";
-import { actorName, itemName } from "@/ui/fallbacks";
+import { actorName, itemName, sentenceCase } from "@/ui/fallbacks";
 import { MoreIcon, NotSyncedIcon, UndoIcon } from "@/ui/primitives/icons";
 import { Menu } from "@/ui/primitives/Menu";
 import { useKitchenActions } from "@/ui/sync/KitchenActionsContext";
@@ -335,7 +335,7 @@ function ShoppingRowView({
             )}
             {tickedBy && (
               <span aria-hidden="true" className="rounded-button bg-accent-soft px-2 text-caption font-strong text-accent-text">
-                {tickedBy}
+                {sentenceCase(tickedBy, locale)}
               </span>
             )}
           </span>

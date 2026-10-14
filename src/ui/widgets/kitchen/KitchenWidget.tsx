@@ -8,7 +8,7 @@
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useRef } from "react";
 import type { ItemRow } from "@/contracts/kitchen-state";
-import { actorName, itemName } from "@/ui/fallbacks";
+import { actorName, itemName, sentenceCase } from "@/ui/fallbacks";
 import { useKitchenData, type ChangeMark } from "@/ui/sync/KitchenDataContext";
 import type { WidgetProps } from "@/ui/workspace/types";
 import { calendarDaysSince, groupItems } from "./model";
@@ -140,7 +140,7 @@ function ItemRowView({
         {item.frozen?.value && item.location?.value !== "freezer" && <span>{t("kitchen.frozen")}</span>}
         {byOther && (
           <span className={remote ? "font-strong text-highlight-text" : ""}>
-            {t("kitchen.byPerson", { name: actorName(item.updatedBy, t), when })}
+            {t("kitchen.byPerson", { name: sentenceCase(actorName(item.updatedBy, t), locale), when })}
           </span>
         )}
       </div>

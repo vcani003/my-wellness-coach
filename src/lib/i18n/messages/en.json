@@ -14,7 +14,8 @@
       "title": "Something didn't load",
       "body": "Your kitchen is safe. Try loading the page again.",
       "retry": "Try again"
-    }
+    },
+    "openSettings": "Settings, signed in as {name}"
   },
   "dev": {
     "label": "Dev only",
@@ -177,7 +178,10 @@
     "REVIEW_QUEUED": "Saved for later in To review",
     "REVIEW_RESOLVED": "Done with To review",
     "INVALID_TRANSITION": "{title} can't go from {from} to {to}",
-    "BASICS_ASSUMED": "Assumes {basics}. Tell me if you don't have them."
+    "BASICS_ASSUMED": "Assumes {basics}. Tell me if you don't have them.",
+    "RESTRICTION_VERIFIED": "Confirmed {name}'s {kind}: {subject}",
+    "RESTRICTION_REMOVED": "Removed {name}'s {kind}: {subject}",
+    "FORMER_MEMBER_PROFILE": "Changed a former member's profile"
   },
   "msgPlain": {
     "ITEM_MOVED": "{name} moved to the {location}",
@@ -200,7 +204,8 @@
       "failed": "Something went wrong. Please try again.",
       "tooMany": "Too many tries. Please wait {minutes} min and try again.",
       "notConfigured": "Access codes aren't set up on this server yet.",
-      "wrong": "That code didn't work. Check it and try again."
+      "wrong": "That code didn't work. Check it and try again.",
+      "deleted": "That code belonged to data that's been deleted, so it no longer opens the kitchen. Ask for a new code to start fresh."
     }
   },
   "shopping": {
@@ -361,6 +366,188 @@
       "doneFailed": "Couldn't update your kitchen, so nothing changed. Try again.",
       "laterFailed": "Couldn't save that for later, so nothing changed. Try again.",
       "skipFailed": "Couldn't skip that. Try again."
+    }
+  },
+  "settings": {
+    "heading": "Settings",
+    "back": "Back to your kitchen",
+    "loadFailed": "I couldn't load your settings just now.",
+    "retry": "Try again",
+    "retrying": "Loading…",
+    "account": {
+      "heading": "Account",
+      "name": "Name",
+      "signOut": "Sign out",
+      "signOutHint": "Signs out on this device only.",
+      "signOutEverywhere": "Sign out everywhere",
+      "signOutEverywhereHint": "Signs you out on this device and every other one.",
+      "signingOut": "Signing out…",
+      "confirm": {
+        "title": "Sign out everywhere?",
+        "body": "You'll be signed out on this device and on every other phone or computer. To come back, enter your access code again.",
+        "confirm": "Sign out everywhere",
+        "cancel": "Cancel",
+        "failed": "I couldn't sign you out just now. Try again."
+      }
+    },
+    "kitchen": {
+      "heading": "Kitchen",
+      "sharedWith": "Shared with {names}",
+      "justYou": "Just you for now.",
+      "membersLabel": "Members",
+      "you": "{name} (you)",
+      "none": "You're not in a kitchen yet."
+    },
+    "remember": {
+      "heading": "Allergies and preferences",
+      "intro": "Kitchen keeps every member's allergies in mind, whoever is asking.",
+      "yours": "Yours",
+      "theirs": {
+        "self": "Added by {owner}",
+        "byYouNeeds": "Added by you, needs {owner} to confirm",
+        "byYouConfirmed": "Added by you · {owner} confirmed it",
+        "needs": "Added by {name}, needs {owner} to confirm",
+        "confirmed": "Added by {name} · {owner} confirmed it"
+      },
+      "empty": "Nothing saved yet. Tell Kitchen in chat, for example \"I'm allergic to peanuts\".",
+      "theirEmpty": "Nothing saved for {name}.",
+      "kind": {
+        "allergy": "Allergy",
+        "diet": "Diet"
+      },
+      "kindWord": "{kind, select, allergy {allergy} diet {diet} other {note}}",
+      "note": "Note: {note}",
+      "onlyOwner": "Only {name} can change these.",
+      "confirm": "Confirm",
+      "editNote": "Edit note",
+      "remove": "Remove",
+      "confirmLabel": "Confirm your {subject} {kind}",
+      "editNoteLabel": "Edit note on your {subject} {kind}, in chat",
+      "removeLabel": "Remove your {subject} {kind}",
+      "editNoteText": "My {subject} {kind}: ",
+      "saving": "Saving…",
+      "failed": "I couldn't save that, so nothing changed. Try again.",
+      "undo": "Undo",
+      "undoLabel": "Undo: {change}",
+      "undone": "Undone.",
+      "cantUndo": "I couldn't undo that just now.",
+      "preferences": "Preferences",
+      "preferencesEmpty": "No preferences saved yet.",
+      "preferencesHint": "To change or forget one, tell Kitchen in chat.",
+      "own": {
+        "self": "Added by you",
+        "needsYou": "Added by {name}, needs you to confirm",
+        "confirmed": "Added by {name} · you confirmed it"
+      },
+      "memberHeading": "{name}'s"
+    },
+    "data": {
+      "heading": "Your data",
+      "download": "Download my data",
+      "downloadHint": "One file with your account, your chats, your kitchen's changes and what Kitchen remembers about you.",
+      "delete": "Delete my data",
+      "deleteHint": "Removes your account, chats and profile.",
+      "sheet": {
+        "title": "Delete your data?",
+        "removes": "This removes your account, your chats with Kitchen, and the allergies, diets and preferences saved for you.",
+        "stays": "Things you added to the shared kitchen stay, credited to \"a former member\", so the kitchen still makes sense for everyone else.",
+        "kitchenStays": "The kitchen itself stays until its last member leaves.",
+        "kitchenGoes": "You're the kitchen's only member, so the kitchen is deleted too.",
+        "final": "This can't be undone. You might like to download your data first.",
+        "label": "To confirm, type \"{phrase}\"",
+        "confirm": "Delete my data",
+        "cancel": "Keep my data",
+        "deleting": "Deleting…",
+        "failed": "I couldn't delete your data just now, so nothing was deleted. Try again."
+      }
+    },
+    "policies": {
+      "heading": "Privacy and terms",
+      "privacy": "Privacy policy",
+      "terms": "Terms"
+    },
+    "verify": {
+      "label": "Please confirm",
+      "one": "{name} added your {subject} {kind}.",
+      "many": "{name} added {count} things to your profile.",
+      "link": "Confirm or change it?",
+      "linkMany": "Confirm or change them?",
+      "dismiss": "Not now"
+    },
+    "pageTitle": "Settings · Kitchen"
+  },
+  "policy": {
+    "back": "Back to Settings",
+    "placeholder": "Placeholder: this is plain-language starter text, not legal advice, and it hasn't been reviewed. It needs a real review before the app opens to the public.",
+    "privacy": {
+      "pageTitle": "Privacy · Kitchen",
+      "title": "Privacy policy",
+      "intro": "Kitchen is a small, invite-only kitchen assistant for one household. This page says what it keeps, who can see it, and how to take it with you or delete it.",
+      "sections": [
+        {
+          "heading": "What Kitchen stores",
+          "body": "Your name and the details that keep you signed in. Your kitchen: what you add, use, freeze or run out of, kept as a history of changes with who made each one and when. Your chats with Kitchen. The allergies, diets and preferences saved for you. Meal ideas, recipes, meal plans and shopping lists."
+        },
+        {
+          "heading": "Who can see it",
+          "body": "Everyone in your kitchen sees the kitchen, its history (including who made each change), the shopping list, the meal plan, and each member's allergies and diets, so meals stay safe for everyone. Your chats are private: other members never see them."
+        },
+        {
+          "heading": "AI processing",
+          "body": "To understand your messages and suggest meals, Kitchen sends what you type, the relevant parts of your kitchen, and your kitchen members' allergies and diets to Anthropic, which runs the Claude AI model that writes the replies. Anthropic handles it under its own commercial terms and privacy policy."
+        },
+        {
+          "heading": "Where it's kept",
+          "body": "The app runs on Vercel and the data is kept in a Neon database. Your phone also keeps a few small things for convenience, like the widget you used last and shopping ticks that haven't been sent yet. One cookie keeps you signed in. There's no advertising and no tracking."
+        },
+        {
+          "heading": "Taking it with you, or deleting it",
+          "body": "In Settings, Download my data gives you one file with your account, chats, kitchen changes and profile. Delete my data removes your account, your chats and your profile. Things you added to a shared kitchen stay, credited to \"a former member\". A kitchen is deleted only when its last member deletes their data."
+        },
+        {
+          "heading": "Never sold",
+          "body": "Your data is never sold, rented or used for ads. It's shared only with the services that run the app (named above), and only so the app can work."
+        },
+        {
+          "heading": "Questions",
+          "body": "Ask the person who invited you to Kitchen."
+        }
+      ]
+    },
+    "terms": {
+      "pageTitle": "Terms · Kitchen",
+      "title": "Terms",
+      "intro": "Kitchen is an early, invite-only test for one household. By using it you agree to these terms.",
+      "sections": [
+        {
+          "heading": "Not advice",
+          "body": "Meal ideas, recipes and allergy flags are helpers, not medical, nutrition or food-safety advice, and an AI can get things wrong. Always check ingredients, labels and food safety yourself, especially when someone has an allergy."
+        },
+        {
+          "heading": "Your content",
+          "body": "What you type stays yours. You let Kitchen store and process it so the app can work, including sending it to Anthropic for the AI replies (see the privacy policy)."
+        },
+        {
+          "heading": "A shared kitchen",
+          "body": "What you add to a shared kitchen is visible to its members. You can save another member's allergy for them; it stays marked as added by you until they confirm it, and only they can change or remove it."
+        },
+        {
+          "heading": "Your access",
+          "body": "Keep your access code to yourself. If you think someone else has it, use Sign out everywhere in Settings and ask for a new code."
+        },
+        {
+          "heading": "As is",
+          "body": "This is a test version. It may have bugs, change, or stop, and data could be lost. If something matters to you, download your data from Settings."
+        },
+        {
+          "heading": "Leaving",
+          "body": "You can stop at any time and delete your data from Settings."
+        },
+        {
+          "heading": "Changes",
+          "body": "These terms may change as the app grows. If they do, the app will say so."
+        }
+      ]
     }
   }
 }

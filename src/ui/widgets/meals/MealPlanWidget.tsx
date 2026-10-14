@@ -9,7 +9,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { MealRow } from "@/contracts/kitchen-state";
 import { useAnnounce } from "@/ui/a11y/Announcer";
-import { actorName } from "@/ui/fallbacks";
+import { actorName, byOther } from "@/ui/fallbacks";
 import { UndoIcon } from "@/ui/primitives/icons";
 import { useKitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { useKitchenData } from "@/ui/sync/KitchenDataContext";
@@ -147,7 +147,7 @@ export function MealPlanWidget() {
               {entry.meal.status === "cooking" && (
                 <span className="rounded-button bg-highlight-bg px-2 text-caption font-strong text-highlight-text">{t("cooking")}</span>
               )}
-              {!("missing" in entry.meal.createdBy) && entry.meal.createdBy.id !== me.id && (
+              {byOther(entry.meal.createdBy, me.id) && (
                 <span className="text-caption text-text-muted">{t("addedBy", { name: actorName(entry.meal.createdBy, tAll) })}</span>
               )}
             </div>

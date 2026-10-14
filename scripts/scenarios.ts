@@ -107,7 +107,22 @@ export async function seedScenario(db: Db, name: ScenarioName, opts: SeedOptions
     );
   }
 
-  if (name === "household" || name === "demo") {
+  if (name === "demo") {
+    // The local demo tells the real story (AI7, 0019): Vero saves Levi's seafood allergy, and it
+    // waits as "Added by Vero" until Levi confirms it in Settings (the home banner asks him).
+    const text = "Levi is allergic to seafood, but he can eat shellfish if medicine is on hand.";
+    await apply(k.members[0], "seed-allergy", text, [
+      {
+        opId: "1",
+        type: "profile.restriction.add",
+        forUserId: k.members[1],
+        evidence: "allergic to seafood",
+        fields: { kind: "allergy", subject: said("seafood"), note: said("can eat shellfish if medicine is on hand") },
+      },
+    ]);
+  }
+
+  if (name === "household") {
     // One member has a seafood allergy with a personal note (0019, 0021).
     const text = "I'm allergic to seafood, but I can eat shellfish if my medicine is on hand.";
     await apply(k.members[1], "seed-allergy", text, [
