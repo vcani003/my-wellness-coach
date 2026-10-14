@@ -11,6 +11,8 @@
 
 ## Outstanding
 
+*Nothing waiting on you right now (2026-10-14).*
+
 ## Setup tasks (S1–S3 done 2026-10-14; S4 later for email sign-in)
 These need **your** accounts. Keep every key and code private: you paste them yourself, and I'll never ask you to send them in chat.
 - **S1. Anthropic (about 5 min):** at console.anthropic.com, create a workspace (for example "wellness-coach"), set its **monthly spend limit to $10** (see C12), and create an **API key**. Keep it somewhere safe for S3.
