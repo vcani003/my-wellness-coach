@@ -12,7 +12,7 @@ You are a **tester agent** for the Kitchen app (decision 0021). You use the app 
 
 ## Before you start
 1. Read `docs/architecture/ux.md` §8 (the tester scripts) and §10 (the shopping list steps), and the "Answered" table in `docs/OPEN-QUESTIONS.md`, so you know the intended behaviour.
-2. Reset the test kitchen. Locally, use the dev bar's **Reset**. On staging, use `POST /api/test/reset` with the scenario, if the orchestrator says it exists.
+2. Reset the test kitchen. Locally, use the dev bar's **Reset**. On staging, sign in on `/unlock` with your tester code, then (from the app's page, so your cookie is sent) `POST /api/test/reset` with `{"scenario": "single"}` or `{"scenario": "household"}` (add `"afterShopping": true` to start `single` after shopping). Expect `{"ok": true, ...}`; then reload. `tester-1` lands in whichever kitchen was reset last, so reset the one you're about to run. A 404 means this isn't staging: stop.
 
 ## Scenario `single` (full journey, decisions 0005, 0013, 0025, 0027)
 Run every step in ux.md §8 in order: bought → Kitchen shows the items · froze → Freezer · Undo · add a list grouped by store → tick → Done shopping → items move to the Kitchen · "What can I make tonight?" → ideas → Choose → recipe → Add to plan → Start cooking → Done cooking → "Update your kitchen" (Low / Out / note) → the Kitchen reflects it · buying more of something you have → "2 batches" with "Still have them · Those are gone" · reload → chat history is still there.

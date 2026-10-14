@@ -4,8 +4,8 @@
  * (milestone 2). Demo people are `isTest` accounts too, so they can never join a real kitchen.
  * `seedScenario` wipes the scenario's test kitchen and its testers' profiles, then loads the
  * scenario through the normal write path (so it has real events). It only ever touches
- * `isTest` kitchens and `isTest` users. Local only for now; the staging `/api/test/reset`
- * route will reuse it later.
+ * `isTest` kitchens and `isTest` users. Used by `npm run db:seed` (local), the staging bootstrap
+ * on preview builds (`ensureStagingKitchens`) and `POST /api/test/reset` (staging).
  */
 import { and, eq, inArray } from "drizzle-orm";
 import type { Db } from "@/db/client";
@@ -135,4 +135,40 @@ export async function seedScenario(db: Db, name: ScenarioName, opts: SeedOptions
     ]);
   }
   return { kitchenId: k.id, userIds: k.members };
+}
+
+/** The scenarios staging has: the two test kitchens the tester agents use (0021). Never `demo`. */
+export const STAGING_SCENARIOS = ["single", "household"] as const satisfies readonly ScenarioName[];
+export type StagingScenario = (typeof STAGING_SCENARIOS)[number];
+
+export interface StagingReport {
+  createdUsers: string[];
+  seededKitchens: string[];
+}
+
+/**
+ * Staging bootstrap (preview builds only; `scripts/staging-bootstrap.ts` holds the guard). Makes
+ * sure `tester-1` and `tester-2` (`isTest`) and the `single` and `household` test kitchens exist.
+ * Idempotent and never wipes: a kitchen that already exists is left exactly as the testers left
+ * it (resetting is `POST /api/test/reset`'s job). Refuses if a tester ID belongs to a real account.
+ */
+export async function ensureStagingKitchens(db: Db): Promise<StagingReport> {
+  const ids = TESTERS.map((t) => t.id);
+  const existing = await db.select({ id: users.id, isTest: users.isTest }).from(users).where(inArray(users.id, ids));
+  if (existing.some((u) => !u.isTest)) throw new Error("Refusing: a tester ID belongs to a real account");
+  const createdUsers: string[] = [];
+  for (const t of TESTERS) {
+    if (existing.some((u) => u.id === t.id)) continue;
+    await createUser(db, { ...t, isTest: true });
+    createdUsers.push(t.id);
+  }
+  const seededKitchens: string[] = [];
+  for (const name of STAGING_SCENARIOS) {
+    const [kitchen] = await db.select({ isTest: kitchens.isTest }).from(kitchens).where(eq(kitchens.id, KITCHENS[name].id));
+    if (kitchen && !kitchen.isTest) throw new Error(`Refusing: kitchen "${KITCHENS[name].id}" is not a test kitchen`);
+    if (kitchen) continue;
+    await seedScenario(db, name);
+    seededKitchens.push(name);
+  }
+  return { createdUsers, seededKitchens };
 }

@@ -13,6 +13,7 @@ import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { getDb, type Queryable } from "@/db/client";
 import { users } from "@/db/schema";
+import { testersAllowed } from "@/lib/deployment";
 import { devActingAsEnabled, env, type Env } from "@/lib/env";
 import { sessionCookieName, verifySession } from "./session";
 
@@ -60,8 +61,8 @@ export async function resolveCurrentUser(
     now,
   );
   if (!session) return null;
-  // Tester accounts never hold a real session (0021). A deleted person has no row (D1).
-  return loadUser(db, session.userId, false, session.epoch);
+  // Tester accounts hold a session on staging only (0021, `testersAllowed`). A deleted person has no row (D1).
+  return loadUser(db, session.userId, testersAllowed(e), session.epoch);
 }
 
 /** The signed-in user, or null. Server only. */

@@ -31,6 +31,11 @@ const EnvSchema = z
     ANTHROPIC_API_KEY: optionalText,
     /** Dev-only "acting as" switch: a user ID. The server refuses to start in production with it set. */
     DEV_ACTING_AS: optionalText,
+    /**
+     * Set by Vercel: `production`, `preview` (staging, with its own database and key) or
+     * `development`. Only `preview` lets tester accounts in (`src/lib/deployment.ts`, 0021).
+     */
+    VERCEL_ENV: optionalText,
   })
   .superRefine((e, ctx) => {
     const fail = (path: string, message: string) => ctx.addIssue({ code: "custom", path: [path], message });

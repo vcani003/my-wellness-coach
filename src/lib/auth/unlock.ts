@@ -5,6 +5,7 @@
 import { eq } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import { deletedUsers, users } from "@/db/schema";
+import { testersAllowed } from "@/lib/deployment";
 import type { Env } from "@/lib/env";
 import { checkUnlockRateLimit, pruneRateLimits } from "@/lib/rate-limit";
 import { matchAccessCode, parseAccessCodes } from "./access-codes";
@@ -39,9 +40,10 @@ export async function attemptUnlock(db: Db, e: Env, input: { code: string; ip: s
       return { ok: false, reason: "deleted" };
     }
   }
-  if (!user || user.isTest) {
+  // Tester accounts (0021) unlock on staging only (`VERCEL_ENV=preview`), never in production.
+  if (!user || (user.isTest && !testersAllowed(e))) {
     // Names only: tells the operator to run the bootstrap; the visitor just sees "didn't work".
-    console.error(`[unlock] access code for "${userId}" has no real user; run npm run db:bootstrap`);
+    console.error(`[unlock] access code for "${userId}" has no usable user here; run npm run db:bootstrap`);
     return { ok: false, reason: "invalid" };
   }
   const token = issueSession(

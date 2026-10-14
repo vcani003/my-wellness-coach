@@ -19,15 +19,20 @@ import { listMembers, type KitchenScope } from "@/shared/membership";
 import { msg } from "@/shared/messages";
 import { loadProfiles } from "@/shared/profile/store";
 
-/** Your first kitchen (MVP 1: one per person, 0006), as `getSession` picks it. */
+/**
+ * The kitchen you're in, as `getSession` and Settings pick it. A real person: their first kitchen
+ * (MVP 1: one per person, 0006). A tester account (0021), which can be in both test kitchens: the
+ * one most recently (re)created, so `POST /api/test/reset {scenario}` also puts `tester-1` in it.
+ */
 export async function firstKitchenId(db: Queryable, userId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ kitchenId: memberships.kitchenId })
+  const rows = await db
+    .select({ kitchenId: memberships.kitchenId, isTest: users.isTest })
     .from(memberships)
+    .innerJoin(users, eq(users.id, memberships.userId))
     .where(eq(memberships.userId, userId))
-    .orderBy(asc(memberships.createdAt))
-    .limit(1);
-  return row?.kitchenId ?? null;
+    .orderBy(asc(memberships.createdAt), asc(memberships.kitchenId));
+  if (rows.length === 0) return null;
+  return (rows[0].isTest ? rows[rows.length - 1] : rows[0]).kitchenId;
 }
 
 const KIND_ORDER = { allergy: 0, diet: 1 } as const;

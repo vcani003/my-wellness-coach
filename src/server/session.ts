@@ -8,12 +8,13 @@
  */
 import "server-only";
 import { connection } from "next/server";
-import { asc, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { Db } from "@/db/client";
-import { kitchens, memberships, rateLimits } from "@/db/schema";
+import { kitchens, rateLimits } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { listMembers, requireMember, type KitchenScope, type Member } from "@/shared/membership";
 import { scenarioKitchenId, seedScenario } from "../../scripts/scenarios";
+import { firstKitchenId } from "./account/settings";
 import { getDb } from "./db";
 import { isDevActingAsOn } from "./dev-mode";
 
@@ -66,17 +67,12 @@ export async function getSession(): Promise<Session | null> {
   if (devActingAs) await ensureDemoKitchen(db);
   const user = await getCurrentUser();
   if (!user) return null;
-  const [membership] = await db
-    .select({ kitchenId: memberships.kitchenId })
-    .from(memberships)
-    .where(eq(memberships.userId, user.id))
-    .orderBy(asc(memberships.createdAt))
-    .limit(1);
-  if (!membership) return null;
-  const members = await listMembers(db, membership.kitchenId);
+  const kitchenId = await firstKitchenId(db, user.id);
+  if (!kitchenId) return null;
+  const members = await listMembers(db, kitchenId);
   const me = members.find((m) => m.userId === user.id);
   if (!me) return null;
-  return { userId: me.userId, displayName: me.displayName, kitchenId: membership.kitchenId, members, devActingAs };
+  return { userId: me.userId, displayName: me.displayName, kitchenId, members, devActingAs };
 }
 
 /** The membership-checked scope for a kitchen, or null (not signed in / not a member). */

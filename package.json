@@ -20,7 +20,7 @@
     "test:e2e": "playwright test",
     "eval": "vitest run --config vitest.eval.config.ts",
     "db:bootstrap": "tsx scripts/db-bootstrap.ts",
-    "vercel-build": "tsx scripts/db-migrate.ts --neon-only && next build"
+    "vercel-build": "tsx scripts/db-migrate.ts --neon-only && tsx scripts/staging-bootstrap.ts && next build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.133.0",
