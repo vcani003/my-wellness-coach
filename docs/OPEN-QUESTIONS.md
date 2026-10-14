@@ -12,9 +12,11 @@
 ## Outstanding
 
 ### SU1. ⛔ Levi signs up himself (you asked): invite link + his own passphrase
-**Rec (being built on this; I'll check with you before it goes live, since it's a sign-in change, decision 0028):**
+**Status: built and tested (601 unit tests, 44 browser tests); not live. Answering "go" here approves it AND the deploy.**
+**Rec:**
 - **No open sign-up.** In **Settings → Kitchen → "Invite someone"**, you get a **single-use invite link** that's valid for 24 hours. You send it to Levi however you like.
-- Levi opens it and chooses his **name** and a **passphrase** (at least 12 characters, shown with Show/Hide). He's signed in and joins your kitchen. The link stops working once used.
+- **For Levi** (his account already exists, with his allergy): **Settings → "Send sign-in setup link"** next to his name, so he keeps his account. "Invite someone new" is for new people only.
+- They open it and choose their **name** and a **passphrase** (at least 12 characters, shown with Show/Hide). He's signed in and joins your kitchen. The link stops working once used.
 - Passphrases are stored **scrambled (hashed)**, never readable, not even by you or me.
 - **Forgot your passphrase?** Another kitchen member can send a **reset link** from Settings, the same way as an invite.
 - Your current access code keeps working. You can switch to your own passphrase from Settings whenever you like. Vercel access codes become a backup only.
