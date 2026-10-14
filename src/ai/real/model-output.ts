@@ -6,7 +6,7 @@
  * limits here: structured outputs don't support them, and the contract checks them afterwards.
  */
 import { z } from "zod";
-import { Basis, BatchWhich, Confidence, Location, StockLevel } from "@/contracts/common";
+import { Basis, BatchWhich, Confidence, ItemCategory, Location, StockLevel } from "@/contracts/common";
 
 const meta = { basis: Basis, confidence: Confidence };
 
@@ -70,6 +70,12 @@ export const ModelOp = z.object({
    * "it" (code resolves it, never the model, 0005). Null for every other action.
    */
   meal: z.string().nullable(),
+  /**
+   * add / update: what kind of thing it is (CAT1). On add, the model's guess (`inferred`); on
+   * update, only a correction the user gives ("fish sauce goes under sauces", `said`). Optional
+   * here (absent = none) so older call sites stay unchanged; always present on the wire.
+   */
+  category: z.object({ value: ItemCategory, ...meta }).nullable().optional(),
 });
 export type ModelOp = z.infer<typeof ModelOp>;
 
@@ -117,7 +123,7 @@ export type ModelOutput = z.infer<typeof ModelOutput>;
  * The wire shape keeps `null` only for the kitchen facts (a fact object, or a number nobody said)
  * and uses plain sentinels everywhere else:
  *  - text labels and notes (item, meal, unit, generate.meal, dish.notes): "" = none
- *  - batch "unspecified", listOfferAccepted "none", generate.what "none"
+ *  - batch "unspecified", listOfferAccepted "none", generate.what "none", category.value "none"
  *  - clarification / rememberPreference / dish: always present; an empty question, statement or
  *    title means "none"
  * `fromWire` maps it back to `ModelOutput`, so everything after it (to-proposal.ts, meal-ops.ts,
@@ -149,6 +155,11 @@ export const WireOp = z.object({
   store: TextFact.nullable(),
   /** "" for every non-meal action. */
   meal: z.string(),
+  /**
+   * CAT1. Always an object, never null (a nullable here would be one more union type): value
+   * "none" means no category. The basis and confidence are then ignored.
+   */
+  category: z.object({ value: z.enum([...ItemCategory.options, "none"]), ...meta }),
 });
 export type WireOp = z.infer<typeof WireOp>;
 
@@ -170,6 +181,9 @@ export const WireOutput = z.object({
   dish: z.object({ title: z.string(), notes: z.string(), evidence: z.string() }),
 });
 export type WireOutput = z.infer<typeof WireOutput>;
+
+/** The category sentinel: "none" (basis and confidence are placeholders). */
+export const NO_CATEGORY = { value: "none", basis: "inferred", confidence: "low" } as const;
 
 const orNull = (s: string): string | null => (s === "" ? null : s);
 const orEmpty = (s: string | null): string => s ?? "";
@@ -200,6 +214,7 @@ export function fromWire(w: WireOutput): ModelOutput {
       batch: op.batch === "unspecified" ? null : op.batch,
       store: op.store,
       meal: orNull(op.meal),
+      ...(op.category.value === "none" ? {} : { category: { ...op.category, value: op.category.value } }),
     })),
     clarification: w.clarification.question === "" ? null : w.clarification,
     rememberPreference: w.rememberPreference.statement === "" ? null : w.rememberPreference,
@@ -227,6 +242,7 @@ export function toWire(o: ModelOutput): WireOutput {
       batch: op.batch ?? "unspecified",
       store: op.store,
       meal: orEmpty(op.meal),
+      category: op.category ?? NO_CATEGORY,
     })),
     clarification: o.clarification ?? { question: "", options: [] },
     rememberPreference: o.rememberPreference ?? { statement: "", evidence: "" },

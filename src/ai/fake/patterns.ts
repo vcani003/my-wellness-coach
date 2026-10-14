@@ -4,6 +4,9 @@
  * The AI specialist deletes this folder when the real interpreter lands.
  */
 
+import type { ItemCategory } from "@/contracts/common";
+import { foldText } from "@/shared/text";
+
 export type FakeIntent =
   | { kind: "bought"; items: Segment[] }
   | { kind: "froze"; targets: Segment[] }
@@ -16,6 +19,7 @@ export type FakeIntent =
   | { kind: "mealIdeas" }
   | { kind: "meal"; action: "meal_choose" | "meal_plan" | "meal_start_cooking" | "meal_done"; label: string }
   | { kind: "dish"; title: string; evidence: string; notes: string; have: Segment[] }
+  | { kind: "category"; target: Segment; category: ItemCategory }
   | { kind: "unknown" };
 
 /** A piece of the message: `raw` is exactly as typed (used as evidence), `name` is cleaned. */
@@ -82,6 +86,46 @@ function segments(list: string): Segment[] {
     .filter((s) => s.name.length > 0);
 }
 
+/**
+ * Category corrections (CAT1), minimal: "fish sauce goes under sauces", "the tofu goes in dairy &
+ * eggs", "put the hoisin under condiments". Only when the words after it name a category, so "put
+ * the milk in the fridge" isn't one.
+ */
+const CATEGORY_MOVE = [
+  new RegExp(String.raw`^\s*(?:the\s+)?(.+?)\s+(?:goes|go|belongs?|should go)\s+(?:under|in|into|with)\s+(.+?)` + END, "i"),
+  new RegExp(String.raw`^\s*(?:please\s+)?(?:put|file|move)\s+(.+?)\s+(?:under|in|into)\s+(.+?)` + END, "i"),
+];
+
+/** First word of a category's everyday names → its ID (folded: no accents, lower case). */
+const CATEGORY_WORDS: Array<[RegExp, ItemCategory]> = [
+  [/^(produce|vegetables?|veg|veggies|fruits?|herbs?)\b/, "produce"],
+  [/^(meat|seafood|meats)\b/, "meat_seafood"],
+  [/^(dairy|eggs?)\b/, "dairy_eggs"],
+  [/^(rice|noodles?|grains?|pasta|bread)\b/, "rice_noodles_grains"],
+  [/^(sauces?|condiments?)\b/, "sauces_condiments"],
+  [/^(spices?|seasonings?)\b/, "spices_seasonings"],
+  [/^(canned|jarred|cans?|jars?|tins?)\b/, "canned_jarred"],
+  [/^baking\b/, "baking"],
+  [/^(snacks?|sweets?|desserts?|candy)\b/, "snacks_sweets"],
+  [/^drinks?\b/, "drinks"],
+  [/^leftovers?\b/, "leftovers"],
+  [/^other\b/, "other"],
+];
+
+export function categoryFromWords(text: string): ItemCategory | null {
+  const words = foldText(text).replace(/^(the|my|our)\s+/, "");
+  return CATEGORY_WORDS.find(([re]) => re.test(words))?.[1] ?? null;
+}
+
+function categoryIntent(text: string): FakeIntent | null {
+  for (const re of CATEGORY_MOVE) {
+    const m = re.exec(text);
+    const category = m && categoryFromWords(m[2]);
+    if (m && category) return { kind: "category", target: toSegment(m[1]), category };
+  }
+  return null;
+}
+
 /** Meals (0005, 0013): "what can I make?", "the second one", "add that to my plan", "start cooking", "I made it". */
 const IDEAS = /\b(what can (i|we) (make|cook)|meal ideas|dinner ideas|any (other )?ideas|something else)\b/i;
 
@@ -122,6 +166,8 @@ export function matchIntent(text: string): FakeIntent {
   if (DONE.test(text)) return { kind: "meal", action: "meal_done", label: "last_chosen" };
   const dish = dishIntent(text);
   if (dish) return dish;
+  const category = categoryIntent(text);
+  if (category) return category;
   const toList = TO_LIST.exec(text);
   if (toList) return { kind: "toList", items: segments(toList[1]), ...(toList[2] ? { store: toList[2].trim() } : {}) };
   const bought = BOUGHT.exec(text);

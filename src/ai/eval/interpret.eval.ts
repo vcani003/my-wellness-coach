@@ -1,8 +1,8 @@
 /**
  * Real-model eval for the interpreter (ai.md §8), scored by exact rules, not by another AI.
  * Run with `npm run eval`; skipped unless ANTHROPIC_API_KEY is set. Costs real money: about
- * 33 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list (0027),
- * older and newer batches (0025) and a dish named in chat (MI1).
+ * 39 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list
+ * (0027), older and newer batches (0025), a dish named in chat (MI1) and item categories (CAT1).
  */
 import { afterAll, describe, expect, it } from "vitest";
 import type { Operation, OperationOf, OperationType } from "@/contracts/operations";
@@ -425,6 +425,66 @@ const cases: Case[] = [
       expect(addNamed(ops, "garlic")).toBeDefined();
       expect(listAdds(ops)).toHaveLength(0);
       expect(only(ops, "shopping.remove")).toHaveLength(0);
+    },
+  },
+  // Categories (CAT1)
+  {
+    name: "a Vietnamese haul is sorted by type: fish sauce, bánh phở, culantro, lemongrass",
+    text: "Picked up nước mắm, 2 bags of bánh phở, a bunch of culantro and some lemongrass",
+    check: (r, ops) => {
+      expect(r.kind).toBe("change");
+      const cat = (needle: string) => addNamed(ops, needle)?.fields.category;
+      expect(cat("nước mắm")?.value).toBe("sauces_condiments");
+      expect(cat("bánh phở")?.value).toBe("rice_noodles_grains");
+      expect(cat("culantro")?.value).toBe("produce");
+      expect(cat("lemongrass")?.value).toBe("produce");
+      for (const o of only(ops, "item.add")) expect(o.fields.category?.basis ?? "inferred").toBe("inferred");
+    },
+  },
+  {
+    name: "I made pho → leftovers",
+    text: "I made pho",
+    check: (r, ops) => expect(addNamed(ops, "pho")?.fields.category?.value ?? "leftovers").toBe("leftovers"),
+  },
+  {
+    name: "fish sauce goes under sauces (a said correction on the listed item)",
+    text: "fish sauce goes under sauces",
+    items: [{ name: "nước mắm (fish sauce)", location: "pantry", category: "other" }, { name: "tofu", category: "produce" }],
+    check: (r, ops) => {
+      const [upd] = only(ops, "item.update");
+      targets(upd, "item-1");
+      expect(upd.fields.category).toMatchObject({ value: "sauces_condiments", basis: "said" });
+      expect(only(ops, "item.add")).toHaveLength(0);
+    },
+  },
+  {
+    name: "put the tofu in dairy & eggs (nearest category ID, not a location)",
+    text: "put the tofu in dairy & eggs",
+    items: [{ name: "tofu", location: "fridge", category: "produce" }],
+    check: (r, ops) => {
+      const [upd] = only(ops, "item.update");
+      targets(upd, "item-1");
+      expect(upd.fields.category).toMatchObject({ value: "dairy_eggs", basis: "said" });
+      expect(upd.fields.location).toBeUndefined();
+    },
+  },
+  {
+    name: "where's the fish sauce? (place and type, grounded)",
+    text: "where's the fish sauce?",
+    items: [{ name: "nước mắm (fish sauce)", location: "pantry", category: "sauces_condiments" }, { name: "limes", location: "fridge", category: "produce" }],
+    check: (r) => {
+      answerOnly(r);
+      expect(r.reply).toMatch(/pantry/i);
+      expect(r.reply).toMatch(/sauces/i);
+    },
+  },
+  {
+    name: "do we have hoisin? (not listed: no)",
+    text: "do we have hoisin?",
+    items: [{ name: "nước mắm (fish sauce)", location: "pantry", category: "sauces_condiments" }],
+    check: (r) => {
+      answerOnly(r);
+      expect(r.reply).toMatch(/\b(no|don't|not)\b/i);
     },
   },
 ];

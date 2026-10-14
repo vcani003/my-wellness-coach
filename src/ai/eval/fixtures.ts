@@ -1,5 +1,5 @@
 /** Small KitchenState builders for the AI unit tests and the eval set. */
-import type { Location, StockLevel } from "@/contracts/common";
+import type { ItemCategory, Location, StockLevel } from "@/contracts/common";
 import { KitchenState, type ItemRow } from "@/contracts/kitchen-state";
 import { standardName } from "@/shared/text";
 import type { Restriction } from "@/shared/profile/state";
@@ -20,6 +20,9 @@ export interface ItemSpec {
   batches?: number[];
   /** "Defrosted on" (0025), days ago. */
   defrostedDaysAgo?: number;
+  /** CAT1: its category, as the kitchen's guess (inferred) unless `categorySaid`. */
+  category?: ItemCategory;
+  categorySaid?: boolean;
 }
 
 const daysBack = (days: number) => new Date(NOW.getTime() - days * 86_400_000).toISOString();
@@ -48,6 +51,9 @@ export function item(spec: ItemSpec, index: number): ItemRow {
     id,
     name: f(spec.name),
     standardName: standardName(spec.name),
+    ...(spec.category && {
+      category: spec.categorySaid ? f(spec.category) : { value: spec.category, basis: "inferred" as const, confidence: "medium" as const },
+    }),
     ...(spec.location && { location: f(spec.location) }),
     ...(spec.stock && { stock: f(spec.stock) }),
     ...(spec.frozen !== undefined && { frozen: f(spec.frozen) }),

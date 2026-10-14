@@ -10,9 +10,13 @@
  * - Batches (0025): a batch ("the new eggs") is targeted only when the user's words name one;
  *   otherwise the backend's default applies (the oldest first). "Those are gone" closes one batch
  *   (the oldest unless they said otherwise); "I defrosted X" is `item.defrost`.
+ * - Categories (CAT1): an add carries the model's guess (`inferred`); the backend still prefers a
+ *   remembered correction. A `said` category needs the user's words to talk about categories
+ *   ("goes under sauces"), else an add's is downgraded to `inferred` (a said one is remembered)
+ *   and an update's is dropped: an update only ever carries the user's own correction.
  * - The result must pass the contract's Zod schema, or nothing is proposed.
  */
-import type { BatchWhich, Fact, ShoppingSource } from "@/contracts/common";
+import type { BatchWhich, Fact, ItemCategory, ShoppingSource } from "@/contracts/common";
 import type { ItemBatchTarget, Operation, ShoppingTarget } from "@/contracts/operations";
 import { nameTokens, standardName } from "@/shared/text";
 import { ProposedChange } from "@/contracts/proposed-change";
@@ -79,6 +83,22 @@ export const BATCH_WORDS =
 
 /** "Defrosted" / "thawed": an update that only unfreezes becomes `item.defrost` (0025). */
 const DEFROST_WORDS = /\b(defrost(ed|ing)?|thaw(ed|ing)?|unfroze)\b/i;
+
+/**
+ * The user's words talk about a category (CAT1): "fish sauce goes under sauces", "put the tofu in
+ * dairy & eggs", "hoisin is a condiment". Without this, a "said" category is the model's guess.
+ */
+export const CATEGORY_WORDS =
+  /\b(under|categor(y|ies|ise|ize)|section|goes (in|into|under|with)|go (in|into|under|with)|belongs?|counts? as|is an? (condiment|sauce|spice|seasoning|grain|snack|sweet|drink|vegetable|fruit)|produce|condiments?|seasonings|grains|dairy|snacks|sweets|drinks|baking|canned|jarred|leftovers)\b/i;
+
+/** The category to propose for an add or update, after the guards above (or none). */
+function categoryOf(op: ModelOp, action: "add" | "update", text: string, evidenceOk: boolean): Fact<ItemCategory> | undefined {
+  const f = keep(op.category ?? null, (c) => c.value, evidenceOk);
+  if (!f) return undefined;
+  const said = f.basis === "said" && CATEGORY_WORDS.test(text);
+  if (action === "update") return said ? f : undefined;
+  return said ? f : { ...f, basis: "inferred" };
+}
 
 function namedBatch(op: ModelOp, evidenceOk: boolean): BatchWhich | undefined {
   if (!op.batch || !evidenceOk) return undefined;
@@ -153,15 +173,22 @@ function toOperationOrNull(op: ModelOp, opId: string, req: InterpretRequest, lab
       if (!listed && evidence && BUY_INTENT.test(evidence)) {
         return { ...common, type: "shopping.add", fields: { name: addName as Fact<string>, ...(quantity && { quantity }) } };
       }
+      const category = categoryOf(op, "add", req.message.text, evidenceOk);
       return {
         ...common,
         type: "item.add",
-        fields: { name: addName as Fact<string>, quantity, location, frozen },
+        fields: { name: addName as Fact<string>, quantity, location, frozen, ...(category && { category }) },
       };
     }
     case "update": {
       if (!target) return null;
-      const fields = { ...(quantity && { quantity }), ...(location && { location }), ...(frozen && { frozen }) };
+      const category = categoryOf(op, "update", req.message.text, evidenceOk);
+      const fields = {
+        ...(quantity && { quantity }),
+        ...(location && { location }),
+        ...(frozen && { frozen }),
+        ...(category && { category }),
+      };
       if (Object.keys(fields).length === 0) return null;
       return { ...common, type: "item.update", target: withBatch(target, which), fields };
     }

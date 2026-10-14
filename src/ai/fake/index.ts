@@ -5,6 +5,7 @@
  * repeatable (backend-data.md §8). It understands only:
  *   "I bought X, Y and Z" · "I froze the X" · "I used the rest of the X" · "X is running low" ·
  *   "add X and Y to the list [for Store]" · "the old X are gone" · "I defrosted the X" · "undo" ·
+ *   "X goes under <category>" (CAT1; adds also get the shared keyword guess) ·
  *   "I was thinking a <dish>, with … I have X" / "I want to make <dish>" (MI1)
  * and answers anything else politely with no changes. Everything it proposes still goes through
  * the real backend validate → apply path. The AI specialist replaces this folder (ai.md §9).
@@ -14,6 +15,7 @@ import type { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult, Interpreter } from "../interpreter";
 import { mealOperations } from "../real/meal-ops";
 import type { ModelOutput } from "../real/model-output";
+import { CATEGORY_LABEL_EN, guessCategory } from "@/shared/item-category";
 import { matchIntent, type Segment } from "./patterns";
 
 /**
@@ -22,6 +24,12 @@ import { matchIntent, type Segment } from "./patterns";
  */
 const said = <T>(value: T) => ({ value, basis: "said" as const, confidence: "high" as const });
 const list = (names: string[]) => new Intl.ListFormat("en", { type: "conjunction" }).format(names);
+
+/** CAT1: the shared keyword guess as an inferred fact, or nothing when no word matched. */
+function guessedCategory(name: string) {
+  const g = guessCategory(name);
+  return g.matched ? { category: { value: g.category, basis: "inferred" as const, confidence: "medium" as const } } : {};
+}
 
 export const FALLBACK_REPLY =
   "Sorry, I didn't catch that. I'm a simple stand-in for now, so I only understand things like " +
@@ -51,7 +59,7 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
             opId: "",
             type: "item.add",
             evidence: s.raw,
-            fields: { name: said(s.name), ...(s.quantity ? { quantity: said(s.quantity) } : {}) },
+            fields: { name: said(s.name), ...(s.quantity ? { quantity: said(s.quantity) } : {}), ...guessedCategory(s.name) },
           }));
           reply = `All set: added ${names(intent.items)}.`;
           break;
@@ -76,6 +84,10 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
         case "defrosted":
           operations = intent.targets.map((s) => ({ opId: "", type: "item.defrost", evidence: s.raw, target: { name: s.name } }));
           reply = `Noted: marked the ${names(intent.targets)} as defrosted.`;
+          break;
+        case "category":
+          operations = [{ opId: "", type: "item.update", evidence: req.message.text.trim(), target: { name: intent.target.name }, fields: { category: said(intent.category) } }];
+          reply = `Done: the ${intent.target.name} is under ${CATEGORY_LABEL_EN[intent.category]} now.`;
           break;
         case "low":
           operations = itemOps(intent.targets, "item.use", { stock: said("low") });

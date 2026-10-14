@@ -85,8 +85,8 @@ describe("what the model sees (0025)", () => {
     await interpreter.interpret(requestFor(k, "what do I have?"));
     await interpreter.interpret(request("what do I have?"));
     const user = calls[0].messages[0].content as string;
-    expect(user).toContain("i1: eggs · 18 eggs · not sure where · 2 batches (Oct 2, today)");
-    expect(user).toMatch(/i2: chicken thighs · freezer(\n| · added)/); // one batch: no batch list
+    expect(user).toContain("i1: eggs · 18 eggs · not sure where · type dairy_eggs · 2 batches (Oct 2, today)");
+    expect(user).toMatch(/i2: chicken thighs · freezer · type meat_seafood(\n| · added)/); // one batch: no batch list
     expect(user).not.toContain(k.state().items[0].batches![0].id); // no batch IDs for the model to copy
     const systems = calls.map((c) => (c.system as Anthropic.Beta.Messages.BetaTextBlockParam[])[0].text);
     expect(systems[0]).toBe(systems[1]);
