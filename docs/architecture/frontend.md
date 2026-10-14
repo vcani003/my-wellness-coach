@@ -49,9 +49,9 @@ Real URLs make the phone's Back button just work. Next 16's `proxy.ts` (formerly
 
 **Your own change:** the `ApplyResult` arrives → the client stores the embedded new `state` (backend §6) → notes `newVersion` so polling doesn't refetch it → the reducer focuses the right widget and marks rows "New"/"Updated" until your next message.
 
-**The other person's change:** `useKitchenSync` polls `/version` per backend §6 (15 s visible, 60 s after 5 idle minutes, immediately on return, paused when hidden). A higher version reloads state; rows with `updatedBy` ≠ you get the soft "[Husband] · just now" highlight.
+**The other person's change:** `useKitchenSync` polls `/version` per backend §6 (15 s visible, 60 s after 5 idle minutes, immediately on return, paused when hidden). A higher version reloads state; rows with `updatedBy` ≠ you get the soft "Levi · just now" highlight.
 
-**Optimistic updates** (showing a change before the server confirms): **no** for anything the AI interprets (UX notes). **Yes for checklist ticks only**: unambiguous, and lag would feel broken. A failed tick reverts with "Couldn't save · Retry". Ticks are shared (0013), so the other person's arrive through sync with "ticked by [Husband]".
+**Optimistic updates** (showing a change before the server confirms): **no** for anything the AI interprets (UX notes). **Yes for checklist ticks only**: unambiguous, and lag would feel broken. A failed tick reverts with "Couldn't save · Retry". Ticks are shared (0013), so the other person's arrive through sync with "ticked by Levi".
 
 **Chat streaming:** plain `fetch` reading one JSON event per line (NDJSON), each checked by the shared Zod schema in `src/contracts/`. The **canonical event list is the turn stream table in backend §6** (`ack`, `status`, `applied`, `clarification`, `offer`, `notes`, `text`, `idea`, `recipe`, `recipe.saved`, `done`, `error {reason, changed, retryable}`). The same stream serves `/api/chat` and **Choose** (`POST /api/meals/choose`).
 Because the backend interprets, then applies, then replies, `applied` always arrives before any `text`, so widgets update *before* the reply streams. Each message has a client-made ID, so **Try again** can never apply twice.
@@ -106,7 +106,7 @@ Versions checked on the npm registry, 2026-10-13. Pin exact versions at build st
 **Chat and announcements**
 - [ ] "Chat" and "Workspace" landmarks with skip links; one `h1`, an `h2` per widget.
 - [ ] The message list is `role="log"` with announcing **off**, so streamed chunks aren't read piecemeal.
-- [ ] **One polite live region** (announces without moving focus) speaks once per turn on `done`: reply plus receipt summary ("Added eggs, spinach. Kitchen updated."). [Husband]'s changes: at most one announcement per poll.
+- [ ] **One polite live region** (announces without moving focus) speaks once per turn on `done`: reply plus receipt summary ("Added eggs, spinach. Kitchen updated."). Levi's changes: at most one announcement per poll.
 - [ ] Focus stays in the composer after Send; incoming changes **never** move it.
 - [ ] Undo is named for what it undoes ("Undo: chicken thighs moved to freezer"); used quick replies stay readable but disabled.
 - [ ] Desktop: Enter sends, Shift+Enter adds a line, Esc closes sheets.
@@ -144,7 +144,7 @@ Versions checked on the npm registry, 2026-10-13. Pin exact versions at build st
 | End-to-end (Playwright) | UX §8 single-person journey on iPhone-sized WebKit, Android-sized Chromium and desktop, with backend's **fake interpreter** and `/api/test/reset` (`single`); the household smoke test with two browser contexts (`household`) |
 | Regression | Every bug gets a test that fails without the fix |
 
-**Hand-off gate (0021):** both test kitchens pass, in CI and through the two tester agents on staging, before a build goes to Vero and [Husband].
+**Hand-off gate (0021):** both test kitchens pass, in CI and through the two tester agents on staging, before a build goes to Vero and Levi.
 
 **Selectors for the tester agents:** role plus name first (`button "Send"`, `button "Open chat"`, `region "Kitchen"`, `button "Choose Spinach omelette"`, `button "Undo: …"`, `checkbox "Feta"`). Otherwise `data-widget`, `data-entity-id`, `data-change="new|updated"`. Names live in `en.json` and change only on purpose.
 
@@ -171,7 +171,7 @@ Wrapping Base UI in `primitives/` means swapping libraries touches one folder.
 6. Meal ideas, Choose, Recipe → steps 5–6. Meal plan → step 7.
 7. `useKitchenSync`, persistence, offline snapshot → step 8.
 8. Playwright journey with axe in CI; manual VoiceOver pass.
-9. Then sheets (incl. the after-cooking step, M8), To review, Settings, [Husband] cues; household smoke test.
+9. Then sheets (incl. the after-cooking step, M8), To review, Settings, Levi cues; household smoke test.
 
 ---
 

@@ -89,7 +89,7 @@ Cream surfaces, a terracotta-clay accent, big round corners, soft diffused shado
 - **Icons:** Phosphor Regular, 2 px stroke, rounded.
 - **Microcopy:** "All set: eggs are in, and the chicken's tucked in the freezer." · "No problem, that's undone." · "That didn't save, so nothing's changed. Want to try again?" · "Welcome back. One thing's waiting in To review."
 
-**In every direction** the allergy flag reads, word for word: "**Allergy** · Contains shrimp: [Husband]'s seafood allergy. Medicine on hand?" with their own note under it (0019). No direction changes that wording.
+**In every direction** the allergy flag reads, word for word: "**Allergy** · Contains shrimp: Levi's seafood allergy. Medicine on hand?" with their own note under it (0019). No direction changes that wording.
 
 ---
 

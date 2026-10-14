@@ -84,7 +84,7 @@ Every change is saved as a permanent **event** (a record of something that happe
 | To review | kind (`add-to-kitchen` or `after-cooking`), items, meal, status | Fed by "Do later". The after-cooking step's wording and defaults are UI only (**M8**). |
 | Chat message | per user, within a kitchen | Private (H2, 0017) |
 
-Every current-state row carries `createdAt/By` and `updatedAt/By`, which drive the "[Husband] · just now" cues. The expanded Kitchen view (K1, view-only) is just another read of the items table.
+Every current-state row carries `createdAt/By` and `updatedAt/By`, which drive the "Levi · just now" cues. The expanded Kitchen view (K1, view-only) is just another read of the items table.
 
 ## 5. Shared context vs domain context (spec §5)
 - **The shared layer is small:**
@@ -223,7 +223,7 @@ The stream is one JSON object per line (NDJSON), checked with the shared Zod sch
 - **End-to-end tests (Frontend, with Playwright)** use a fake interpreter with fixed answers, so runs are repeatable. The tester agents use the real model.
 - **Regressions:** every bug gets a test that fails without the fix.
 - **Test kitchens (0021):** `POST /api/test/reset` (staging and tester accounts only) wipes a test kitchen and loads a named scenario: **`single`** (one tester; empty or "after shopping"; the full journey) or **`household`** (both testers as members, one with a seafood allergy and note; the shared smoke test in ux.md §8).
-- **Hand-off gate:** both test kitchens must pass on staging before a build goes to Vero and [Husband].
+- **Hand-off gate:** both test kitchens must pass on staging before a build goes to Vero and Levi.
 - **Defensive reads:** tests delete a referenced row and check the read returns a fallback, not an error.
 
 ## 9. Repo layout
@@ -304,7 +304,7 @@ Tracked in `OPEN-QUESTIONS.md`. H2 and H3: answered → 0017. B14: answered → 
 | `item.use` | A same-unit remainder of 0 also sets `stock: out` (basis `inferred`). Using an `out` item → `ALREADY_OUT`. |
 | After cooking, "Do later" | `meal.transition {to: done, note}` on a meal that's already done only saves the note (event `meal.noted`). Otherwise the note couldn't be added from To review. |
 | Evidence | Chat operations without `evidence` → `EVIDENCE_NOT_FOUND`. If the message has pasted parts and a non-recipe operation's evidence isn't found in the typed part → `NOT_ALLOWED`. The command takes the message text as `messageText`; without it, profile changes via chat are refused. |
-| Restrictions | `.update` / `.remove` find the restriction by person + kind + subject (no ID in the contract). Adding one that already exists only updates the note (owner) or does nothing. The "Save this to [Husband]'s profile?" confirmation is the AI's step (AI7 Rec); the backend checks membership and ownership. |
+| Restrictions | `.update` / `.remove` find the restriction by person + kind + subject (no ID in the contract). Adding one that already exists only updates the note (owner) or does nothing. The "Save this to Levi's profile?" confirmation is the AI's step (AI7 Rec); the backend checks membership and ownership. |
 | `review.queue.items` | Typed as `[{name, itemId?}]`. |
 | Meal ideas | Stored in a `meal_ideas` table (chat messages don't exist yet), with `recordMealIdeas`. "Choose" on the same idea twice returns the same meal. |
 | KitchenState shape | Adds `kitchenId`. Actor fields are `{id, name}` or `{id, missing: true}`. `meals` = chosen/planned/cooking; `plan` = meal IDs, cooking first; `ticks` = ticked only, each with a `meal` ref; `toReview` = pending only. Recipes come from `getRecipe(mealId)` (`RecipeView`); meals carry a `recipe` summary. |

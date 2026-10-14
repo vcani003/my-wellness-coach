@@ -11,113 +11,53 @@
 
 ## Outstanding
 
-### P1. ⛔ What should come after the backend foundation? (asked as building starts)
-✅ **Backend foundation is done** (65 tests passing, committed locally). UX's visual directions are ready (V1).
-Built: **backend foundation** (project skeleton, event history, kitchen state, change checking, tests), plus **UX's calm visual direction** (you'll get a preview to pick from).
-Pick the next milestone, or put them in order:
-- **(a) The app on screen:** layout, chat dock (Peek / Full / Minimized + button), and the Kitchen widget, using a stand-in "fake AI" so it works without an AI key. It needs the visual direction (**V1**).
-- **(b) The real AI:** Kitchen actually understanding your messages, plus the test set of example messages. This needs an Anthropic API key (S1).
-- **(c) Sign-in:** email link + code. This needs Resend and a sign-in email (S1).
+### K3. 🟡 Older and newer batches of the same item (you asked for a rec)
+Your two scenarios:
+1. **You ran out but didn't tell the app.** The new eggs are really the only eggs.
+2. **You bought more while still having some.** Now there are older eggs and newer eggs.
 
-**Rec:** (a) → (b) → (c). You see and feel the app first; sign-in matters only once it's online.
-
-> Answer:
-
-### V1. 🟡 Which calm visual direction? (A, B or C)
-Open [`design/preview.html`](design/preview.html) in a browser and switch between the three. The details are in [`design/visual-direction.md`](design/visual-direction.md).
-- **A. Linen & Sage:** "A slow morning: linen light, a pot of herbs on the sill." Warm paper tones, a sage accent, and a soft serif for headings.
-- **B. Still Water:** "Cool and clear, like a glass of water on a quiet table." Misty blue-grey, a teal accent, flat cards, and a very readable font.
-- **C. Clay & Honey:** "Cosy and rounded: an afternoon with tea in a hand-thrown mug." Cream, a clay accent and pill-shaped buttons.
-
-All three pass the accessibility contrast checks and use free fonts. You can also mix them, for example A's colours with C's rounded buttons.
-**Rec (UX):** A. It feels warm without being sleepy, and sage stays far from the allergy and error colours, so those signals stay unmistakable.
+The app can't tell these apart on its own, so the design has to handle both without interrogating you.
+**Rec, in scope for MVP 1 in a small form:**
+- **Each item can have batches.** "Eggs" stays **one row** on the Kitchen list, showing "2 batches · oldest 12 days" when there's more than one. Tapping it shows the batches (date added, frozen or defrosted, Low). It's view-only, like the rest of See all.
+- **Buying something you already have adds a new batch.** The receipt makes it a one-tap choice, never a question you must answer: *"Added eggs (new batch). You also had eggs from Oct 2: **Still have them** · **Those are gone**."* Ignoring it keeps both (scenario 2). Tapping "Those are gone" closes the old batch (scenario 1).
+- **"Use the eggs" uses the oldest batch first** by default, which also feeds the use-it-up idea (AI8). You can say "the new eggs" to pick.
+- **Why now rather than later:** it changes the core data shape, which costs little now (only the backend exists) and a lot after the screens and AI are built on top.
+- **Kept out of MVP 1:** editing batches by hand, splitting or merging them, and expiry dates.
 
 > Answer:
 
-### V2. ⚪ Plum for allergy flags?
-Plum is used **only** for allergy flags, so it always means "allergy" and never anything else.
-**Rec (UX):** yes. It's unmistakable without looking alarming.
+### AI8. 🟡 "Use it up" priority in meal ideas (from your AI6 note)
+Here's how I read your note; please correct me if it's wrong:
+- **Meal ideas should favour food that needs using up**, such as things in the fridge longest, or something defrosted.
+- **If that food is an allergen** (say, defrosted shrimp, given Levi's allergy), **it should still be suggested**, clearly flagged, instead of being left out under AI6.
+
+**Rec, in scope for MVP 1 in a simple form:**
+- Rank ideas using what we already store: days since added, oldest batch (K3), defrosted (a new "defrosted on" date when you say you defrosted something), and Low.
+- The idea's "why" line says so: "Uses the chicken you defrosted yesterday."
+- **No shelf-life prediction** ("milk lasts 7 days"). That's "advanced freshness prediction", which is out of scope (spec §10).
+- A use-it-up allergen item can appear in unprompted ideas, flagged as always.
 
 > Answer:
 
-### K3. 🟡 "I bought eggs" when eggs are already in the kitchen
-*(From the Backend specialist, found while building)* Right now this creates a **second** "eggs" entry, which makes "use the eggs" ambiguous later.
-**Rec:** one entry per item. Buying more of something you already have updates that entry (and clears "Low" / "Out"). Separate entries only when you say they're different ("eggs in the freezer" vs "eggs in the fridge").
+### C10. 🟡 Cheaper models for some tasks: how and when to decide (you asked)
+**Feasible in MVP 1?** Yes. It's already built in: the model is a **per-task server setting** (0020), so interpreting, meal ideas and recipes can each use a different model, changed without code.
+**Your concern is right.** Going live on Opus and later quietly downgrading would mean Levi and you get worse answers before anyone notices. So the decision should **never be made on you two.**
+- **Decide with tests, before you see it.** When the real AI is built (milestone b), every task's test set runs on **both Opus and Sonnet** on staging, at about $2–4 a run. A task can move to Sonnet only if it scores **as well as Opus**, with **zero allergy misses**.
+- **Taste needs you.** For recipes and meal ideas, "good" is partly subjective, so you get a **blind side-by-side** of 5–10 examples (you don't know which is which) and you pick.
+- **No "try the better model" button in the app.** It's confusing, and it means you'd be living with the worse answer first.
+- **Which tasks, honestly:**
+  - **Interpreting** (turning "I used the rest of the spinach" into the right change) is where mistakes damage trust, and allergy handling runs through it. **Keep Opus.**
+  - **Meal ideas and recipes** are the realistic Sonnet candidates.
+  - **Haiku** is too weak for anything you'd read.
+- **The money:** the Opus estimate (~$15–18) already meets your $20 target. Moving ideas and recipes to Sonnet saves maybe **$4–7 a month**. Worth testing, but don't expect big savings at this scale.
+
+**Rec:** Opus for interpreting throughout MVP 1. Run the Opus vs Sonnet test plus your blind taste test for ideas and recipes when the real AI is built. Switch only tasks that pass.
 
 > Answer:
 
-### K4. ⚪ Using up a measured amount marks it "Out" automatically?
-*(From the Backend specialist)* For example, you had "2 lbs chicken" and used 2 lbs.
-**Rec:** yes, mark it Out automatically, with the usual "What changed" and Undo. You can always correct it.
-
-> Answer:
-
-### AI6. 🟡 Allergen dishes in meal ideas you didn't ask for?
-Decision 0019: allergies are always considered and always flagged, with the person's own note (for example, [Husband]'s seafood allergy plus "can eat shellfish if medicine is on hand").
-The open part is **unprompted** suggestions ("What can I make?"):
-- **(a) Leave allergen dishes out** of unprompted ideas. If someone asks for one directly ("shrimp tacos?"), it's allowed and clearly flagged with the reminder.
-- **(b) Include them, flagged,** alongside the others.
-
-**Rec:** (a). It's the safe default, and the nuance still works the moment either of you asks for a dish like that.
-
-> Answer:
-
-### AI7. 🟡 Can you save your husband's allergy for him?
-*(From the integration pass; follows from 0019)* Say you tell Kitchen "[Husband] is allergic to seafood."
-**Rec:** Kitchen asks you, "Save this to [Husband]'s profile?". (Backend will record your "yes" with the allergy, as it does for preferences.) If you say yes, it's saved and starts being considered right away. In his Settings it shows as **"Added by Vero"**, and **only he** can edit its note or remove it.
-
-> Answer:
-
-### K2. ⚪ What happens to an item marked "Out"?
-*(From the integration pass)*
-**Rec:** it drops off the Kitchen list, so the list shows only what you have. Its history is kept, so the assistant still knows "you ran out of eggs on Tuesday". A "running low" item stays on the list with a "Low" label.
-
-> Answer:
-
-### UX4. ⚪ The floating chat button (from your UX3 answer)
-**Rec:** a round button in the bottom-right corner, with a dot when the assistant has replied since you minimized the chat. It's **not draggable in MVP 1**: dragging is more to build and harder to make accessible, and it could come next.
-
-> Answer:
-
-### FE1. ⚪ Signing out: why have it at all? (you asked)
-You never *have* to sign out. "Session length" only means how long the app trusts a phone without seeing you. With a **rolling** session, every time you open the app the clock resets, so as long as you use it now and then, you're **never asked to sign in again.**
-Some limit still exists for safety:
-- **A lost or stolen phone:** the app eventually stops trusting it.
-- **Forgotten devices:** an old laptop you used once doesn't stay signed in forever.
-
-A **"Sign out everywhere"** button in Settings covers the urgent case.
-
-**Rec:** a rolling **1 year**, in practice "never" for daily users, plus "Sign out everywhere" in Settings. (The earlier rec was 60 days, which is stricter than a kitchen app needs.)
-
-> Answer:
-
-### FE2. ⚪ Offline: a local AI model as a fallback? (you asked)
-**Short answer:** it's feasible in theory but not worth it for MVP 1. It would be scope creep.
-- **iPhone:** a web app can't use Apple's built-in on-device AI. That's only open to native iPhone apps. A downloadable model in the browser means a large download (around 1–4 GB), it runs slowly on phones, and it's much worse at the careful interpreting this app depends on.
-- **Syncing is the hard part, not the chatting.** Changes made offline can clash with your husband's changes made online, and reconciling those is real work.
-- **Cost:** a local model is free per message, but it would cost far more in build time than it saves.
-
-**Options:**
-- **(a) MVP 1:** offline is **read-only**. You can see your kitchen, plan and recipes, and Send is disabled.
-- **(b) Next MVP:** **queued messages.** You type offline, and the message is sent when you're back. The assistant then reads it against the *latest* kitchen, so nothing clashes. This is cheap, safe, and covers most of the need.
-- **(c) Later:** if the app ever goes native on iPhone, Apple's on-device AI could handle simple offline chat.
-
-**Rec:** (a) now, (b) next.
-
-> Answer:
-
-### C10. 🟡 Model quality vs cost (you asked)
-| Model | Price vs Opus | Quality for this app |
-|---|---|---|
-| **Opus 5.5** (current) | 1× | Best at the hard parts: "the rest of the spinach", corrections, allergy nuance |
-| **Sonnet 5.5** | ½× | Strong, and likely fine for meal ideas and recipes. Slightly more risk on tricky interpretation. |
-| **Haiku 5.5** | ~1/40× | Fast and very cheap. Too weak for interpreting and allergy nuance; fine only for tiny jobs. |
-
-- **Your $20 target:** the estimate on Opus is already about $15–18/month, so **no downgrade is needed to hit it.** Real usage will tell.
-- **Choosing the model inside the app** (a setting you flip) **is scope creep.** It's also unnecessary, because the model is already a **per-task server setting** (0020) that I can change for you without code.
-- **The proposal:** once real messages exist, run the test set (about $2–4 a run) on **Sonnet** for meal ideas and recipes, and compare the results side by side. **You decide** from that, not from guesses.
-
-**Rec:** yes to the comparison after the first 2 weeks of real use. Keep Opus until then.
+### C11. ⚪ Cheaper models for the build agents too?
+Separate from the app's AI: the **specialist agents building the app** can also run on different models. This uses your Claude plan, not the $40 API budget.
+**Rec:** keep Opus for agents writing core code (a subtle bug costs more than the tokens saved). Use **Sonnet for mechanical jobs** like syncing docs or simple edits. I'll choose per task when I launch them, and note which model each used.
 
 > Answer:
 
@@ -193,5 +133,10 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | R2 | Recipe default | [0013](decisions/0013-meal-lifecycle.md): suggested by default + "Use my own recipe" |
 | C5 (revisited) | Saved specialists | [0023](decisions/0023-saved-specialist-agents.md): saved in `.claude/agents/` |
 | — | Look and feel | [0022](decisions/0022-ux-owns-look-and-feel.md): UX owns visual design; start calm |
+| P1 | Next milestone | (a) the app on screen with a stand-in AI: milestone 2 started |
+| V1, V2 | Visual direction; plum | [0024](decisions/0024-visual-direction-clay-and-honey.md): C, Clay & Honey; plum for allergies only |
+| K2, K4 | "Out" items; auto-Out | [0011](decisions/0011-visible-changes-and-kitchen-fields.md): Out drops off list; auto-Out with Undo |
+| AI6, AI7 | Allergen ideas; Levi's allergy | [0019](decisions/0019-allergies-with-nuance-and-basics.md): left out unless asked; added by Vero, verified by Levi |
+| UX4, FE1, FE2 | Chat button; sessions; offline | [0017](decisions/0017-shared-kitchen-and-layout.md): not draggable; 1-year rolling; read-only offline |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |

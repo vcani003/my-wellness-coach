@@ -2,7 +2,7 @@
 
 **Status:** Proposed, pending Vero's review · 2026-10-13 · UI/UX specialist
 
-What the user sees and does; no technology. Where an outstanding question matters, the design follows its Rec, cites the ID and notes the alternative. "Kitchen" is the assistant's name (0020); "[Husband]" is a placeholder for Vero's husband's name; all wording is placeholder copy.
+What the user sees and does; no technology. Where an outstanding question matters, the design follows its Rec, cites the ID and notes the alternative. "Kitchen" is the assistant's name (0020); Levi is Vero's husband; all wording is placeholder copy.
 
 ---
 
@@ -86,13 +86,13 @@ DESKTOP
 
 ### Kitchen
 - **To review** (0013): at the top with a count, one row per postponed sheet ("3 items to add · Spinach omelette", "Update your kitchen · Spinach omelette"). Tapping reopens the sheet.
-- **Items,** grouped **Fridge / Freezer / Pantry / Not sure where**. A row shows the name, plus, when known: the amount as said, "added 3 days ago", Frozen/Opened, "Running low", and a "[Husband]" tag for their recent changes. The compact widget shows about 8 items, most recently changed first, then **See all (23)**.
-- **See all (K1, 0017):** a full page on phone, the whole workspace on desktop. Grouped by location, with "Added by [Husband] · 2 days ago" on each item. View-only except To review; changes happen in chat.
+- **Items,** grouped **Fridge / Freezer / Pantry / Not sure where**. A row shows the name, plus, when known: the amount as said, "added 3 days ago", Frozen/Opened, "Running low", and a "Levi" tag for their recent changes. The compact widget shows about 8 items, most recently changed first, then **See all (23)**.
+- **See all (K1, 0017):** a full page on phone, the whole workspace on desktop. Grouped by location, with "Added by Levi · 2 days ago" on each item. View-only except To review; changes happen in chat.
 - **Empty:** "Your kitchen is empty. Tell me what you've got."
 
 ### Meal ideas
 - A header echoing the request ("Ideas for tonight"), then about three cards (0009): name, short why, **Uses**, **Missing**.
-- **Allergy flag (0019):** unprompted ideas leave allergen dishes out (AI6 Rec). A dish you asked for still appears, with a flag in text and icon above Choose: "Contains shrimp: [Husband]'s seafood allergy. Their note: can eat shellfish if medicine is on hand". Never "safe", never advice.
+- **Allergy flag (0019):** unprompted ideas leave allergen dishes out (AI6 Rec). A dish you asked for still appears, with a flag in text and icon above Choose: "Contains shrimp: Levi's seafood allergy. Their note: can eat shellfish if medicine is on hand". Never "safe", never advice.
 - **Choose**, or name it in chat (0013): the card shows "Chosen" and the Recipe opens.
 - **Loading:** "Finding ideas from your kitchen…". **Empty:** not used; if nothing fits, the assistant says so in chat. **Stale:** "Your kitchen changed since these ideas · [Refresh]".
 
@@ -100,13 +100,13 @@ DESKTOP
 - **Header:** name; **AI-written** or **Your recipe** label; status ("In your plan", "Cooking"); a **Use my own recipe** link (R2) that puts the cursor in the composer with "Paste or type your recipe".
 - **Allergy flag (0019):** the same flag under the header, and on each flagged ingredient in the checklist.
 - **Assumed basics (0010, 0019):** "Assumes salt, pepper and cooking oil. Tell me if you don't have them."
-- **Checklist (0013):** groups **In your kitchen** and **Need**, a checkbox each. Ticking doesn't change the kitchen. Ticks are shared, and show who ticked ("ticked by [Husband]", 0013). Then numbered steps.
+- **Checklist (0013):** groups **In your kitchen** and **Need**, a checkbox each. Ticking doesn't change the kitchen. Ticks are shared, and show who ticked ("ticked by Levi", 0013). Then numbered steps.
 - **Actions, by state:** **Add to plan**, **Start cooking**, **Add ticked items** (when "Need" items are ticked), **Done cooking**, and **Cancel meal** (⋯ menu, with Undo).
 - **Loading:** title at once, then "Writing your recipe…".
 - *If R2 is "ask":* on your first chosen meal, the Recipe asks "Suggest one" or "Use my own" and remembers.
 
 ### Meal plan (planned and cooking meals, 0013)
-- A short undated list (0008): **Cooking** meals first, then planned ones in order added; "Added by [Husband]" where relevant.
+- A short undated list (0008): **Cooking** meals first, then planned ones in order added; "Added by Levi" where relevant.
 - **Actions:** tap to open the Recipe; **Start cooking** / **Done cooking**; **Cancel** in ⋯ (kitchen unchanged, receipt with Undo).
 - **Empty:** "Nothing planned yet" (only in the session it was emptied).
 
@@ -160,10 +160,10 @@ These are bottom sheets on phone and centred dialogs on desktop.
 
 ## 6. Shared kitchen cues (0006)
 
-- **Who:** items, plan rows and ticks carry a "[Husband]" tag for their recent changes; See all shows "Added by [Husband] · 2 days ago". Your own changes have no tag.
-- **Since your last visit:** one dismissible line atop Kitchen: "[Husband] added milk and used the eggs."
-- **While you're looking:** their changes appear within seconds with a soft highlight and "[Husband] · just now". They never reorder widgets, move focus, change the dock or interrupt a sheet.
-- **Conflicts:** your receipt notes them ("[Husband] already marked eggs as out"); no error dialog.
+- **Who:** items, plan rows and ticks carry a "Levi" tag for their recent changes; See all shows "Added by Levi · 2 days ago". Your own changes have no tag.
+- **Since your last visit:** one dismissible line atop Kitchen: "Levi added milk and used the eggs."
+- **While you're looking:** their changes appear within seconds with a soft highlight and "Levi · just now". They never reorder widgets, move focus, change the dock or interrupt a sheet.
+- **Conflicts:** your receipt notes them ("Levi already marked eggs as out"); no error dialog.
 - **Undo** is only on your own receipts; fix their changes in chat, recorded as yours (H3, 0017).
 - **Private chats** (H2, 0017); kitchen, plan, ticks and To review are shared.
 
@@ -179,10 +179,10 @@ These are bottom sheets on phone and centred dialogs on desktop.
 **First run**
 - Empty Kitchen state plus "I save things as soon as you tell me. You can always Undo."
 - Suggestion buttons "I bought…", "What can I make tonight?", "I'm allergic to…" **fill the composer** for you to finish; they don't send.
-- [Husband]'s first run (kitchen already stocked): "This kitchen is shared with Vero."
+- Levi's first run (kitchen already stocked): "This kitchen is shared with Vero."
 
 **Settings** (from the avatar in the top bar)
-- **Account:** name, email, Sign out, **Sign out everywhere** (FE1 Rec: you stay signed in on a device for a rolling year). **Kitchen:** "Shared with [Husband]".
+- **Account:** name, email, Sign out, **Sign out everywhere** (FE1 Rec: you stay signed in on a device for a rolling year). **Kitchen:** "Shared with Levi".
 - **Things I remember:** allergies, each with your own note, editable ("can eat shellfish if medicine is on hand", 0019), and preferences (0012), each removable.
 - **Your data (0015):** **See my data** (a readable copy of account, messages, kitchen changes, remembered things); **Delete my data** (confirmation explaining that your kitchen items stay, credited to "a former member", D1).
 - **Policies:** Privacy policy, Terms.
@@ -233,8 +233,8 @@ This design follows the Recs of the outstanding **M8** (after-cooking wording), 
 
 ## Notes for Frontend + Accessibility
 
-- **Keyboard focus stays in the composer after Send.** Never move focus on an incoming change, including [Husband]'s.
-- **One polite live region** announces the reply plus a receipt summary; batch [Husband]'s live changes.
+- **Keyboard focus stays in the composer after Send.** Never move focus on an incoming change, including Levi's.
+- **One polite live region** announces the reply plus a receipt summary; batch Levi's live changes.
 - **The chat dock must work without dragging:** a Show/Hide chat button with an expanded state, and a Minimize button (WCAG 2.5.7). Handle the on-screen keyboard and safe areas.
 - **Floating chat button:** named "Open chat" ("Open chat, new reply" with the dot); focus moves to it on minimize and back to the composer on open; it never covers content or the home indicator.
 - **Allergy flags and fallbacks** are text, never colour or an icon alone.
