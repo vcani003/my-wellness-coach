@@ -3,7 +3,7 @@
  * instances. Fixed windows: simple and cheap; a burst can straddle a window edge, which is fine
  * at this scale.
  *
- * - Chat: 60 messages an hour and 300 a day per user. The chat route calls `checkChatRateLimit`
+ * - Chat: 60 messages an hour and 100 a day per user (C12). The chat route calls `checkChatRateLimit`
  *   before interpreting; a refused message counts against neither window.
  * - Access codes: 5 attempts per 15 minutes per IP, and 50 an hour overall.
  */
@@ -25,7 +25,7 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-export const CHAT_LIMITS = { hour: { windowMs: HOUR, max: 60 }, day: { windowMs: DAY, max: 300 } } satisfies Record<string, Limit>;
+export const CHAT_LIMITS = { hour: { windowMs: HOUR, max: 60 }, day: { windowMs: DAY, max: 100 } } satisfies Record<string, Limit>;
 export const UNLOCK_LIMITS = {
   perIp: { windowMs: 15 * MINUTE, max: 5 },
   global: { windowMs: HOUR, max: 50 },
@@ -80,7 +80,7 @@ export async function hitAll(db: Db, hits: { key: string; limit: Limit }[], now:
 export type ChatLimitResult = { ok: true } | { ok: false; retryAfterSeconds: number; reason: Msg };
 
 /**
- * Per-user chat limit: 60 an hour, 300 a day. Call once per user message, before any AI call.
+ * Per-user chat limit: 60 an hour, 100 a day (C12). Call once per user message, before any AI call.
  * When refused, send `reason` in the turn stream's `error` event (`retryable: true`, nothing changed).
  */
 export async function checkChatRateLimit(db: Db, userId: string, now: Date = new Date()): Promise<ChatLimitResult> {

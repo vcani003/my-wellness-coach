@@ -2,7 +2,8 @@
 
 **Status:** Accepted · 2026-10-14 · Decided by Vero
 
-- **Budget (C2):** a **$40/month hard limit** ($30 production + $10 staging). **Target about $20/month** by the end of the first month, measured from real usage logs, not estimates.
+- **Budget (C2, revised by C12 on 2026-10-14):** the Anthropic spend limit starts at **$10/month** and is raised toward the **$20/month target** only if real usage shows a need. The original $40 was a ceiling, not expected spend. Each message costs about 3–6¢, and every call logs its real cost.
+- **Per-person message limit:** 60 an hour, **100 a day** (C12), so a bug can't drain the cap.
 - **Model:** Claude Opus 5.5 for now. **No cheaper model for re-wording replies (AI5)**: the saving is under $1/month and one model is simpler.
 - **The model is a server setting per task** (interpreting, meal ideas, recipes), never a user-facing choice, and changing it needs no code change.
 - **Switching tasks to a cheaper model (C10):** decided by tests, never on Vero and Levi. When the real AI exists, each task's test set runs on Opus and Sonnet. A task moves to Sonnet only if it scores as well. Ideas and recipes also get Vero's blind side-by-side taste test. **Interpreting stays on Opus** in MVP 1.

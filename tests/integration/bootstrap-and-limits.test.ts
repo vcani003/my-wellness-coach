@@ -65,7 +65,7 @@ describe("chat rate limit", () => {
     expect((await checkChatRateLimit(db, "someone-else", at(30))).ok).toBe(true);
   });
 
-  it("allows 300 a day; a refused message counts against neither window", async () => {
+  it("allows 100 a day (C12); a refused message counts against neither window", async () => {
     const u = "daily-user";
     const day = new Date("2026-10-15T00:00:00Z");
     let sent = 0;
@@ -74,7 +74,7 @@ describe("chat rate limit", () => {
         expect((await checkChatRateLimit(db, u, new Date(day.getTime() + hour * 3_600_000 + i * 1000))).ok).toBe(true);
       }
     }
-    // 300 used across 5 hours; hour 6 is empty but the day is full.
+    // 100 used across 2 hours; hour 6 is empty but the day is full.
     const sixth = new Date(day.getTime() + 6 * 3_600_000);
     const refused = await checkChatRateLimit(db, u, sixth);
     expect(refused.ok).toBe(false);

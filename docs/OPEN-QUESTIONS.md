@@ -11,15 +11,6 @@
 
 ## Outstanding
 
-### C12. 🟡 Lower the spend cap (your pushback on $40)
-The $40 was a **ceiling** (production $30 + a staging copy $10 that doesn't exist yet), not expected spend. You're right that it's more than this test needs.
-**Rec:**
-- Set the Anthropic spend limit to **$10** now. That covers today's test and the next few days many times over.
-- Raise it to your **$20/month** target only if real usage shows you need it.
-- Lower the per-person message limit from 300/day to **100/day**, so a bug or runaway loop can't burn through the cap in an afternoon.
-
-> Answer:
-
 ### T1. ⛔ Today: deploy a small version for your grocery trip (in progress)
 **Goal:** live in about 2 hours, for you only. Levi is added tonight.
 **Status: ready to deploy.** The screens, the real AI and the online hosting are merged. All tests pass: 217 unit and integration, 8 in a real browser, plus a production build.
@@ -113,5 +104,6 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | D1 | Deleting data in a shared kitchen | [0015](decisions/0015-language-units-policies-data.md): items stay as "former member" |
 | B15 | Success criteria | [0026](decisions/0026-success-criteria-and-first-real-test.md): testers + 2 weeks; grocery test today |
 | T2 | Staples and shopping list | [0026](decisions/0026-success-criteria-and-first-real-test.md): staples answered in chat + "remember as a staple?"; a Shopping list widget is decided after today |
+| C12 | Lower spend cap | [0020](decisions/0020-ai-cost-and-model.md): $10 limit to start, $20 target; 100 messages/day per person |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |

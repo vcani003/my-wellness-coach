@@ -205,11 +205,11 @@ The stream is one JSON object per line (NDJSON), checked with the shared Zod sch
   - **Revoking:** change one person's code to sign out only them; change `SESSION_SECRET` to sign everyone out. There's no "Sign out everywhere" button until Better Auth.
   - **Rate limits** on attempts (Postgres counters): 5 per 15 minutes per IP (stored as a keyed hash, not the address), and 50 an hour overall. Every attempt counts, right or wrong. The overall cap means a flood could stop *new* unlocks for up to an hour; existing sessions are unaffected.
   - **Dev-only "acting as":** `DEV_ACTING_AS=<userId>` skips the gate locally (a `dev_acting_as` cookie can pick another user). The server refuses to start in production if it's set.
-- **Chat rate limit (built):** `checkChatRateLimit(db, userId)` in `src/lib/rate-limit.ts`, 60 an hour and 300 a day per user, all or nothing (a refused message counts against neither window). The chat route calls it before interpreting and, when refused, sends `error {reason: RATE_LIMITED, changed: false, retryable: true}`.
+- **Chat rate limit (built):** `checkChatRateLimit(db, userId)` in `src/lib/rate-limit.ts`, 60 an hour and 100 a day per user (C12), all or nothing (a refused message counts against neither window). The chat route calls it before interpreting and, when refused, sends `error {reason: RATE_LIMITED, changed: false, retryable: true}`.
 - **Tester agents (0021):** two `isTest` accounts that the database restricts to `isTest` kitchens, on **staging** only. A staging-only sign-in route serves those accounts, and production refuses to start if the route is enabled.
 - **AI spend:**
   - an Anthropic spend limit per workspace: $30 for production and $10 for staging, the $40 cap (0020); target about $20
-  - per-user rate limits (about 60 messages an hour, 300 a day) and a per-kitchen daily AI budget (about $2, ai.md §7), kept as counters in Postgres
+  - per-user rate limits (about 60 messages an hour, 100 a day (C12)) and a per-kitchen daily AI budget (about $2, ai.md §7), kept as counters in Postgres
   - a cap on reply length
   - tokens and cost logged for every call
 - **Pasted content (for the AI specialist):** pasted recipes are **data, not instructions**.
