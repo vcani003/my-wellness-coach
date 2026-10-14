@@ -11,6 +11,16 @@
 
 ## Outstanding
 
+### ST1. 🟡 How the tester agents use the staging copy
+Staging is set up: its own database, two tester accounts, and two test kitchens. It's behind **two locks**: Vercel's own login wall for preview copies, and the app's sign-in. I'm **not allowed to type sign-in codes into sites other than your local copy**, so the testers can't sign in to staging by themselves.
+- **(a)** Before a big deploy, you sign in once in the app's built-in browser (to Vercel, then with a tester code), and the tester agents take it from there.
+- **(b)** Turn off Vercel's login wall for preview copies. The app's own sign-in still protects it, but that removes one lock, and I'd still need you to enter the tester code.
+- **(c)** Tester agents run on your **local copy** before every deploy (stand-in AI, no codes needed). Staging is used to prove database updates work on a real Neon database before they touch yours.
+
+**Rec:** (c) as the routine, plus (a) before bigger changes. Keep both locks.
+
+> Answer:
+
 ### GH1. 🟡 Make the GitHub repo public?
 It's **private** for now: [github.com/vcani003/my-wellness-coach](https://github.com/vcani003/my-wellness-coach). There are no secrets anywhere in its history (checked). But it does contain personal details: **Levi's seafood allergy and medicine note** (used as a test case), your names, your stores, and your Gmail address on every commit.
 **Rec:** keep it private. If you want it public later (for a portfolio, say), first replace those details with made-up ones and use a GitHub "noreply" commit email. Going public can't be fully undone.
@@ -48,8 +58,8 @@ These need **your** accounts. Keep every key and code private: you paste them yo
 - **Then tell me "ready".** I'll link the Vercel project, you add the five settings above in the dashboard, and on your **"go"** I deploy and check it.
 - **For the test copy ("staging") and the two tester agents (P2 e, decision 0021):** about 10 minutes, whenever suits you. Not urgent.
   - **S5. Neon (✅ done 2026-10-14):** in the same Neon account, create a **second project** called `wellness-coach-staging`. Copy its connection string and keep it private.
-  - **S6. Anthropic:** create a workspace called `wellness-coach-staging` with a **$5 monthly limit**, and create a key in it (30-day expiry, like the other).
-  - **S7. Vercel:** Claude gives you the exact `npx vercel env add … preview` commands, so the test copy uses the staging database and key, never your real kitchen.
+  - **S6 (✅ done). Anthropic:** create a workspace called `wellness-coach-staging` with a **$5 monthly limit**, and create a key in it (30-day expiry, like the other).
+  - **S7 (✅ done). Vercel:** Claude gives you the exact `npx vercel env add … preview` commands, so the test copy uses the staging database and key, never your real kitchen.
   - Until then, the tester agents run against the local copy on your Mac, using the stand-in AI.
 - **S4. Resend: no longer needed** (0029 replaced email sign-in).
 - ~~S4. Resend:~~ not needed today. It's for email sign-in later.
