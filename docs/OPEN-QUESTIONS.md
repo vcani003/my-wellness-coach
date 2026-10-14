@@ -13,7 +13,7 @@
 
 ### T1. ⛔ Today: deploy a small version for your grocery trip (in progress)
 **Goal:** live in about 2 hours, for you only. Levi is added tonight.
-**Status: ready to deploy.** The screens, the real AI and the online hosting are merged. All tests pass: 217 unit and integration, 8 in a real browser, plus a production build.
+**Status: deployed 2026-10-14** at https://my-wellness-coach-mu.vercel.app, behind the access code (strangers are redirected to /unlock, and the API refuses without a code). Previously: ready to deploy. The screens, the real AI and the online hosting are merged. All tests pass: 217 unit and integration, 8 in a real browser, plus a production build.
 **Plan accepted (2026-10-14).** The home Wi-Fi fallback applies if time runs out. **Still needed:** S1–S3 (Vero is setting them up), then a final **"go"** right before the deploy.
 
 **What today's version does:**
