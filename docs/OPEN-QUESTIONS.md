@@ -11,7 +11,12 @@
 
 ## Outstanding
 
-*Nothing outstanding.*
+### RBX1–RBX3. 🟡 Recipe box details (spec: [design/recipe-box.md](design/recipe-box.md))
+- **RBX1.** "Make again" when a copy is already in your plan? **Rec:** don't make another copy; the button becomes "Open in your plan".
+- **RBX2.** Asking for a change ("no oven") while reading a cooked recipe? **Rec:** "That one's already cooked. Make it again with no oven?" [Make again] [Not now].
+- **RBX3.** Show the after-cooking note on a cooked recipe ("Ben's note: used half the coconut milk")? **Rec:** yes, one muted line.
+
+> Answer:
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
