@@ -5,10 +5,11 @@
  * basics, allergen flags and the leave-out rule, the In-your-kitchen/Need split, recipe.save).
  */
 import { askedAllergies } from "../meals/allergen-guard";
+import { applyRecipeEdits } from "../meals/apply-edits";
 import { basicsNote } from "../meals/basics";
 import { labelMaps } from "../meals/context";
 import { matchKitchenItem } from "../meals/match";
-import type { IdeaOut, RecipeOutput } from "../meals/model-output";
+import type { IdeaOut, RecipeEditOut, RecipeOutput } from "../meals/model-output";
 import { toIdea } from "../meals/to-ideas";
 import { toRecipeResult } from "../meals/to-recipe";
 import type {
@@ -54,6 +55,53 @@ function dishIngredients(input: RecipeInput, toLabel: Map<string, string>): Reci
     out.push({ name, amount: null, item: item ? (toLabel.get(item.id) ?? null) : null, basic: false });
   }
   return out;
+}
+
+type Current = NonNullable<RecipeInput["refine"]>["current"];
+
+/**
+ * The fake's edit mode, for e2e tests and testers: a few fixed phrasings become edits; anything
+ * else is a rewrite (as before). Generic on purpose: no dish-specific words.
+ * - "I'm using baby carrots too" / "add baby carrots" → a new ingredient at the end, worked into the last step
+ * - "no garlic" / "I don't have garlic" / "without garlic" → that ingredient removed
+ * - "use 3 eggs instead of 2" → that ingredient's amount changed
+ * - "skip step 2" → that step removed
+ */
+export function fakeEdits(text: string, current: Current): { edits: RecipeEditOut[]; reply: string } | null {
+  const t = text.trim().replace(/[.!?]+$/, "");
+  const blank = { name: "", amount: "", item: "", text: "" };
+  const find = (words: string) => {
+    const w = words.trim().toLowerCase();
+    return current.ingredients.findIndex((i) => i.name.toLowerCase() === w || i.name.toLowerCase().includes(w) || w.includes(i.name.toLowerCase()));
+  };
+  let m = /^skip step (\d+)$/i.exec(t);
+  if (m) return { edits: [{ ...blank, op: "remove_step", at: Number(m[1]) }], reply: `Skipped step ${m[1]}.` };
+  m = /^use (\d+) (.+?) instead of (\d+)$/i.exec(t);
+  if (m) {
+    const at = find(m[2]);
+    if (at < 0) return null;
+    return { edits: [{ ...blank, op: "change_ingredient", at: at + 1, name: current.ingredients[at].name, amount: m[1] }], reply: `Changed it to ${m[1]} ${m[2]}.` };
+  }
+  m = /^(?:no|without|i don'?t have(?: any)?|i'?m out of) (.+)$/i.exec(t);
+  if (m) {
+    const at = find(m[1]);
+    if (at < 0) return null;
+    return { edits: [{ ...blank, op: "remove_ingredient", at: at + 1 }], reply: `Took out the ${current.ingredients[at].name}.` };
+  }
+  m = /^(?:i'?m (?:also )?using (.+?) too|add (?:some )?(.+))$/i.exec(t);
+  if (m) {
+    const name = (m[1] ?? m[2]).trim();
+    const last = current.steps.length;
+    if (!name || last === 0) return null;
+    return {
+      edits: [
+        { ...blank, op: "add_ingredient", at: current.ingredients.length, name },
+        { ...blank, op: "change_step", at: last, text: `${current.steps[last - 1]} Add the ${name} too.` },
+      ],
+      reply: `Added ${name} and worked it into step ${last}.`,
+    };
+  }
+  return null;
 }
 
 const title = (s: string) => s.replace(/\s*\(.*?\)\s*/g, " ").trim().replace(/^\w/, (c) => c.toUpperCase());
@@ -112,6 +160,41 @@ export function createFakeMealAI(now: () => Date = () => new Date()): MealAI {
     const { toId, toLabel } = labelMaps(input);
     const idea = input.meal.idea;
     const current = input.refine?.current;
+    // A small refinement goes through edit mode and the SAME apply code as the real one.
+    const edit = current ? fakeEdits(input.refine!.text, current) : null;
+    if (edit) {
+      const applied = applyRecipeEdits(current!, edit.edits, edit.reply, {
+        ctx: input,
+        labels: toId,
+        mealId: input.meal.mealId,
+        fallbackTitle: input.meal.title,
+        source: "ai",
+        opId: `${input.refine!.messageId}:recipe`,
+        evidence: input.refine!.text,
+      });
+      if (applied.ok) {
+        const r = applied.result;
+        const g = r.recipe;
+        yield {
+          type: "part",
+          part: "edit",
+          data: {
+            title: g.title,
+            summary: g.summary,
+            servings: g.servings,
+            source: g.source,
+            allergenFlags: g.allergenFlags,
+            ingredients: g.ingredients,
+            steps: g.steps,
+            basics: g.basicsAssumed,
+            note: basicsNote(g.basicsAssumed),
+            changed: { ingredients: r.change.ingredients, steps: r.change.steps },
+          },
+        };
+        yield { type: "done", result: r };
+        return;
+      }
+    }
     const out: RecipeOutput = current
       ? {
           title: current.title,

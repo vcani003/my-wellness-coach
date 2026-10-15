@@ -61,12 +61,15 @@ function recipeText(r: Omit<GeneratedRecipe, "allergenFlags">): string {
  * the saved recipe has no servings field, so a refinement ("only 2 chicken breasts, not 4") would
  * otherwise lose the number it scales from. User-pasted text has no fixed shape: null for both.
  */
-export function savedRecipeMeta(text: string, source: "ai" | "user"): { title: string | null; servings: string | null } {
-  if (source !== "ai") return { title: null, servings: null };
+export function savedRecipeMeta(text: string, source: "ai" | "user"): { title: string | null; servings: string | null; summary: string | null } {
+  if (source !== "ai") return { title: null, servings: null, summary: null };
   const lines = text.split("\n", 4);
   const title = lines[0]?.trim() || null;
   const serves = lines.slice(1, 3).map((l) => /^Serves (.+)$/.exec(l.trim())?.[1]?.trim()).find(Boolean);
-  return { title, servings: serves || null };
+  // The summary is the line after the title, unless the recipe had none (then it's "Serves …" or blank).
+  const second = lines[1]?.trim() ?? "";
+  const summary = second && !/^Serves /.test(second) && second !== "Ingredients" ? second : null;
+  return { title, servings: serves || null, summary };
 }
 
 export interface RecipeBuild {
@@ -83,8 +86,19 @@ export interface RecipeBuild {
 }
 
 export function toRecipeResult(out: RecipeOutput, b: RecipeBuild): RecipeResult | { ok: false; why: string } {
-  const ingredients = toIngredients(out.ingredients, b.ctx, b.labels);
-  const steps = toSteps(out.steps);
+  return buildRecipeResult(toIngredients(out.ingredients, b.ctx, b.labels), toSteps(out.steps), out, b);
+}
+
+/**
+ * The checked recipe and its `recipe.save`, from ingredients and steps code has already cleaned
+ * (a fresh recipe, or the current one with edits applied). Flags are always recomputed here.
+ */
+export function buildRecipeResult(
+  ingredients: RecipeIngredientOut[],
+  steps: string[],
+  out: Pick<RecipeOutput, "title" | "summary" | "servings" | "reply">,
+  b: RecipeBuild,
+): RecipeResult | { ok: false; why: string } {
   if (ingredients.length === 0 && b.source === "ai") return { ok: false, why: "recipe has no ingredients" };
   if (steps.length === 0 && b.source === "ai") return { ok: false, why: "recipe has no steps" };
 

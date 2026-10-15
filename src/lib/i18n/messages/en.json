@@ -464,6 +464,7 @@
       "useOwn": "Use my own recipe",
       "ownRecipePrefix": "My recipe for {title}: ",
       "writing": "Writing your recipe…",
+      "announceUpdated": "Recipe updated.",
       "writeFailed": "I couldn't finish the recipe, so nothing was saved.",
       "tryAgain": "Try again",
       "noRecipe": "No recipe yet.",

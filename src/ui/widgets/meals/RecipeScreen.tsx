@@ -229,7 +229,11 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
                 const showBy = by && isTicked(row) && pendingTicks[tickKey(row.name)] === undefined;
                 const name = sentenceCase(row.name, locale);
                 return (
-                  <div key={`${g.key}-${row.name}`} className="flex flex-col py-1">
+                  <div
+                    key={`${g.key}-${row.name}${row.changed ? `-${recipe?.changeKey}` : ""}`}
+                    className="flex flex-col py-1"
+                    data-recipe-changed={row.changed ? "" : undefined}
+                  >
                     <label className="flex min-h-tap cursor-pointer items-center gap-3 rounded-sm px-1">
                       <input
                         type="checkbox"
@@ -298,9 +302,14 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
             {t("steps")}
           </h3>
           <ol className="flex list-decimal flex-col gap-2 pl-6 text-body">
-            {recipe.steps.map((s, i) => (
-              <li key={i}>{s}</li>
-            ))}
+            {recipe.steps.map((s, i) => {
+              const changed = recipe.changedSteps?.includes(i);
+              return (
+                <li key={changed ? `${i}-${recipe.changeKey}` : i} data-recipe-changed={changed ? "" : undefined}>
+                  {s}
+                </li>
+              );
+            })}
           </ol>
         </section>
       )}

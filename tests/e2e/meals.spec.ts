@@ -234,3 +234,31 @@ test("in chat: a dish she names (MI1) → what she has goes in the kitchen, and 
   const need = recipe(page).getByRole("group", { name: "Need" });
   for (const name of [/coconut milk/i, /lemongrass/i]) await expect(need).toContainText(name);
 });
+
+test("in chat: a small recipe change edits the open Recipe in place (ai.md §5 edit mode)", async ({ page, baseURL }) => {
+  await resetAndActAs(page, baseURL!);
+  await say(page, "I bought chicken thighs and potatoes");
+  await expect(kitchen(page).getByRole("listitem").filter({ hasText: "Potatoes" })).toBeVisible();
+  await say(page, "I want to make a chicken stew");
+  await expect(page).toHaveURL(/\/recipe\//);
+  const steps = recipe(page).getByRole("listitem");
+  await expect(steps).toHaveCount(3);
+  const before = await steps.allTextContents();
+
+  await say(page, "I'm using baby carrots too");
+  const carrots = recipe(page).getByRole("checkbox", { name: "Baby carrots" });
+  await expect(carrots).toBeVisible();
+  // The new line is marked for the highlight; the rest of the recipe is exactly as it was.
+  await expect(recipe(page).locator("[data-recipe-changed]").filter({ has: page.getByRole("checkbox", { name: "Baby carrots" }) })).toHaveCount(1);
+  await expect(steps).toHaveCount(3);
+  expect((await steps.allTextContents()).slice(0, 2)).toEqual(before.slice(0, 2));
+  await expect(steps.nth(2)).toHaveAttribute("data-recipe-changed", "");
+  await expect(steps.nth(2)).toContainText("baby carrots");
+  await expect(recipe(page)).not.toContainText("Writing your recipe…");
+  await expect(page.getByTestId("announcer")).toContainText("Recipe updated.");
+  await expectAccessible(page, "recipe after an edit");
+
+  await say(page, "skip step 1");
+  await expect(steps).toHaveCount(2);
+  await expect(steps.first()).toHaveText(before[1]);
+});

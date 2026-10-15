@@ -117,7 +117,22 @@ export interface RecipeInput extends MealContext {
    * Refinement in chat ("no oven", "make it spicier", 0013): the user's message and the
    * current recipe. The result is a new version for the same meal.
    */
-  refine?: { messageId: string; text: string; current: Pick<GeneratedRecipe, "title" | "ingredients" | "steps"> & { servings?: string | null } };
+  refine?: {
+    messageId: string;
+    text: string;
+    current: Pick<GeneratedRecipe, "title" | "ingredients" | "steps"> & { servings?: string | null; summary?: string | null };
+  };
+}
+
+/**
+ * How a refinement changed the recipe (edit mode, ai.md §5): positions in the NEW recipe of the
+ * lines that were added or changed. Absent for a fresh recipe or a full rewrite.
+ */
+export interface RecipeChange {
+  ingredients: number[];
+  steps: number[];
+  /** Lines removed, for the record (they have no position in the new recipe). */
+  removed: { ingredients: number; steps: number };
 }
 
 /** A recipe the user pasted or typed (R1, "Your recipe"). Stored exactly as given. */
@@ -138,15 +153,36 @@ export type RecipeResult =
       operation: RecipeSaveOperation;
       reply: string;
       notes: Msg[];
+      /** Set when a refinement was applied as edits (not a rewrite). */
+      change?: RecipeChange;
+      /** A refinement that changed nothing (e.g. a question answered "yes, that's fine"): don't save. */
+      unchanged?: true;
     }
   | { ok: false; reason: MealFailure; reply: string };
+
+/** The whole recipe after edits, with what changed: replaces the shown recipe in place. */
+export interface RecipeEditPartData {
+  title: string;
+  summary: string;
+  servings: string | null;
+  source: "ai" | "user";
+  allergenFlags: AllergenFlag[];
+  ingredients: RecipeIngredientOut[];
+  steps: string[];
+  basics: string[];
+  note: Msg | null;
+  /** Positions in the new recipe of the lines added or changed. */
+  changed: { ingredients: number[]; steps: number[] };
+}
 
 /** `recipe` stream parts (backend §6: the `data` shape is owned by the AI specialist). */
 export type RecipePart =
   | { part: "meta"; data: { title: string; summary: string; servings: string | null; source: "ai" | "user"; allergenFlags: AllergenFlag[] } }
   | { part: "ingredient"; data: RecipeIngredientOut & { index: number } }
   | { part: "step"; data: { index: number; text: string } }
-  | { part: "basics"; data: { basics: string[]; note: Msg | null } };
+  | { part: "basics"; data: { basics: string[]; note: Msg | null } }
+  /** A refinement applied as edits (one part, sent once the edits are checked). */
+  | { part: "edit"; data: RecipeEditPartData };
 
 /** Streamed while a recipe is generated; the last event is always `done`. */
 export type RecipeEvent = ({ type: "part" } & RecipePart) | { type: "done"; result: RecipeResult };

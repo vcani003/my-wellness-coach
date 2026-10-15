@@ -47,6 +47,43 @@ export const RecipeOutput = z.object({
 export type RecipeOutput = z.infer<typeof RecipeOutput>;
 
 /**
+ * One change to the current recipe (refinements, ai.md §5 "edit mode"). Positions are 1-based and
+ * always refer to <current_recipe> as sent, never to a list that's already been edited. `add_*`
+ * inserts after position `at` (0 = at the start). Unused fields are "" (no unions: schema limits).
+ * `at` is a plain number: integer and range are checked by code (apply-edits.ts).
+ */
+export const RecipeEditOut = z.object({
+  op: z.enum(["add_ingredient", "change_ingredient", "remove_ingredient", "add_step", "change_step", "remove_step"]),
+  at: z.number(),
+  /** Ingredient ops: the plain name ("" otherwise). */
+  name: z.string(),
+  /** Ingredient ops: as written ("2", "1 cup"), or "". */
+  amount: z.string(),
+  /** Ingredient ops: label of the kitchen item it uses (i3), or "". */
+  item: z.string(),
+  /** Step ops: the whole new step, without numbering ("" otherwise). */
+  text: z.string(),
+});
+export type RecipeEditOut = z.infer<typeof RecipeEditOut>;
+
+/** A full recipe without the reply (the rewrite half of a refinement). */
+export const RecipeBodyOut = RecipeOutput.omit({ reply: true });
+
+/**
+ * A refinement answer: small edits to the current recipe, or (for a broad change) the whole recipe
+ * again. `mode` comes first so the stream knows which it is early. Key order matters for streaming.
+ */
+export const RecipeRefineOutput = z.object({
+  mode: z.enum(["edit", "rewrite"]),
+  /** mode "edit": the changes. mode "rewrite": []. */
+  edits: z.array(RecipeEditOut),
+  /** mode "rewrite": the whole new recipe. mode "edit": null. */
+  recipe: RecipeBodyOut.nullable(),
+  reply: z.string(),
+});
+export type RecipeRefineOutput = z.infer<typeof RecipeRefineOutput>;
+
+/**
  * Same converter as the interpreter (model-output.ts): Zod's own, so enums and required keys
  * are enforced by the API. We still validate the answer afterwards.
  */

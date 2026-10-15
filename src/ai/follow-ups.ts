@@ -153,6 +153,7 @@ export function refineCurrent(view: RecipeView, mealTitle: string): NonNullable<
   return {
     title: meta.title ?? mealTitle,
     servings: meta.servings,
+    summary: meta.summary,
     steps: view.steps,
     ingredients: view.ingredients.map((i) => toIngredientOut(i, view.allergenFlags)),
   };
@@ -223,6 +224,8 @@ export async function* recipeStep(
     }
     const result = ev.result;
     if (!result.ok) return result.reply;
+    // A refinement that changed nothing ("will that be fine?" → "yes"): no new version.
+    if (result.unchanged) return result.reply;
     const operation = {
       ...result.operation,
       ...(origin.source.via === "chat" && !result.operation.evidence ? { evidence: clip(origin.text?.trim() || meal.title, 2000) } : {}),
@@ -251,6 +254,19 @@ export async function* recipeStep(
 }
 
 // ─── Running them ───────────────────────────────────────────────────────────────────────
+
+/** "Here's a recipe.", "Here's the recipe.", "Here’s your recipe for X!" as a whole sentence. */
+const RECIPE_ANNOUNCEMENT = /(^|(?<=[.!?])\s+)here['’]s (?:a|the|your) recipe(?: for [^.!?]*)?[.!]\s*/gi;
+
+/**
+ * The turn's reply before a recipe follow-up, without its "Here's a recipe." sentence: the recipe
+ * step says that itself, with the dish's name (or says it couldn't). Regression: the chat reply
+ * said "Here's a recipe." twice ("…Here's a recipe. Here's a recipe for Chicken curry.").
+ */
+export function withoutRecipeAnnouncement(reply: string, followUps: TurnFollowUp[]): string {
+  if (!followUps.some((f) => f.kind === "recipe" && !f.refine)) return reply;
+  return reply.replace(RECIPE_ANNOUNCEMENT, "$1").trim();
+}
 
 /**
  * Run a turn's follow-ups in order, after apply. `meal-step` is not handled here: the turn folds

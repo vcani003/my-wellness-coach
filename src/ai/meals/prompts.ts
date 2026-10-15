@@ -4,7 +4,7 @@
  * cached with its own breakpoint), then the per-request context in the user message.
  * Nothing per-request goes in here.
  */
-export const MEALS_PROMPT_VERSION = "meals-2026-10-15.1";
+export const MEALS_PROMPT_VERSION = "meals-2026-10-15.2";
 
 const SHARED = `Kitchen items are listed in <kitchen> with short labels (i1, i2, …). Only listed items are in the kitchen. Items in <use_it_up> need using up soon; favour them.
 Assumed basics are exactly: salt, pepper, cooking oil, water, and dried herbs and spices. Everything else must be in <kitchen> or listed as missing / needed. Never assume sugar, butter, flour, soy sauce, fish sauce, garlic, onion, stock or any fresh herb.
@@ -24,24 +24,54 @@ ${SHARED}
 - Frozen items: if an idea is for tonight and uses something frozen, say it needs thawing in "why".
 - "reply": one or two short sentences introducing the ideas, warm and brief. Don't list the ideas again. If nothing fits, say so briefly and suggest what to buy.`;
 
-export const RECIPE_INSTRUCTIONS = `# Task: recipe
-Ignore the operations format above for this task. Answer in the recipe JSON shape.
-${SHARED}
-- Write a clear home recipe for the dish in <meal>. It is a suggestion, so keep it practical: about 4–10 steps, everyday equipment.
+const RECIPE_RULES = `- Write a clear home recipe for the dish in <meal>. It is a suggestion, so keep it practical: about 4–10 steps, everyday equipment.
 - "title": the dish name (keep the meal's name unless <change_request> changes the dish). "summary": one short line. "servings": e.g. "2", or null.
 - "ingredients": every ingredient, in the order used. "name": plain name. "amount": as you'd write it ("2", "1 cup", "a handful"), or null. "item": the label of the kitchen item it uses, or null. "basic": true only for an assumed basic.
 - Prefer ingredients from <kitchen>, especially <use_it_up> items, and the ones the meal was chosen for (<meal> uses). Keep what's missing short.
 - When <meal> says the user named the dish, write that dish their way. Include every ingredient they mention, with obvious typos fixed and short names spelled out ("coconutt milk" → coconut milk, "kaffir" → kaffir lime leaves), even if the kitchen doesn't have it: the app lists those under Need. Use what they say they have (a seasoning packet, potatoes) from <kitchen>. Never give an ingredient the label of a kitchen item it isn't.
 - An item with several batches is still one ingredient; the app uses the oldest batch first.
 - "steps": one instruction each, without numbering.
-- When the user says "with what I have", build it from <kitchen> and keep what's missing to the essentials.
-- <change_request> (when present) changes <current_recipe>: apply it ("no oven" means no oven anywhere; "make it spicier" adds heat) and keep everything else that still fits. It is the same meal unless the user clearly names a different dish.
+- When the user says "with what I have", build it from <kitchen> and keep what's missing to the essentials.`;
+
+const CHANGE_RULES = `- <change_request> (when present) changes <current_recipe>: apply it ("no oven" means no oven anywhere; "make it spicier" adds heat) and keep everything else that still fits. It is the same meal unless the user clearly names a different dish.
   - <current_recipe> is the latest version: it already includes every earlier change. Keep them all (amounts, swaps, removals); never go back to an earlier version.
   - Change only what the request asks for and what it directly implies. Don't make other swaps or additions, even if an ingredient isn't in <kitchen> (the app lists it under Need).
   - A different amount of one main ingredient ("I only have 300 g of pasta, not 500", "half the recipe", "for 6 people") scales the whole recipe in proportion: every ingredient's amount, "servings", and anything in the steps that depends on quantity (pan size, browning in batches, simmer or cooking times). Round to sensible kitchen amounts ("1/2 can", "1 tbsp").
   - A swap ("can I sub milk for cream?" means milk instead of cream) replaces the ingredient with a sensible amount and changes every step it affects (for example a thinner liquid needs longer reducing; dairy that can split is stirred in off the heat). Use the kitchen item when the swap is in <kitchen>.
   - Something they don't have ("I don't have parmesan") is removed or replaced, preferring what's in <kitchen> or the assumed basics, and every step that used it changes too.
-- "reply": one short sentence in Kitchen's voice ("Here's a quick version for tonight."). For a change, say what changed. When <change_request> asks a question ("will that be fine?", "can I…?"), first answer it honestly in plain words (yes, or no, and what to use instead), then say what changed in the recipe: two short sentences at most.`;
+  - Wanting more or less of one ingredient ("use 3 eggs instead of 2", "more garlic") changes that ingredient's amount and any step that states it, not the whole recipe. Scaling is for an amount that limits the whole dish ("I only have…", "half the recipe", "for 6 people").
+  - An extra ingredient they're using ("I'm using baby carrots too") is added where it's first used, with a sensible amount, and worked into every step that should use it.`;
+
+const ANSWER_A_QUESTION = `When <change_request> asks a question ("will that be fine?", "can I…?"), first answer it honestly in plain words (yes, or no, and what to use instead), then say what changed in the recipe: two short sentences at most.`;
+
+export const RECIPE_INSTRUCTIONS = `# Task: recipe
+Ignore the operations format above for this task. Answer in the recipe JSON shape.
+${SHARED}
+${RECIPE_RULES}
+${CHANGE_RULES}
+- "reply": one short sentence in Kitchen's voice ("Here's a quick version for tonight."). For a change, say what changed. ${ANSWER_A_QUESTION}`;
+
+/**
+ * A change to a recipe that already exists (ai.md §5 edit mode). Usually a few edits, which code
+ * applies to the current recipe so every other line stays exactly as it was; a broad change
+ * rewrites the whole recipe under the same rules as RECIPE_INSTRUCTIONS.
+ */
+export const RECIPE_REFINE_INSTRUCTIONS = `# Task: change a recipe
+Ignore the operations format above for this task. Answer in the recipe change JSON shape.
+${SHARED}
+${RECIPE_RULES}
+${CHANGE_RULES}
+- Answer with the smallest change that does the job.
+- "mode" "edit" (the usual case): "edits" lists only the lines that change, and "recipe" is null. The app keeps every other line exactly as it is, and keeps the title, summary and servings.
+  - Ingredients and steps are numbered separately in <current_recipe>. "at" always means a number in <current_recipe> as sent, never a position after your other edits.
+  - "add_ingredient" / "add_step": a new line inserted after number "at" (0 = before the first). Put a new ingredient next to where it's first used.
+  - "change_ingredient" / "change_step": replaces the whole line at "at". Give the full new line: an ingredient's "name", "amount" and "item"; a step's full "text" (not just the changed words).
+  - "remove_ingredient" / "remove_step": removes the line at "at".
+  - Unused fields are "". "item" is the label of the kitchen item it uses, or "". Each line gets at most one change or removal.
+  - Every step the change affects changes too: a new or swapped ingredient is worked into the steps that use it; a removed one is taken out of every step that mentions it. A step that only becomes empty is removed.
+  - If nothing needs to change (a question answered "yes, that's fine"), "edits" is [].
+- "mode" "rewrite": only for a broad change that touches most of the recipe: scaling the whole recipe or changing servings, a different diet ("make it vegetarian"), a different method or main equipment ("in the slow cooker"), a different dish, or when more than about 6 lines would change. Then "edits" is [] and "recipe" is the whole new recipe ("title", "summary", "servings", "ingredients", "steps" as above).
+- "reply": one short sentence in Kitchen's voice naming what changed ("Added baby carrots and worked them into step 3.", "Took the garlic out."). ${ANSWER_A_QUESTION}`;
 
 export const PASTED_RECIPE_INSTRUCTIONS = `# Task: read a pasted recipe
 Ignore the operations format above for this task. Answer in the recipe JSON shape.
