@@ -43,7 +43,7 @@ export function standardName(input: string): string {
 }
 
 /** Words of a standard name, minus filler words people say ("the chicken", "some eggs"). */
-const FILLER = new Set(["the", "a", "an", "some", "my", "of", "rest", "remaining", "leftover", "bag", "pack"]);
+export const FILLER = new Set(["the", "a", "an", "some", "my", "of", "rest", "remaining", "leftover", "bag", "pack"]);
 export function nameTokens(input: string): string[] {
   return standardName(input)
     .split(" ")

@@ -21,12 +21,25 @@ export function searchWords(item: Searchable): string[] {
   return [...new Set(texts.flatMap((t) => foldText(t).split(" ").filter(Boolean)))];
 }
 
-export function matchesItemSearch(query: string, item: Searchable): boolean {
+/** The folded words a set of names can be found by: each name plus its English glosses. */
+export function nameSearchWords(names: readonly string[]): string[] {
+  const texts = names.flatMap((n) => [n, ...englishGlosses(n)]);
+  return [...new Set(texts.flatMap((t) => foldText(t).split(" ").filter(Boolean)))];
+}
+
+/**
+ * The search rule, on already-folded words: every word of the query starts one of `words`, in
+ * any order. An empty query matches everything. Also used by "Cooked before" (0040 RB9).
+ */
+export function matchesSearchWords(query: string, words: readonly string[]): boolean {
   const q = foldText(query).split(" ").filter(Boolean);
   if (q.length === 0) return true;
-  const words = searchWords(item);
   // A plural query ("eggs") also matches the singular name ("egg").
   return q.every((t) => words.some((w) => w.startsWith(t) || w.startsWith(singularWord(t))));
+}
+
+export function matchesItemSearch(query: string, item: Searchable): boolean {
+  return matchesSearchWords(query, searchWords(item));
 }
 
 /** The items matching `query`, in their original order. */

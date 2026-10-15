@@ -85,6 +85,9 @@ export function mealFromRow(r: typeof meals.$inferSelect): Meal {
     recipeId: r.recipeId ?? undefined,
     note: r.note ?? undefined,
     cookedAt: isoOpt(r.cookedAt),
+    cookedBy: r.cookedBy ?? undefined,
+    noteBy: r.noteBy ?? undefined,
+    madeAgainFromMealId: r.madeAgainFromMealId ?? undefined,
     ...auditFrom(r),
   });
 }
@@ -99,6 +102,7 @@ export function recipeFromRow(r: typeof recipes.$inferSelect): Recipe {
     ingredients: r.ingredients,
     steps: r.steps,
     basicsAssumed: r.basicsAssumed,
+    ...(r.copiedFromRecipeId ? { copiedFromRecipeId: r.copiedFromRecipeId } : {}),
     ...auditFrom(r),
   };
 }
@@ -239,6 +243,9 @@ export async function persistKitchenEntities(
             recipeId: e.recipeId ?? null,
             note: e.note ?? null,
             cookedAt: dateOpt(e.cookedAt),
+            cookedBy: e.cookedBy ?? null,
+            noteBy: e.noteBy ?? null,
+            madeAgainFromMealId: e.madeAgainFromMealId ?? null,
             ...auditTo(e),
           });
         }
@@ -258,6 +265,7 @@ export async function persistKitchenEntities(
             ingredients: e.ingredients,
             steps: e.steps,
             basicsAssumed: e.basicsAssumed,
+            copiedFromRecipeId: e.copiedFromRecipeId ?? null,
             ...auditTo(e),
           });
         }

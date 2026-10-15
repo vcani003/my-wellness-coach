@@ -25,6 +25,10 @@ export const RejectionCode = z.enum([
   // shopping list (0027)
   "NOT_ON_LIST",
   "NOT_TICKED",
+  // recipe box (0040 A2): a done or cancelled meal's recipe is kept as cooked
+  "RECIPE_LOCKED",
+  // RBX1: a made-again copy of this dish is still live; params.mealId is that copy
+  "ALREADY_MAKING",
 ]);
 // Batches (0025) add no codes: a bad batch ID → UNKNOWN_TARGET; a closed batch → ALREADY_OUT.
 export type RejectionCode = z.infer<typeof RejectionCode>;

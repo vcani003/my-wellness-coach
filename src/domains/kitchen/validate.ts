@@ -22,7 +22,7 @@ import {
 import type { ProposalSource, ProposedChange } from "@/contracts/proposed-change";
 import { msg } from "@/shared/messages";
 import { reject, type EventFactory, type OpOutcome } from "@/shared/ops";
-import { nameTokens, normalizeText, standardName } from "@/shared/text";
+import { foldText, nameTokens, normalizeText, standardName } from "@/shared/text";
 import {
   CHANGESET_REVERTED,
   compact,
@@ -59,6 +59,7 @@ import {
   type KitchenEntities,
   type Meal,
   type MealChosenPayload,
+  type Recipe,
   type MealNotedPayload,
   type MealTransitionedPayload,
   type RecipeSavedPayload,
@@ -885,9 +886,35 @@ function mealTransitionOp(op: OperationOf<"meal.transition">, env: OpEnv): OpOut
   return mealTransition(meal, op.to, op.note, env, "MEAL_STATUS");
 }
 
+/** Finished meals keep their recipe as cooked (0040 A2): the newest version at Done is the cooked one. */
+const isFinished = (meal: Meal) => meal.status === "done" || meal.status === "cancelled";
+
+/**
+ * A dish's live "made again" copy (0040 RBX1): a chosen, planned or cooking meal that was made
+ * again from a Done meal, with the same title folded (titles can't be renamed, RB4). The most
+ * recently chosen wins. Exported for the read side.
+ */
+export function activeCopyOf(title: string, kitchen: KitchenEntities): Meal | undefined {
+  const key = foldText(title);
+  return Object.values(kitchen.meals)
+    .filter((m) => m.madeAgainFromMealId && !isFinished(m) && foldText(m.title) === key)
+    .sort((a, b) => b.chosenAt.localeCompare(a.chosenAt) || b.id.localeCompare(a.id))[0];
+}
+
+/** The recipe a meal was cooked with: the one it points at, else its newest version. */
+function cookedRecipe(meal: Meal, kitchen: KitchenEntities): Recipe | undefined {
+  return (
+    (meal.recipeId ? kitchen.recipes[meal.recipeId] : undefined) ??
+    Object.values(kitchen.recipes)
+      .filter((r) => r.mealId === meal.id)
+      .sort((a, b) => b.version - a.version)[0]
+  );
+}
+
 function recipeSave(op: OperationOf<"recipe.save">, env: OpEnv): OpOutcome {
   const meal = env.kitchen.meals[op.target.mealId];
   if (!meal) return reject("UNKNOWN_TARGET");
+  if (isFinished(meal)) return reject("RECIPE_LOCKED", { title: meal.title, status: meal.status });
   const versions = Object.values(env.kitchen.recipes)
     .filter((r) => r.mealId === meal.id)
     .map((r) => r.version);
@@ -909,6 +936,47 @@ function recipeSave(op: OperationOf<"recipe.save">, env: OpEnv): OpOutcome {
       { kind: "meal", id: meal.id, change: "updated" },
     ],
   );
+}
+
+/**
+ * "Make again" (0040 C): a new `chosen` meal with the same title and, when the source had one, a
+ * v1 recipe copying its cooked version (source, text, ingredients, steps, basics). One operation,
+ * so one receipt and one Undo. The source meal gets no event: it's never changed. Item links
+ * (`itemId`) are dropped so the copy is matched against today's kitchen by name.
+ */
+function mealMakeAgain(op: OperationOf<"meal.makeAgain">, env: OpEnv): OpOutcome {
+  const k = kitchenStream(env.ctx.kitchenId);
+  const source = env.kitchen.meals[op.fromMealId];
+  if (!source) return reject("UNKNOWN_TARGET");
+  // RB1: only a cooked meal is in "Cooked before".
+  if (source.status !== "done") return reject("INVALID_OPERATION");
+  // RBX1: one live made-again copy per dish; point at it instead of making another.
+  const active = activeCopyOf(source.title, env.kitchen);
+  if (active) return reject("ALREADY_MAKING", { title: active.title, mealId: active.id });
+  const mealId = env.ctx.newId();
+  const chosen: MealChosenPayload = { mealId, title: source.title, isNew: true, fromMealId: source.id };
+  const events = [emit(env, k, KITCHEN_EVENT.mealChosen, chosen)];
+  const refs: ChangeRef[] = [{ kind: "meal", id: mealId, change: "added" }];
+  const cooked = cookedRecipe(source, env.kitchen);
+  if (cooked) {
+    const recipe: RecipeSavedPayload = {
+      recipeId: env.ctx.newId(),
+      mealId,
+      version: 1,
+      source: cooked.source,
+      text: cooked.text,
+      ingredients: cooked.ingredients.map(({ itemId: _itemId, ...rest }) => {
+        void _itemId;
+        return compact(rest);
+      }),
+      steps: [...cooked.steps],
+      basicsAssumed: [...cooked.basicsAssumed],
+      copiedFromRecipeId: cooked.id,
+    };
+    events.push(emit(env, k, KITCHEN_EVENT.recipeSaved, recipe));
+    refs.push({ kind: "recipe", id: recipe.recipeId, change: "added" });
+  }
+  return ok(events, msg("MEAL_MADE_AGAIN", { title: source.title }), refs);
 }
 
 function checklistTick(op: OperationOf<"checklist.tick">, env: OpEnv): OpOutcome {
@@ -1340,6 +1408,8 @@ function validateOperation(op: Operation, env: OpEnv): OpOutcome {
       return itemDefrost(op, env);
     case "meal.choose":
       return mealChoose(op, env);
+    case "meal.makeAgain":
+      return mealMakeAgain(op, env);
     case "meal.plan":
       return mealPlan(op, env);
     case "meal.transition":
