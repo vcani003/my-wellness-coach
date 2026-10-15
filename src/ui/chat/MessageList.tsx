@@ -17,7 +17,7 @@
 import { useTranslations } from "next-intl";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useAnnounce } from "@/ui/a11y/Announcer";
-import { Lumi, type LumiState } from "@/ui/lumi/Lumi";
+import { LumiHalo, type LumiState } from "@/ui/lumi/Lumi";
 import type { AssistantMessage, ChatState, UserMessage } from "./chat-reducer";
 import { useFormatMsg } from "./format-msg";
 import { Receipt } from "./Receipt";
@@ -141,7 +141,7 @@ function UserBubble({ message, peek, onRetry }: { message: UserMessage; peek: bo
   const t = useTranslations("chat");
   return (
     <div data-peek={peek || message.status === "failed"} data-message={message.id} tabIndex={-1} className="flex flex-col items-end gap-1">
-      <p className="max-w-[85%] rounded-lg rounded-br-xs border-2 border-border-default bg-accent-soft px-4 py-2 text-body whitespace-pre-wrap">
+      <p className="bubble-you max-w-[85%] px-4 py-2 text-body font-medium whitespace-pre-wrap">
         <span className="sr-only">{t("you")}: </span>
         {message.text}
       </p>
@@ -161,13 +161,9 @@ function UserBubble({ message, peek, onRetry }: { message: UserMessage; peek: bo
   );
 }
 
-/** Lumi beside a reply: a round cream frame with the small cat. */
+/** Lumi beside a reply: the small cat in her soft round halo (prototype `.cat-wrap`). */
 export function LumiFace({ state = "idle" }: { state?: LumiState }) {
-  return (
-    <span aria-hidden="true" className="grid size-tap shrink-0 place-items-center rounded-full border-2 border-border-outline bg-surface-soft">
-      <Lumi state={state} size={30} />
-    </span>
-  );
+  return <LumiHalo state={state} size="tap" />;
 }
 
 /** Happy for a moment when a reply lands, then still. */
@@ -205,7 +201,7 @@ function AssistantBubble({
       {writing ? <LumiFace state="think" /> : <MoodLumi key={message.status} fresh={watched && message.status === "done"} />}
       <div className="flex min-w-0 flex-1 flex-col items-start">
       {message.text && (
-        <p className="max-w-full rounded-lg rounded-tl-xs border-2 border-border-default bg-surface-raised px-4 py-2 text-body whitespace-pre-wrap">
+        <p className="bubble-lumi max-w-full px-4 py-2 text-body whitespace-pre-wrap">
           <span className="eyebrow block" aria-hidden="true">{t("assistant")}</span>
           <span className="sr-only">{t("assistant")}: </span>
           {message.text}

@@ -76,7 +76,7 @@ export function Receipt({
     <section
       aria-label={t("title")}
       data-receipt={receipt.changeSetId}
-      className="mt-2 rounded-md border-2 border-border-outline bg-surface-raised px-4 py-3 shadow-sticker"
+      className="receipt mt-2 px-4 py-3"
     >
       <h3 className="eyebrow font-body">{t("title")}</h3>
       <ul className="mt-1 flex flex-col gap-1">
@@ -120,7 +120,7 @@ export function Receipt({
               onClick={runUndo}
               aria-disabled={undoPending || undefined}
               aria-label={undoName}
-              className="btn btn-small text-accent-text"
+              className="btn btn-primary btn-small"
             >
               <UndoIcon aria-hidden="true" className="size-icon-sm" />
               {undoPending ? t("undoing") : t("undo")}

@@ -85,7 +85,7 @@ export const Composer = forwardRef<ComposerHandle, { busy: boolean; onSend: (tex
           enterKeyHint="send"
           autoComplete="off"
           placeholder={t("composerPlaceholder")}
-          className="min-h-tap flex-1 resize-none rounded-lg border-2 border-border-strong bg-surface-raised px-4 py-2 text-body text-text-default placeholder:text-text-muted"
+          className="min-h-tap flex-1 resize-none rounded-lg border-[1.5px] border-border-strong bg-surface-raised px-4 py-2 text-body text-text-default shadow-card placeholder:text-text-muted"
         />
         <button
           type="submit"

@@ -449,7 +449,7 @@ function KitchenScreen({
     <div className="flex flex-col items-start gap-2">
       <div className="flex items-start gap-2">
         <LumiFace state="idle" />
-        <p className="rounded-lg rounded-tl-xs border-2 border-border-default bg-surface-raised px-4 py-2 text-body">
+        <p className="bubble-lumi px-4 py-2 text-body">
           <span className="eyebrow block" aria-hidden="true">
             {t("chat.assistant")}
           </span>
@@ -457,13 +457,13 @@ function KitchenScreen({
           {t("chat.welcome")}
         </p>
       </div>
-      <div role="group" aria-label={t("chat.suggestionsLabel")} className="flex flex-wrap gap-2 pl-7">
+      <div role="group" aria-label={t("chat.suggestionsLabel")} className="flex flex-wrap gap-2 pl-12">
         {(["bought", "froze", "low"] as const).map((key) => (
           <button
             key={key}
             type="button"
             onClick={() => composerRef.current?.fill(t(`chat.suggestions.${key}`).replace(/…$/, " "))}
-            className="btn btn-small text-accent-text"
+            className="chip"
           >
             {t(`chat.suggestions.${key}`)}
           </button>
@@ -512,7 +512,7 @@ function KitchenScreen({
             tabIndex={-1}
             aria-label={t("chat.label")}
             data-dock={dock}
-            className="chat-dock flex flex-col rounded-t-sheet border-2 border-b-0 border-border-outline bg-surface-raised shadow-dock desk:rounded-none desk:border-0 desk:border-l-2 desk:border-border-default desk:shadow-none"
+            className="chat-dock flex flex-col rounded-t-sheet bg-surface-default shadow-dock desk:rounded-none desk:border-l-2 desk:border-border-default desk:shadow-none"
           >
             <h2 className="sr-only">{t("chat.heading")}</h2>
             <div className="flex items-center gap-1 px-2 pt-1 desk:px-4 desk:pt-3">
@@ -590,7 +590,7 @@ function KitchenScreen({
           >
             <ChatIcon aria-hidden="true" className="size-icon-lg" />
             {newReply && (
-              <span aria-hidden="true" className="absolute top-1 right-1 size-dot rounded-full border-2 border-border-outline bg-highlight-bg" />
+              <span aria-hidden="true" className="absolute top-1 right-1 size-dot rounded-full bg-accent-text ring-2 ring-surface-raised" />
             )}
           </button>
         )}

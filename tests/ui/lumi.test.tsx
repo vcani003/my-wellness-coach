@@ -1,15 +1,21 @@
 // @vitest-environment jsdom
-/** Lumi, the assistant's cat (KOS10, 0045): states, decorative by default, art files present. */
+/**
+ * Lumi, the assistant's cat (KOS10, 0045; bright line-drawn cat, 0048): states, decorative by
+ * default, cat colour tokens only, and no looping animation (0046).
+ */
 import "@testing-library/jest-dom/vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { LUMI_ART, Lumi } from "@/ui/lumi/Lumi";
+import { Lumi, LumiHalo, type LumiState } from "@/ui/lumi/Lumi";
 
 afterEach(cleanup);
 // jsdom changes import.meta.url resolution, so resolve from the repo root (vitest runs there).
-const publicFile = (p: string) => join(process.cwd(), "public", p);
+const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+
+/** The `.lumi-cat` rules in globals.css (from the first one to the end of its reduced-motion block). */
+const lumiCss = css.slice(css.indexOf(".lumi-cat {"), css.indexOf(".lumi-halo {"));
 
 describe("Lumi", () => {
   it("is decorative unless given a translated title", () => {
@@ -25,10 +31,38 @@ describe("Lumi", () => {
     expect(screen.getByRole("img", { name: "Lumi is resting" })).toHaveAttribute("data-state", "sleep");
   });
 
-  it.each(Object.entries(LUMI_ART))("ships %s art, decorative and without hard-coded English", (_name, path) => {
-    expect(existsSync(publicFile(path))).toBe(true);
-    const svg = readFileSync(publicFile(path), "utf8");
-    expect(svg).toContain('aria-hidden="true"');
-    expect(svg).not.toMatch(/<title|aria-label|<script|href=/);
+  it.each<LumiState>(["idle", "think", "happy", "sleep"])("draws %s with the cat colour tokens only", (state) => {
+    const { container } = render(<Lumi state={state} />);
+    const colours = [...container.querySelectorAll("[fill], [stroke]")].flatMap((el) =>
+      ["fill", "stroke"].map((a) => el.getAttribute(a)).filter((v): v is string => Boolean(v) && v !== "none"),
+    );
+    expect(colours.length).toBeGreaterThan(5);
+    for (const c of colours) expect(c).toMatch(/^var\(--cat-[a-z]+\)$/);
+    // Both eye sets are drawn; CSS picks which shows for the state.
+    expect(container.querySelector(".lumi-eyes")).not.toBeNull();
+    expect(container.querySelector(".lumi-happy-eyes")).not.toBeNull();
+  });
+
+  it("defines every cat colour it uses", () => {
+    for (const name of ["line", "fur", "ear", "blush", "brow"]) expect(css).toMatch(new RegExp(`--cat-${name}:\\s*#[0-9a-f]{6};`));
+  });
+
+  it("never loops (0046): no infinite animation, no blink, no tail, and nothing moves with reduced motion", () => {
+    expect(lumiCss).not.toBe("");
+    expect(lumiCss).not.toMatch(/infinite|alternate/);
+    expect(lumiCss).not.toMatch(/blink|wag|\.tail/);
+    expect(lumiCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.lumi-cat \.lumi-head \{\s*animation: none;/);
+  });
+
+  it("sits in a decorative halo", () => {
+    const { container } = render(<LumiHalo state="happy" size="lumi-lg" />);
+    const halo = container.firstElementChild!;
+    expect(halo).toHaveAttribute("aria-hidden", "true");
+    expect(halo).toHaveClass("lumi-halo", "size-lumi-lg");
+    expect(halo.querySelector("svg")).toHaveAttribute("data-state", "happy");
+  });
+
+  it("ships no cream illustrations any more (0048)", () => {
+    for (const dir of ["art/lumi", "art/food", "art/icons"]) expect(existsSync(join(process.cwd(), "public", dir))).toBe(false);
   });
 });

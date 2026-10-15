@@ -13,7 +13,7 @@ export function Dock({ places, currentId, onNavigate }: { places: readonly Place
   const t = useTranslations();
   return (
     <nav aria-label={t("places.label")} className="dock-nav bg-surface-default px-3 pt-2 desk:border-r-2 desk:border-border-default desk:px-2 desk:pt-4">
-      <ul className="flex justify-around gap-1 rounded-button border-2 border-border-outline bg-surface-raised p-1 shadow-sticker desk:flex-col desk:justify-start desk:rounded-lg desk:shadow-none">
+      <ul className="flex justify-around gap-1 rounded-button bg-surface-raised p-1 shadow-card desk:flex-col desk:justify-start desk:rounded-lg">
         {places.map((p) => {
           const on = p.id === currentId;
           const Icon = p.Icon;
@@ -25,7 +25,7 @@ export function Dock({ places, currentId, onNavigate }: { places: readonly Place
                 onClick={() => onNavigate(p.id)}
                 data-place-link={p.id}
                 className={`flex min-h-[52px] w-full flex-col items-center justify-center gap-0.5 rounded-button px-1 text-caption desk:min-w-[72px] desk:rounded-md desk:py-2 ${
-                  on ? "bg-accent-default font-strong text-text-on-accent" : "font-medium text-text-muted"
+                  on ? "bg-accent-soft font-strong text-accent-text" : "font-strong text-text-muted"
                 }`}
               >
                 <Icon aria-hidden="true" weight={on ? "fill" : "regular"} className="size-icon" />

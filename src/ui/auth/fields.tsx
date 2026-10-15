@@ -1,9 +1,9 @@
 "use client";
 /**
- * Sign-in building blocks (cream style, 0042), shared by `/unlock`, `/join/<token>`,
+ * Sign-in building blocks (bright style, 0048), shared by `/unlock`, `/join/<token>`,
  * `/reset/<token>` and Settings → Change passphrase, so they all look and behave the same.
  *
- * - `AuthCard`: the centred stitched card with Lumi, an h1 and an intro line (decorative art only).
+ * - `AuthCard`: the centred white card with Lumi, an h1 and an intro line (decorative art only).
  * - `SecretField`: a passphrase or access-code field with **Show/Hide** (long phrases are typed on
  *   phones). The toggle's name says what it will do ("Show passphrase"). `autoComplete` is passed
  *   through so password managers fill (`current-password`) or offer to save (`new-password`).
@@ -11,26 +11,24 @@
  * Errors are rendered by the form (one live region per form), and tied in with `describedBy`.
  */
 import { useState, type ReactNode, type Ref } from "react";
-import { LUMI_ART } from "@/ui/lumi/Lumi";
+import { LumiHalo } from "@/ui/lumi/Lumi";
 import { HideIcon, ShowIcon } from "@/ui/primitives/icons";
 
 export const inputClass = (invalid: boolean, extra = "") =>
-  `min-h-tap w-full rounded-md border-2 bg-surface-raised py-3 pl-4 text-body text-text-default ${extra} ${
+  `min-h-tap w-full rounded-md border-[1.5px] bg-surface-raised py-3 pl-4 text-body text-text-default ${extra} ${
     invalid ? "border-error-text" : "border-border-strong"
   }`;
 
-/** The one main action: peach with the ink outline (peach alone is 1.64:1 on the card). */
+/** The one main action: the coral gradient pill with ink text (white on coral fails AA). */
 export const primaryButtonClass = "btn btn-primary w-full text-title";
 
 export const quietLinkClass = "btn-quiet w-full justify-center text-small underline underline-offset-2";
 
 export function AuthCard({ title, intro, children }: { title: string; intro?: ReactNode; children: ReactNode }) {
   return (
-    <div className="card-stitched relative mt-6 w-full max-w-sm px-6 pt-7 pb-7">
-      <span aria-hidden="true" className="washi-tape" data-tone="peach" />
+    <div className="card mt-6 w-full max-w-sm px-6 pt-7 pb-7">
       <div className="flex flex-col items-center text-center">
-        {/* eslint-disable-next-line @next/next/no-img-element -- a small static SVG */}
-        <img src={LUMI_ART.idle} alt="" width={96} height={96} className="size-sticker-lg" />
+        <LumiHalo state="idle" size="lumi-lg" />
         <h1 className="mt-2 font-heading text-display font-medium">{title}</h1>
         {intro && <p className="mt-2 text-body text-text-muted">{intro}</p>}
       </div>

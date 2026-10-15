@@ -1,9 +1,9 @@
 /**
  * The Kitchen OS shell (0042) on the FAKE interpreter: the five places in the dock are real routes,
- * the chat stays mounted while you move (a half-typed message survives), each place passes axe in
- * light and dark (KOS14), and nothing scrolls sideways at 390×844 (ported from recipe-cat's
- * `e2e/kitchen-os.spec.ts`). Set PLACE_SHOTS=<folder> to save a light and a dark screenshot of each
- * place at phone width.
+ * the chat stays mounted while you move (a half-typed message survives), each place passes axe
+ * (light only, 0048, even on a dark phone), and nothing scrolls sideways at 390×844 (ported from
+ * recipe-cat's `e2e/kitchen-os.spec.ts`). Set PLACE_SHOTS=<folder> to save a screenshot of each
+ * place and Settings at phone width.
  */
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
@@ -46,6 +46,31 @@ const PLACES: { name: PlaceName; url: RegExp; title: string; region: string }[] 
   { name: "Meals", url: /\/meals$/, title: "Meals", region: "Meals" },
   { name: "List", url: /\/list$/, title: "Shopping list", region: "Shopping list" },
 ];
+
+/**
+ * Light only (0048): no panel on screen has a dark fill. Any visible element bigger than a 64 px
+ * square whose background colour has a relative luminance below 0.35 fails; small marks (the
+ * new-reply dot, a badge) are fine.
+ */
+async function noDarkPanels(page: Page, where: string) {
+  const dark = await page.evaluate(() => {
+    const lum = (r: number, g: number, b: number) =>
+      [r, g, b]
+        .map((v) => v / 255)
+        .map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+        .reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+    const out: string[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>("body *")) {
+      const m = /rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)/.exec(getComputedStyle(el).backgroundColor);
+      if (!m || (m[4] !== undefined && Number(m[4]) < 0.5)) continue;
+      const box = el.getBoundingClientRect();
+      if (box.width * box.height < 64 * 64 || box.bottom < 0 || box.top > innerHeight) continue;
+      if (lum(+m[1], +m[2], +m[3]) < 0.35) out.push(`${el.tagName.toLowerCase()}.${el.className}`);
+    }
+    return out;
+  });
+  expect(dark, `dark panels on ${where}`).toEqual([]);
+}
 
 async function noSidewaysScroll(page: Page, where: string) {
   const overflow = await page.evaluate(() => ({
@@ -98,24 +123,35 @@ test.describe("phone width 390×844", () => {
   test.skip(({ isMobile }) => !isMobile, "phone only");
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test("every place: no sideways scroll, axe in light and dark", async ({ page, baseURL }) => {
+  test("every place: no sideways scroll, axe (light only, 0048)", async ({ page, baseURL }) => {
     await resetAndActAs(page, baseURL!);
     await fill(page);
     const shots = process.env.PLACE_SHOTS;
-    for (const scheme of ["light", "dark"] as const) {
-      await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
-      for (const p of PLACES) {
-        await goTo(page, p.name);
-        await expect(page.getByRole("region", { name: p.region })).toBeVisible();
-        await noSidewaysScroll(page, `${p.name} (${scheme})`);
-        await expectAccessible(page, `${p.name} (${scheme})`);
-        if (shots) await page.screenshot({ path: `${shots}/${p.name.toLowerCase()}-${scheme}.png` });
-      }
-      await page.getByRole("link", { name: "Settings, signed in as Vero" }).click();
-      await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
-      await noSidewaysScroll(page, `Settings (${scheme})`);
-      await expectAccessible(page, `Settings (${scheme})`);
-      if (shots) await page.screenshot({ path: `${shots}/settings-${scheme}.png` });
+    // A dark phone still gets the light app: there is no dark theme (0048).
+    await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+    for (const p of PLACES) {
+      await goTo(page, p.name);
+      await expect(page.getByRole("region", { name: p.region })).toBeVisible();
+      await noSidewaysScroll(page, p.name);
+      await noDarkPanels(page, p.name);
+      await expectAccessible(page, p.name);
+      if (shots) await page.screenshot({ path: `${shots}/${p.name.toLowerCase()}.png` });
     }
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(255, 251, 248)");
+    await page.getByRole("link", { name: "Settings, signed in as Vero" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+    await noSidewaysScroll(page, "Settings");
+    await noDarkPanels(page, "Settings");
+    await expectAccessible(page, "Settings");
+    if (shots) await page.screenshot({ path: `${shots}/settings.png` });
+
+    // The "What changed" card and the By place / By type toggle, on screen together (light, 0048).
+    await goTo(page, "Kitchen");
+    await say(page, "I bought milk");
+    await expect(lastReceipt(page)).toContainText("Added milk");
+    await expect(page.getByRole("button", { name: "By place", pressed: true })).toBeVisible();
+    await noDarkPanels(page, "Kitchen with a receipt");
+    await expectAccessible(page, "Kitchen with a receipt");
+    if (shots) await page.screenshot({ path: `${shots}/receipt-and-toggle.png` });
   });
 });

@@ -1,7 +1,7 @@
 /*
- * Cream design tokens (decision 0042; docs/design/visual-direction.md). Values are translated from
- * recipe-cat's RecipeCat cream system (design/build_tokens.py → src/styles/tokens.css), with the
- * Kitchen OS phone layout's type scale. Supersedes Clay & Honey (0024).
+ * Bright design tokens (decision 0048; docs/design/visual-direction.md). Values come from
+ * recipe-cat's `explorations/kitchen-os/prototype-bright.html`, with text colours darkened where
+ * the prototype's fail WCAG AA. Supersedes the cream system (0042's visual half).
  *
  * Every value is a SEMANTIC token, named for its role, never its look (0017, frontend.md §4).
  * Tailwind's default palette, type scale, radii, shadows and spacing are reset to `initial`,
@@ -9,59 +9,63 @@
  * these tokens. Utility names follow the token names 1:1: `color.text.muted` →
  * `--color-text-muted` → `text-text-muted`.
  *
- * Themes: light is the default. Dark ("night kitchen") applies automatically when the phone is in
- * dark mode, or when <html data-theme="dark">; <html data-theme="light"> forces light. The two dark
- * blocks below must stay identical (tests/ui/design-tokens.test.ts checks this and AA contrast).
+ * Light only (0048 reverses KOS14). There is no dark theme. Every colour still goes through these
+ * names, so a dark theme can be added later by giving the same names new values.
+ * tests/ui/design-tokens.test.ts checks AA contrast and that no dark theme has crept back.
  *
- * `color.allergy.*` is reserved for allergy flags only (0024 V2, kept by KOS15, 0045). Nothing else
- * may be plum or purple, including the Kitchen OS lavender "est." pill.
+ * `color.allergy.*` (berry) is reserved for allergy flags only (KOS15, 0045). Nothing else may be
+ * berry or magenta. Lavender is the freezer's tint, so the allergy colour moved off plum (0048).
  */
 @import "tailwindcss";
 
 @theme static {
-  /* ── Colour (light theme) ─────────────────────────────────────────── */
+  /* ── Colour ───────────────────────────────────────────────────────── */
   --color-*: initial;
   --color-transparent: transparent;
   --color-current: currentColor;
 
-  --color-surface-default: #fff6ec; /* page and stage (cream) */
-  --color-surface-raised: #fffdf8; /* cards, chat, dock, sheets */
-  --color-surface-sunken: #f7eadc; /* message box, tags, group headers */
-  --color-surface-soft: #ffe9de; /* quiet peach fill: ingredient chips, pills */
-  --color-text-default: #5b3a29; /* ink */
-  --color-text-muted: #7e5843;
-  --color-text-faint: #a88b78; /* disabled only (fails 4.5:1 on purpose; never for reading text or placeholders) */
-  --color-text-on-accent: #5b3a29; /* text on accent fills (peach, butter, matcha): dark in both themes */
-  --color-text-inverse: #5b3a29; /* legacy alias of text-on-accent; existing buttons use it */
-  --color-text-on-error: #fffdf8; /* text on an error-text fill (destructive button) */
-  --color-border-default: #ecdccb; /* decorative only: dividers, soft edges */
-  --color-border-strong: #7e5843; /* edges of inputs and checkboxes (≥ 3:1) */
-  --color-border-outline: #5b3a29; /* the sticker outline on cards, buttons, chips */
-  --color-border-stitch: #ffb89a; /* dashed inner stitch on cards (decorative) */
-  --color-accent-default: #ffb89a; /* primary buttons, chat button (peach fill, ink text) */
-  --color-accent-strong: #f59873; /* pressed / hover on the accent */
-  --color-accent-text: #a84a26; /* links, Undo, eyebrows */
-  --color-accent-soft: #ffe9de; /* your own chat bubble */
-  --color-focus-ring: #2b7a97; /* deep sky: never brown, so it shows against ink outlines */
-  --color-highlight-bg: #fff1cc; /* "New" / "Updated" butter wash, new-reply dot */
-  --color-highlight-text: #7a4e0e;
-  --color-success-bg: #e4f0dc;
-  --color-success-text: #3e6834;
-  --color-warning-bg: #fff1cc;
-  --color-warning-text: #7a4e0e;
-  --color-error-bg: #ffe1dc;
-  --color-error-text: #9e2b25;
-  --color-info-bg: #e0f0f5;
-  --color-info-text: #2c6273;
-  --color-allergy-bg: #f6e9f4; /* reserved: allergy flags only */
-  --color-allergy-text: #5a2a57; /* reserved: allergy flags only */
-  --color-allergy-border: #87487f; /* reserved: allergy flags only */
-  --color-selected-bg: #ffe9de;
-  --color-selected-border: #a84a26;
-  --color-place-fridge: #e4f0dc; /* place tiles (Kitchen OS): matcha */
-  --color-place-freezer: #e0f0f5; /* sky */
-  --color-place-pantry: #fff1cc; /* butter */
-  --color-scrim: rgb(91 58 41 / 0.35); /* behind sheets */
+  --color-surface-default: #fffbf8; /* page and stage (warm white) */
+  --color-surface-raised: #ffffff; /* cards, rows, chat, dock, sheets: plain white on a soft shadow */
+  --color-surface-sunken: #f7f1f6; /* message box, tags, segmented controls, group headers */
+  --color-surface-soft: #ffede9; /* quiet coral fill: pills, step numbers, Lumi's halo */
+  --color-text-default: #33263a; /* plum ink */
+  --color-text-muted: #6f6278;
+  --color-text-faint: #a99eb2; /* disabled only (fails 4.5:1 on purpose; never for reading text or placeholders) */
+  --color-text-on-accent: #33263a; /* text on the coral gradient: ink, because white on coral is 2.55:1 */
+  --color-text-inverse: #33263a; /* legacy alias of text-on-accent */
+  --color-text-on-error: #ffffff; /* text on an error-text fill (destructive button) */
+  --color-text-on-fill: #ffffff; /* the white tick on a ticked checkbox's green fill */
+  --color-border-default: #f1ebf1; /* decorative only: dividers, dashed ghosts */
+  --color-border-strong: #8e8098; /* edges of inputs and checkboxes (≥ 3:1) */
+  --color-border-accent: #ffd5ce; /* chip edge (decorative; the chip's text names it) */
+  --color-accent-default: #ff7a6b; /* coral: start of the primary gradient, Send, the chat button */
+  --color-accent-end: #ffb36b; /* orange: end of the primary gradient */
+  --color-accent-strong: #f2665a; /* hover / pressed coral */
+  --color-accent-text: #b23a2a; /* coral as text: links, Undo, eyebrows, chips (prototype coral fails as text) */
+  --color-accent-soft: #ffede9; /* active dock place, soft coral pills */
+  --color-focus-ring: #1f6fd1; /* deep sky (prototype sky #3d9bff is 2.86:1, too faint) */
+  --color-highlight-bg: #fff4d0; /* "New" / "Updated" lemon wash, new-reply dot */
+  --color-highlight-text: #8a5a00;
+  --color-success-bg: #dcf7ee;
+  --color-success-text: #0d6e52;
+  --color-success-fill: #17a07a; /* a ticked checkbox (white tick on it, ≥ 3:1) */
+  --color-warning-bg: #fff4d0;
+  --color-warning-text: #8a5a00;
+  --color-error-bg: #ffe4e6;
+  --color-error-text: #b42030;
+  --color-info-bg: #e3f0ff;
+  --color-info-text: #1f63b8;
+  --color-allergy-bg: #fbe6f6; /* reserved: allergy flags only (berry) */
+  --color-allergy-text: #8e1a6b; /* reserved: allergy flags only */
+  --color-allergy-border: #b8338f; /* reserved: allergy flags only */
+  --color-selected-bg: #ffede9;
+  --color-selected-border: #b23a2a;
+  --color-place-fridge: #e3f0ff; /* place tints (0048): sky */
+  --color-place-freezer: #efeaff; /* lavender */
+  --color-place-pantry: #fff4d0; /* lemon */
+  --color-hero-start: #ffe3ec; /* Today's hero card: soft pink → peach (ink text stays AA) */
+  --color-hero-end: #fff0da;
+  --color-scrim: rgb(51 38 58 / 0.35); /* behind sheets */
 
   /* ── Type: Fredoka (headings) + Nunito (body), both SIL OFL, self-hosted by next/font ── */
   --font-*: initial;
@@ -73,7 +77,7 @@
   --font-weight-medium: 600; /* Fredoka headings use this */
   --font-weight-strong: 800;
 
-  /* Kitchen OS phone scale (cream's 18 px body is for its full-screen cooking canvas). */
+  /* Kitchen OS phone scale. */
   --text-*: initial;
   --text-caption: 13px;
   --text-caption--line-height: 18px;
@@ -102,7 +106,7 @@
   --spacing-5: 24px;
   --spacing-6: 32px;
   --spacing-7: 48px;
-  --spacing-tap: 44px; /* minimum tap target (frontend.md §6); Kitchen OS 36 px controls must grow */
+  --spacing-tap: 44px; /* minimum tap target (frontend.md §6); the prototype's 36–40 px controls grow */
   --spacing-dot: 10px; /* new-reply dot */
   --spacing-icon: 20px;
   --spacing-icon-sm: 16px;
@@ -110,35 +114,34 @@
   --spacing-avatar: 32px;
   --spacing-fab: 56px; /* floating chat button */
   --spacing-tile: 46px; /* place / food tile in a row */
-  --spacing-sticker-sm: 56px;
-  --spacing-sticker-md: 72px;
-  --spacing-sticker-lg: 96px;
-  --spacing-lumi: 64px; /* Lumi beside a greeting */
+  --spacing-lumi: 64px; /* Lumi in an empty state */
+  --spacing-lumi-lg: 88px; /* Lumi on a focal card (Today, sign-in) */
 
   /* ── Shape and depth ──────────────────────────────────────────────── */
   --radius-*: initial;
   --radius-xs: 8px;
   --radius-sm: 12px;
-  --radius-md: 20px; /* rows, tiles */
-  --radius-lg: 28px; /* cards */
+  --radius-tile: 16px; /* emoji and place tiles */
+  --radius-md: 20px; /* rows */
+  --radius-lg: 24px; /* cards (prototype --r) */
   --radius-sheet: 32px;
   --radius-button: 999px; /* pill */
   --radius-full: 9999px;
 
-  /* Shadow colours are variables (set per theme in :root below) because Tailwind inlines shadows. */
+  /* Soft plum-tinted shadows (prototype --shadow / --shadow-lg). No outlines anywhere. */
   --shadow-*: initial;
-  --shadow-card: 0 6px 0 var(--shadow-ink-soft); /* cream "sticker" offset shadow */
-  --shadow-sticker: 0 3px 0 var(--shadow-ink);
-  --shadow-pop: 0 4px 0 var(--shadow-ink-faint), 0 12px 28px var(--shadow-ink-deep); /* sheets, menus */
-  --shadow-dock: 0 -6px 24px var(--shadow-ink-soft);
-  --shadow-fab: 0 4px 0 var(--shadow-ink), 0 8px 20px var(--shadow-ink-soft);
-  --shadow-glow: 0 0 0 4px var(--glow-ring), 0 0 22px 6px var(--glow-halo); /* optional "this changed" */
+  --shadow-soft: 0 1px 2px rgb(70 40 90 / 0.08); /* segments, small controls */
+  --shadow-card: 0 1px 3px rgb(70 40 90 / 0.05), 0 10px 28px rgb(70 40 90 / 0.08);
+  --shadow-pop: 0 2px 6px rgb(70 40 90 / 0.06), 0 24px 60px rgb(70 40 90 / 0.14); /* sheets, menus */
+  --shadow-dock: 0 -8px 28px rgb(70 40 90 / 0.07);
+  --shadow-fab: 0 8px 20px rgb(255 122 107 / 0.35); /* coral glow under primary buttons */
+  --shadow-hero: 0 14px 34px rgb(255 122 107 / 0.18);
 
   /* ── Motion: soft settle by default ───────────────────────────────── */
   --ease-*: initial;
-  --ease-gentle: cubic-bezier(0.2, 0.8, 0.2, 1); /* cream "standard" */
+  --ease-gentle: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
-  --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1); /* small overshoot: cat and celebrations only (see visual-direction §5) */
+  --ease-pop: cubic-bezier(0.3, 1.6, 0.5, 1); /* overshoot: Lumi and celebrations only (0046) */
 
   /* ── Layout ───────────────────────────────────────────────────────── */
   --breakpoint-*: initial;
@@ -152,28 +155,17 @@
   --motion-distance: 10px; /* how far things rise when they enter */
   --icon-stroke: 2px;
 
-  /* Outline widths for the sticker look (use as border-[length:var(--border-card)] or in CSS). */
-  --border-hair: 2px;
-  --border-thin: 2.5px; /* chips, inputs, the dashed stitch */
-  --border-card: 3px;
-  --border-stitch-inset: 9px;
+  /* The primary gradient (prototype `.btn.primary`): coral → orange, ink text. */
+  --gradient-accent: linear-gradient(135deg, var(--color-accent-default), var(--color-accent-end));
+  --gradient-accent-strong: linear-gradient(135deg, var(--color-accent-strong), var(--color-accent-default));
+  --gradient-hero: linear-gradient(135deg, var(--color-hero-start), var(--color-hero-end));
 
-  /* Shadow and glow colours (light). */
-  --shadow-ink-faint: rgb(91 58 41 / 0.08);
-  --shadow-ink-soft: rgb(91 58 41 / 0.1);
-  --shadow-ink: rgb(91 58 41 / 0.14);
-  --shadow-ink-deep: rgb(91 58 41 / 0.16);
-  --glow-ring: rgb(255 217 142 / 0.9);
-  --glow-halo: rgb(255 217 142 / 0.65);
-
-  /* Fixed art colours: the SVGs in public/art use these hexes in both themes. Art only, never UI. */
-  --art-ink: #5b3a29;
-  --art-cream: #fffdf8;
-  --art-peach: #ffb89a;
-  --art-blush: #ff9aa2;
-  --art-matcha: #a8c99b;
-  --art-butter: #ffd98e;
-  --art-sky: #a7d3e0;
+  /* Lumi's colours (src/ui/lumi/Lumi.tsx). Art only, never UI text or fills. */
+  --cat-line: #4a3542;
+  --cat-fur: #ffffff;
+  --cat-ear: #ffc3d3;
+  --cat-blush: #ffb3c7;
+  --cat-brow: #ffb36b;
 
   /* Set by src/ui/shell/viewport.ts (iOS keyboard; frontend.md §5). */
   --keyboard-inset: 0px;
@@ -182,109 +174,6 @@
   --topbar-height: 56px;
 
   color-scheme: light;
-}
-
-/* ── Dark theme: "night kitchen" (KOS14, 0045). Automatic, unless <html data-theme="light">. ── */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    /* dark-theme:start */
-    --color-surface-default: #2b1e17;
-    --color-surface-raised: #3b2a21;
-    --color-surface-sunken: #241913;
-    --color-surface-soft: #523829;
-    --color-text-default: #ffeedd;
-    --color-text-muted: #e5c7ae;
-    --color-text-faint: #a88a74;
-    --color-text-on-accent: #3a2418;
-    --color-text-inverse: #3a2418;
-    --color-text-on-error: #2b1e17;
-    --color-border-default: #54402f;
-    --color-border-strong: #c49a7c;
-    --color-border-outline: #c49a7c;
-    --color-border-stitch: #b27459;
-    --color-accent-default: #f7a786;
-    --color-accent-strong: #ffbfa4;
-    --color-accent-text: #ffb89a;
-    --color-accent-soft: #523829;
-    --color-focus-ring: #8fd3ea;
-    --color-highlight-bg: #4a3a1c;
-    --color-highlight-text: #ffd98e;
-    --color-success-bg: #33402c;
-    --color-success-text: #bee0b1;
-    --color-warning-bg: #4a3a1c;
-    --color-warning-text: #ffd98e;
-    --color-error-bg: #4e2622;
-    --color-error-text: #ffaaa1;
-    --color-info-bg: #22383f;
-    --color-info-text: #b5deea;
-    --color-allergy-bg: #3f2440;
-    --color-allergy-text: #f4d6f0;
-    --color-allergy-border: #c88dc1;
-    --color-selected-bg: #523829;
-    --color-selected-border: #ffb89a;
-    --color-place-fridge: #33402c;
-    --color-place-freezer: #22383f;
-    --color-place-pantry: #4a3a1c;
-    --color-scrim: rgb(16 9 6 / 0.6);
-    --shadow-ink-faint: rgb(0 0 0 / 0.3);
-    --shadow-ink-soft: rgb(0 0 0 / 0.35);
-    --shadow-ink: rgb(0 0 0 / 0.4);
-    --shadow-ink-deep: rgb(0 0 0 / 0.45);
-    --glow-ring: rgb(242 198 110 / 0.85);
-    --glow-halo: rgb(242 198 110 / 0.45);
-    color-scheme: dark;
-    /* dark-theme:end */
-  }
-}
-
-:root[data-theme="dark"] {
-  /* dark-theme:start */
-  --color-surface-default: #2b1e17;
-  --color-surface-raised: #3b2a21;
-  --color-surface-sunken: #241913;
-  --color-surface-soft: #523829;
-  --color-text-default: #ffeedd;
-  --color-text-muted: #e5c7ae;
-  --color-text-faint: #a88a74;
-  --color-text-on-accent: #3a2418;
-  --color-text-inverse: #3a2418;
-  --color-text-on-error: #2b1e17;
-  --color-border-default: #54402f;
-  --color-border-strong: #c49a7c;
-  --color-border-outline: #c49a7c;
-  --color-border-stitch: #b27459;
-  --color-accent-default: #f7a786;
-  --color-accent-strong: #ffbfa4;
-  --color-accent-text: #ffb89a;
-  --color-accent-soft: #523829;
-  --color-focus-ring: #8fd3ea;
-  --color-highlight-bg: #4a3a1c;
-  --color-highlight-text: #ffd98e;
-  --color-success-bg: #33402c;
-  --color-success-text: #bee0b1;
-  --color-warning-bg: #4a3a1c;
-  --color-warning-text: #ffd98e;
-  --color-error-bg: #4e2622;
-  --color-error-text: #ffaaa1;
-  --color-info-bg: #22383f;
-  --color-info-text: #b5deea;
-  --color-allergy-bg: #3f2440;
-  --color-allergy-text: #f4d6f0;
-  --color-allergy-border: #c88dc1;
-  --color-selected-bg: #523829;
-  --color-selected-border: #ffb89a;
-  --color-place-fridge: #33402c;
-  --color-place-freezer: #22383f;
-  --color-place-pantry: #4a3a1c;
-  --color-scrim: rgb(16 9 6 / 0.6);
-  --shadow-ink-faint: rgb(0 0 0 / 0.3);
-  --shadow-ink-soft: rgb(0 0 0 / 0.35);
-  --shadow-ink: rgb(0 0 0 / 0.4);
-  --shadow-ink-deep: rgb(0 0 0 / 0.45);
-  --glow-ring: rgb(242 198 110 / 0.85);
-  --glow-halo: rgb(242 198 110 / 0.45);
-  color-scheme: dark;
-  /* dark-theme:end */
 }
 
 /* Reduced motion: every duration becomes 0 ms, nothing rises or overshoots; changes just appear. */
@@ -308,6 +197,7 @@
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
     -webkit-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
   }
 
   /* Headings use the rounded display face (Fredoka); utilities can still override. */
@@ -317,7 +207,7 @@
     font-family: var(--font-heading);
   }
 
-  /* 3 px sky ring with a 2 px gap: visible on every surface and against ink outlines (cream). */
+  /* 3 px deep-sky ring with a 2 px gap: visible on every light surface. */
   :focus-visible {
     outline: 3px solid var(--color-focus-ring);
     outline-offset: 2px;
@@ -335,29 +225,9 @@
 
 @layer components {
   /*
-   * Cream card recipe (recipe-cat Card): raised surface, ink outline, offset shadow and a dashed
-   * peach stitch inset. Decorative only: the stitch never carries meaning.
-   */
-  .card-stitched {
-    position: relative;
-    background: var(--color-surface-raised);
-    border: var(--border-card) solid var(--color-border-outline);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
-  }
-  .card-stitched::after {
-    content: "";
-    position: absolute;
-    inset: var(--border-stitch-inset);
-    border: var(--border-thin) dashed var(--color-border-stitch);
-    border-radius: calc(var(--radius-lg) - var(--border-stitch-inset));
-    pointer-events: none;
-  }
-
-  /*
-   * Lumi's states (src/ui/lumi/Lumi.tsx). Calm (0022, 0046: nothing loops): she is still when idle (no blink),
-   * tilts only while she's writing, hops once when happy, and closes her eyes asleep.
-   * Reduced motion: no movement at all; the eyes alone show the state.
+   * Lumi's states (src/ui/lumi/Lumi.tsx). Calm (0046: nothing loops): she is still when idle (no
+   * blink), glances up and tilts once while she's writing (and holds it), hops once when happy,
+   * and closes her eyes asleep. Reduced motion: no movement at all; the eyes alone show the state.
    */
   .lumi-cat {
     display: block;
@@ -387,7 +257,7 @@
     transform: translate(1.5px, -2px);
   }
   .lumi-cat[data-state="happy"] .lumi-head {
-    animation: lumi-hop var(--motion-duration-slow) var(--ease-pop);
+    animation: lumi-hop var(--motion-duration-slow) var(--ease-pop) 1;
   }
   .lumi-cat[data-state="think"] .lumi-head {
     animation: lumi-tilt var(--motion-duration-gentle) var(--ease-gentle) 1 both;
@@ -409,42 +279,14 @@
     }
   }
 
-  /*
-   * Washi tape strip across the top of a hero card. Put it on an aria-hidden element inside a
-   * positioned card. Tone classes pick the art colour; matcha is the default.
-   */
-  .washi-tape {
-    --tape: var(--art-matcha);
-    position: absolute;
-    z-index: 2;
-    top: -15px;
-    left: 50%;
-    width: 112px;
-    height: 30px;
-    transform: translateX(-50%) rotate(-3deg);
-    opacity: 0.92;
-    pointer-events: none;
-    background: repeating-linear-gradient(
-      60deg,
-      var(--tape) 0 11px,
-      color-mix(in srgb, var(--tape) 50%, var(--art-cream)) 11px 19px
-    );
-    clip-path: polygon(
-      0 0, 100% 0, 96% 17%, 100% 33%, 96% 50%, 100% 67%, 96% 83%, 100% 100%,
-      0 100%, 4% 83%, 0 67%, 4% 50%, 0 33%, 4% 17%
-    );
-  }
-  .washi-tape[data-tone="peach"] {
-    --tape: var(--art-peach);
-  }
-  .washi-tape[data-tone="sky"] {
-    --tape: var(--art-sky);
-  }
-  .washi-tape[data-tone="blush"] {
-    --tape: var(--art-blush);
-  }
-  .washi-tape[data-tone="butter"] {
-    --tape: var(--art-butter);
+  /* Lumi's round halo (prototype `.cat-wrap`): beside replies, and larger on focal cards. */
+  .lumi-halo {
+    display: grid;
+    place-items: center;
+    flex: none;
+    border-radius: var(--radius-full);
+    background: var(--gradient-hero);
+    box-shadow: var(--shadow-card);
   }
 
   /* "New" / "Updated" wash: fades in once, then stays until your next message (ux §1). */
@@ -457,13 +299,13 @@
       background: transparent;
     }
   }
-
 }
 
 /*
- * Shared controls (Kitchen OS layout in cream, 0042). Built only from tokens. Primary buttons are a
- * peach fill with the ink outline: peach alone is 1.64:1 against a card, so the outline gives the
- * shape (visual-direction §6). Every control is at least 44 px tall (`spacing.tap`).
+ * Shared controls (0048, Kitchen OS layout). Built only from tokens. White surfaces float on soft
+ * shadows with no outlines; the main action is the coral → orange gradient pill with INK text
+ * (white on coral is 2.55:1 and fails AA; ink is 5.58:1 on the coral end and 8.05:1 on the orange
+ * end; visual-direction §6). Every control is at least 44 px tall (`spacing.tap`).
  */
 @layer components {
   .btn {
@@ -474,21 +316,19 @@
     min-height: var(--spacing-tap);
     padding: 0 var(--spacing-5);
     border-radius: var(--radius-button);
-    border: var(--border-hair) solid var(--color-border-outline);
     background: var(--color-surface-raised);
     color: var(--color-text-default);
     font-weight: var(--font-weight-strong);
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
-    box-shadow: var(--shadow-sticker);
+    box-shadow: var(--shadow-card);
     transition:
       transform var(--motion-duration-quick) var(--ease-gentle),
       box-shadow var(--motion-duration-quick) var(--ease-gentle),
       background-color var(--motion-duration-quick) var(--ease-gentle);
   }
   .btn:active:not(:disabled, [aria-disabled="true"]) {
-    transform: translateY(2px);
-    box-shadow: none;
+    transform: scale(0.97);
   }
   .btn:disabled,
   .btn[aria-disabled="true"] {
@@ -496,22 +336,28 @@
     cursor: default;
   }
   .btn-primary {
-    background: var(--color-accent-default);
+    background: var(--gradient-accent);
     color: var(--color-text-on-accent);
+    box-shadow: var(--shadow-fab);
   }
   .btn-primary:hover:not(:disabled, [aria-disabled="true"]) {
-    background: var(--color-accent-strong);
+    background: var(--gradient-accent-strong);
   }
   .btn-danger {
     background: var(--color-error-text);
     color: var(--color-text-on-error);
+    box-shadow: none;
   }
   .btn-small {
     padding: 0 var(--spacing-4);
     font-size: var(--text-small);
     line-height: var(--text-small--line-height);
+    box-shadow: var(--shadow-soft);
   }
-  /* A quiet text button (Undo, Retry, Cancel): no outline, accent text, still 44 px. */
+  .btn-primary.btn-small {
+    box-shadow: none;
+  }
+  /* A quiet text button (Undo, Retry, Cancel): no fill, accent text, still 44 px. */
   .btn-quiet {
     display: inline-flex;
     align-items: center;
@@ -527,7 +373,7 @@
     opacity: 0.6;
     cursor: default;
   }
-  /* Round icon button (header, close): 44 px, ink outline. */
+  /* Round icon button (header, close): 44 px. */
   .btn-icon {
     display: inline-flex;
     align-items: center;
@@ -538,48 +384,124 @@
     border-radius: var(--radius-full);
     color: var(--color-text-muted);
   }
+  /* A suggestion chip (prototype `.chip`): white pill, coral text, a soft coral edge. */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    min-height: var(--spacing-tap);
+    padding: 0 var(--spacing-4);
+    border-radius: var(--radius-button);
+    background: var(--color-surface-raised);
+    border: 1.5px solid var(--color-border-accent);
+    color: var(--color-accent-text);
+    font-weight: var(--font-weight-strong);
+    font-size: var(--text-small);
+    line-height: var(--text-small--line-height);
+    transition: background-color var(--motion-duration-quick) var(--ease-gentle);
+  }
+  .chip:hover {
+    background: var(--color-accent-soft);
+  }
 
-  /* A raised card with the ink outline (Kitchen OS `.card` in cream). */
+  /*
+   * A segmented control (prototype `.seg` / `.tab`): a sunken pill. The chosen option is coral-soft
+   * with dark coral text, and is also bolder and ringed, so it never relies on colour alone (1.4.1).
+   * Light only (0048): no ink fill.
+   */
+  .seg-group {
+    display: flex;
+    border-radius: var(--radius-button);
+    background: var(--color-surface-sunken);
+    padding: var(--spacing-0_5);
+  }
+  .seg-option {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--spacing-tap);
+    padding: 0 var(--spacing-3);
+    border-radius: var(--radius-button);
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-medium);
+    font-size: var(--text-small);
+    line-height: var(--text-small--line-height);
+  }
+  .seg-option[data-on="true"],
+  .seg-option:has([data-checked]) {
+    background: var(--color-selected-bg);
+    color: var(--color-accent-text);
+    font-weight: 900;
+    box-shadow:
+      inset 0 0 0 2px var(--color-selected-border),
+      var(--shadow-soft);
+  }
+
+  /* A white card on a soft shadow (prototype `.card`): no outline, no stitch. */
   .card {
     position: relative;
     background: var(--color-surface-raised);
-    border: var(--border-hair) solid var(--color-border-outline);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
+  }
+  /* The focal card on Today (prototype `.hero`, softened so ink text passes AA). */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    background: var(--gradient-hero);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-hero);
+  }
+  .hero::after {
+    content: "";
+    position: absolute;
+    right: -36px;
+    top: -36px;
+    width: 150px;
+    height: 150px;
+    border-radius: var(--radius-full);
+    background: rgb(255 255 255 / 0.45);
+    pointer-events: none;
+  }
+  .hero > * {
+    position: relative;
+    z-index: 1;
   }
   /* A row inside a place (items, list entries, meals). */
   .row-card {
     background: var(--color-surface-raised);
-    border: var(--border-hair) solid var(--color-border-default);
     border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
   }
-  /* Small caps label (V-KOS1 Rec: short, 13 px caps labels are fine). */
+  /* Small caps label (V-KOS1: short, 13 px caps labels are fine). */
   .eyebrow {
     font-size: var(--text-caption);
     line-height: var(--text-caption--line-height);
-    font-weight: var(--font-weight-strong);
-    letter-spacing: 0.08em;
+    font-weight: 900;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--color-accent-text);
   }
   .section-label {
     font-size: var(--text-caption);
     line-height: var(--text-caption--line-height);
-    font-weight: var(--font-weight-strong);
-    letter-spacing: 0.08em;
+    font-weight: 900;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--color-text-muted);
   }
-  /* Place tile (Kitchen OS `.tile`): a soft square holding an icon. */
+  /* Place / food tile (prototype `.tile`): a soft square, tinted by place, holding an icon or emoji. */
   .place-tile {
     display: grid;
     place-items: center;
     flex: none;
     width: var(--spacing-tile);
     height: var(--spacing-tile);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-tile);
     background: var(--color-surface-soft);
     color: var(--color-text-default);
+    font-size: 24px;
+    line-height: 1;
   }
   .place-tile[data-place="fridge"] {
     background: var(--color-place-fridge);
@@ -590,11 +512,15 @@
   .place-tile[data-place="pantry"] {
     background: var(--color-place-pantry);
   }
+  /* FoodTile: the emoji is generated content, so it never joins the row's text (src/ui/primitives/FoodTile.tsx). */
+  .place-tile[data-emoji]::before {
+    content: attr(data-emoji);
+  }
   .field {
     min-height: var(--spacing-tap);
     width: 100%;
     border-radius: var(--radius-sm);
-    border: var(--border-hair) solid var(--color-border-strong);
+    border: 1.5px solid var(--color-border-strong);
     background: var(--color-surface-raised);
     padding: var(--spacing-2) var(--spacing-4);
     font-size: var(--text-body);
@@ -604,25 +530,50 @@
     color: var(--color-text-muted);
   }
 
-  /* Round check (src/ui/primitives/Checkbox.tsx). */
+  /* Chat bubbles (prototype `.me .txt` / `.you`). */
+  .bubble-lumi {
+    background: var(--color-surface-raised);
+    border-radius: 18px 18px 18px 6px;
+    box-shadow: var(--shadow-card);
+  }
+  /* Your own message: soft coral, ink text (the prototype's ink bubble is too dark for light-only, 0048). */
+  .bubble-you {
+    background: var(--color-surface-soft);
+    color: var(--color-text-default);
+    border-radius: 18px 18px 6px 18px;
+  }
+
+  /*
+   * "What changed" (prototype `.receipt`, made light for 0048): a soft mint card ("saved") with ink
+   * text, mint ticks, the soft shadow and a coral Undo pill. Everything inside uses the ordinary
+   * tokens; every pair is in the contrast test.
+   */
+  .receipt {
+    background: var(--color-success-bg);
+    color: var(--color-text-default);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Round check (src/ui/primitives/Checkbox.tsx; prototype `.li .box`). */
   .check-box {
     position: relative;
     display: inline-grid;
     place-items: center;
     flex: none;
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     border-radius: var(--radius-full);
-    border: var(--border-thin) solid var(--color-border-strong);
+    border: 2.5px solid var(--color-border-strong);
     background: var(--color-surface-raised);
-    color: var(--color-success-text);
+    color: var(--color-text-on-fill);
   }
   .check-box .check-mark {
     opacity: 0;
   }
   .check-box:has(input:checked) {
-    background: var(--color-success-bg);
-    border-color: var(--color-success-text);
+    background: var(--color-success-fill);
+    border-color: var(--color-success-fill);
   }
   .check-box:has(input:checked) .check-mark {
     opacity: 1;
@@ -635,16 +586,9 @@
     opacity: 0.6;
   }
 
-  /* Sheets (Base UI dialog): cream paper with an ink edge, rising from the bottom on a phone. */
+  /* Sheets (Base UI dialog): white, rising from the bottom on a phone, on the large soft shadow. */
   .sheet {
-    border: var(--border-hair) solid var(--color-border-outline);
-    border-bottom-width: 0;
     box-shadow: var(--shadow-pop);
-  }
-  @media (min-width: 56.25rem) {
-    .sheet {
-      border-bottom-width: var(--border-hair);
-    }
   }
 
   /* A place's content rises in once when you arrive (gentle, never the pop; 0 with reduced motion). */
@@ -659,7 +603,7 @@
   }
 
   /*
-   * A recipe line a refinement just added or changed (ai.md §5 edit mode): the butter wash, briefly,
+   * A recipe line a refinement just added or changed (ai.md §5 edit mode): the lemon wash, briefly,
    * then it settles back. With reduced motion there's no fade: the wash just stays on those lines.
    */
   [data-recipe-changed] {

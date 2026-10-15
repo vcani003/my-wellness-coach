@@ -11,7 +11,12 @@
 
 ## Outstanding
 
-*Nothing outstanding.*
+### BRT1–BRT3. 🟡 Bright look details (from the reskin, 0048)
+- **BRT1. Button text.** White text on the prototype's coral fails contrast (2.55:1), so main buttons use dark ink text on the coral gradient instead (5.58:1). The alternative is darker, brick-red buttons with white text. **Rec:** keep the ink text, which keeps your colours.
+- **BRT2. The allergy-only colour (KOS15)** moved from plum to **berry**, because plum looked like the lavender freezer tint. **Rec:** keep berry.
+- **BRT3. The "What changed" box** is now soft mint (it reads as "saved"). **Rec:** keep mint rather than plain white.
+
+> Answer:
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*

@@ -24,7 +24,7 @@ export function PolicyPage({ which }: { which: "privacy" | "terms" }) {
         {t("back")}
       </Link>
       <h1 className="text-display font-medium">{t(`${which}.title`)}</h1>
-      <p role="note" className="rounded-md border-2 border-border-default bg-warning-bg px-4 py-3 text-small text-warning-text">
+      <p role="note" className="rounded-md bg-warning-bg px-4 py-3 text-small text-warning-text">
         {t("placeholder")}
       </p>
       <p className="text-body">{t(`${which}.intro`)}</p>

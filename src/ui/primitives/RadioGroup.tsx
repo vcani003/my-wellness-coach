@@ -28,12 +28,12 @@ export function SegmentedRadio({
         value={value}
         onValueChange={(v) => onChange(String(v))}
         disabled={disabled}
-        className="flex rounded-button border-2 border-border-outline bg-surface-raised p-0.5"
+        className="seg-group"
       >
         {options.map((o) => (
           <label
             key={o.value}
-            className="flex min-h-tap cursor-pointer items-center rounded-button px-3 text-small font-medium text-text-default has-data-checked:bg-accent-default has-data-checked:text-text-on-accent font-strong has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus-ring"
+            className="seg-option cursor-pointer has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus-ring"
           >
             <Radio.Root value={o.value} className="sr-only">
               <Radio.Indicator />
@@ -74,12 +74,12 @@ export function ChoiceRadio({
         value={value}
         onValueChange={(v) => onChange(String(v))}
         disabled={disabled}
-        className="flex flex-wrap self-start rounded-button border-2 border-border-outline bg-surface-raised p-0.5"
+        className="seg-group flex-wrap self-start"
       >
         {options.map((o) => (
           <label
             key={o.value}
-            className="flex min-h-tap cursor-pointer items-center rounded-button px-3 text-small font-medium text-text-default has-data-checked:bg-accent-default has-data-checked:text-text-on-accent font-strong has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus-ring"
+            className="seg-option cursor-pointer has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus-ring"
           >
             <Radio.Root value={o.value} className="sr-only">
               <Radio.Indicator />

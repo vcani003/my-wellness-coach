@@ -13,7 +13,8 @@ import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import type { ItemRow } from "@/contracts/kitchen-state";
 import { useAnnounce } from "@/ui/a11y/Announcer";
-import { LUMI_ART } from "@/ui/lumi/Lumi";
+import { LumiHalo } from "@/ui/lumi/Lumi";
+import { FoodTile } from "@/ui/primitives/FoodTile";
 import { actorName, byOther as byOtherActor, itemName, sentenceCase } from "@/ui/fallbacks";
 import { Collapsible } from "@/ui/primitives/Collapsible";
 import { CaretDownIcon, CloseIcon, FreezerIcon, FridgeIcon, PantryIcon, SearchIcon, UnknownPlaceIcon } from "@/ui/primitives/icons";
@@ -124,8 +125,7 @@ function EmptyKitchen() {
   const t = useTranslations("kitchen");
   return (
     <div className="card flex flex-col items-center gap-3 px-5 py-6 text-center">
-      {/* eslint-disable-next-line @next/next/no-img-element -- a small static SVG; next/image adds nothing here */}
-      <img src={LUMI_ART.sleeping} alt="" width={96} height={96} className="size-sticker-lg" />
+      <LumiHalo state="sleep" size="lumi" />
       <p className="text-body font-medium">{t("empty")}</p>
     </div>
   );
@@ -165,7 +165,7 @@ function SearchField({
         spellCheck={false}
         enterKeyHint="search"
         data-kitchen-search=""
-        className="min-h-tap w-full rounded-button border-2 border-border-strong bg-surface-raised py-2 pr-7 pl-7 text-body placeholder:text-text-muted"
+        className="min-h-tap w-full rounded-button border-[1.5px] border-border-strong bg-surface-raised py-2 pr-7 pl-7 text-body placeholder:text-text-muted"
       />
       {query && (
         <button
@@ -184,7 +184,7 @@ function SearchField({
 function ViewToggle({ view, onChange }: { view: KitchenView; onChange: (view: KitchenView) => void }) {
   const t = useTranslations("kitchen.seeAll");
   return (
-    <div role="group" aria-label={t("viewLabel")} className="flex self-start rounded-button border-2 border-border-outline bg-surface-raised p-1">
+    <div role="group" aria-label={t("viewLabel")} className="seg-group self-start">
       {(["place", "type"] as const).map((v) => (
         <button
           key={v}
@@ -192,9 +192,8 @@ function ViewToggle({ view, onChange }: { view: KitchenView; onChange: (view: Ki
           aria-pressed={view === v}
           onClick={() => onChange(v)}
           data-kitchen-view={v}
-          className={`min-h-tap rounded-button px-4 text-small font-strong ${
-            view === v ? "bg-accent-default text-text-on-accent" : "text-text-muted"
-          }`}
+          data-on={view === v}
+          className="seg-option px-4"
         >
           {t(v === "place" ? "byPlace" : "byType")}
         </button>
@@ -365,14 +364,17 @@ export function ItemRowView({
   );
 
   const rowClass = `row-card ${highlighted ? "change-highlight" : ""}`;
+  // The food's emoji tile, tinted by where it's kept (0048); the catalog emoji comes with KOS2.
+  const tile = <FoodTile place={item.location?.value ?? "unknown"} />;
   if (!several) {
     return (
       <li
         data-entity-id={item.id}
         data-change={mark ?? (remote ? "remote" : undefined)}
-        className={`flex min-h-tap flex-col justify-center gap-0.5 px-4 py-3 ${rowClass}`}
+        className={`flex min-h-tap items-center gap-3 px-3 py-2 ${rowClass}`}
       >
-        {content}
+        {tile}
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">{content}</span>
       </li>
     );
   }
@@ -383,8 +385,9 @@ export function ItemRowView({
       <Collapsible.Root>
         <Collapsible.Trigger
           data-batches-toggle=""
-          className="group flex min-h-tap w-full items-center gap-2 rounded-md px-4 py-3 text-left"
+          className="group flex min-h-tap w-full items-center gap-3 rounded-md px-3 py-2 text-left"
         >
+          {tile}
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">{content}</span>
           <CaretDownIcon
             aria-hidden="true"
@@ -407,7 +410,7 @@ function BatchList({ item, meId, name }: { item: ItemRow; meId: string; name: st
   const date = (iso: string) => format.dateTime(new Date(iso), { month: "short", day: "numeric" });
   return (
     <>
-      <ul aria-label={t("kitchen.batches.listLabel", { name })} className="flex flex-col gap-1 border-l-2 border-border-stitch pl-3">
+      <ul aria-label={t("kitchen.batches.listLabel", { name })} className="flex flex-col gap-1 border-l-2 border-border-default pl-3">
         {batchesOf(item).map((b) => {
           const defrosted = b.defrostedOn && !b.frozen?.value;
           const who = byOtherActor(b.createdBy, meId)

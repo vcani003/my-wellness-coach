@@ -117,7 +117,7 @@ function SheetBody({ open, onOpenChange, title, body, create }: LinkSheetProps) 
             <p
               aria-labelledby="link-sheet-label"
               data-testid="invite-link"
-              className="rounded-md border-2 border-border-default bg-surface-sunken px-3 py-2 text-small break-all select-all"
+              className="rounded-md bg-surface-sunken px-3 py-2 text-small break-all select-all"
             >
               {state.url}
             </p>

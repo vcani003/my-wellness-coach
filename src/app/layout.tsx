@@ -7,7 +7,7 @@ import { META_COLORS } from "@/ui/theme/meta-colors";
 import "./globals.css";
 
 /**
- * Fredoka (headings) + Nunito (body), both SIL OFL (cream, 0042). Variable fonts, downloaded at
+ * Fredoka (headings) + Nunito (body), both SIL OFL (0042, kept by 0048). Variable fonts, downloaded at
  * build time and self-hosted: no request to Google from the phone. Exposed as `--font-heading` /
  * `--font-body` in globals.css.
  */
@@ -32,11 +32,9 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   interactiveWidget: "resizes-content",
-  // Follows the phone's light / dark setting (the automatic theme in globals.css).
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: META_COLORS.surfaceDefault },
-    { media: "(prefers-color-scheme: dark)", color: META_COLORS.dark.surfaceDefault },
-  ],
+  // Light only (0048): one theme colour, whatever the phone's setting.
+  themeColor: META_COLORS.surfaceDefault,
+  colorScheme: "light",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

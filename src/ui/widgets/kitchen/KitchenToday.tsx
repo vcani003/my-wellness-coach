@@ -10,10 +10,10 @@ import { useLocale, useTranslations } from "next-intl";
 import { useRef } from "react";
 import { useAskLumi } from "@/ui/chat/AskLumi";
 import { itemName } from "@/ui/fallbacks";
-import { LUMI_ART } from "@/ui/lumi/Lumi";
+import { LumiHalo } from "@/ui/lumi/Lumi";
+import { FoodTile } from "@/ui/primitives/FoodTile";
 import { SparkleIcon } from "@/ui/primitives/icons";
 import { useKitchenData } from "@/ui/sync/KitchenDataContext";
-import { PlaceTile } from "./KitchenWidget";
 import { groupItems, useItUpRows, type UseItUpReason } from "./model";
 import { LiveRemovals, SinceLastVisit } from "./SharedCues";
 import { ToReview } from "./ToReview";
@@ -33,8 +33,7 @@ export function KitchenToday() {
       <ToReview reviews={state.toReview} finalFocus={rootRef} />
       {empty ? (
         <div className="card flex items-center gap-4 px-5 py-5">
-          {/* eslint-disable-next-line @next/next/no-img-element -- a small static SVG */}
-          <img src={LUMI_ART.listening} alt="" width={72} height={72} className="size-sticker-md shrink-0" />
+          <LumiHalo state="idle" size="lumi" />
           <div className="flex flex-col gap-1">
             <p className="text-title font-medium">{t("emptyTitle")}</p>
             <p className="text-small text-text-muted">{t("emptyBody")}</p>
@@ -75,7 +74,7 @@ function UseItUp({ now }: { now: Date }) {
       <ul className="flex flex-col gap-2">
         {rows.map(({ item, reason: r }) => (
           <li key={item.id} data-entity-id={item.id} className="flex items-center gap-3">
-            <PlaceTile place={item.location?.value ?? "unknown"} />
+            <FoodTile place={item.location?.value ?? "unknown"} />
             <span className="flex flex-col">
               <span className="text-body font-strong">{itemName(item.name.value, tAll, locale)}</span>
               <span className="text-small text-text-muted">{reason(r)}</span>

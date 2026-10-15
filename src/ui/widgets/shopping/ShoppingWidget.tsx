@@ -14,7 +14,7 @@ import type { ShoppingItemRow } from "@/contracts/kitchen-state";
 import { Checkbox } from "@/ui/primitives/Checkbox";
 import { useAnnounce } from "@/ui/a11y/Announcer";
 import { actorName, itemName, sentenceCase } from "@/ui/fallbacks";
-import { LUMI_ART } from "@/ui/lumi/Lumi";
+import { LumiHalo } from "@/ui/lumi/Lumi";
 import { MoreIcon, NotSyncedIcon, UndoIcon } from "@/ui/primitives/icons";
 import { Menu } from "@/ui/primitives/Menu";
 import { useKitchenActions } from "@/ui/sync/KitchenActionsContext";
@@ -369,7 +369,7 @@ function ShoppingRowView({
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Positioner side="bottom" align="end" sideOffset={4} className="z-40">
-              <Menu.Popup className="min-w-40 rounded-md border-2 border-border-outline bg-surface-raised p-1 shadow-pop">
+              <Menu.Popup className="min-w-40 rounded-md bg-surface-raised p-1 shadow-pop">
                 <Menu.Item
                   onClick={onRemove}
                   className="flex min-h-tap cursor-pointer items-center rounded-md px-3 text-body data-highlighted:bg-surface-sunken"
@@ -404,8 +404,7 @@ function EmptyList() {
   const t = useTranslations("shopping");
   return (
     <div className="card flex flex-col items-center gap-3 px-5 py-6 text-center">
-      {/* eslint-disable-next-line @next/next/no-img-element -- a small static SVG */}
-      <img src={LUMI_ART.celebrating} alt="" width={96} height={96} className="size-sticker-lg" />
+      <LumiHalo state="happy" size="lumi" />
       <p className="text-body font-medium">{t("empty")}</p>
     </div>
   );

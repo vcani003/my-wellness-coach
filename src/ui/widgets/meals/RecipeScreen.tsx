@@ -310,7 +310,7 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
                   data-recipe-changed={changed ? "" : undefined}
                 >
                   {/* The number is the list's own; this circle is how it looks (Kitchen OS steps). */}
-                  <span aria-hidden="true" className="grid size-avatar shrink-0 place-items-center rounded-full border-2 border-border-outline bg-surface-soft text-small font-strong">
+                  <span aria-hidden="true" className="grid size-avatar shrink-0 place-items-center rounded-full bg-surface-soft text-small font-strong text-accent-text">
                     {i + 1}
                   </span>
                   <span className="pt-1">{s}</span>

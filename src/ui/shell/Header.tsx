@@ -63,9 +63,9 @@ export const Header = forwardRef(function Header(
             {people.map((p, i) => (
               <span
                 key={p.id}
-                className={`flex size-avatar items-center justify-center rounded-full border-2 border-border-outline text-small font-strong ${
-                  // One text colour per fill (both pairs pass 4.5:1 in light and dark).
-                  i === 0 ? "bg-accent-default text-text-on-accent" : "-ml-2 bg-place-freezer text-text-default"
+                className={`flex size-avatar items-center justify-center rounded-full text-small font-strong ring-2 ring-surface-default ${
+                  // One text colour per fill (both pairs pass 4.5:1).
+                  i === 0 ? "bg-accent-default text-text-on-accent shadow-soft" : "-ml-2 bg-place-freezer text-text-default"
                 }`}
               >
                 {sentenceCase(p.name, locale).charAt(0)}

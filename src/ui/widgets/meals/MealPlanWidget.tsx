@@ -15,7 +15,7 @@ import { UndoIcon } from "@/ui/primitives/icons";
 import { useKitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { useKitchenData } from "@/ui/sync/KitchenDataContext";
 import { MealNoticeLine } from "@/ui/widgets/kitchen/ToReview";
-import { LUMI_ART } from "@/ui/lumi/Lumi";
+import { LumiHalo } from "@/ui/lumi/Lumi";
 import { useMeals } from "./MealsContext";
 import { useFinishCooking } from "./useFinishCooking";
 
@@ -121,8 +121,7 @@ export function MealPlanWidget() {
   if (rows.length === 0 && liveGhosts.length === 0) {
     return (
       <div className="card flex flex-col items-center gap-3 px-5 py-6 text-center">
-        {/* eslint-disable-next-line @next/next/no-img-element -- a small static SVG */}
-        <img src={LUMI_ART.sleeping} alt="" width={96} height={96} className="size-sticker-lg" />
+        <LumiHalo state="sleep" size="lumi" />
         <p className="text-body font-medium">{t("empty")}</p>
         <p className="text-small text-text-muted">{t("emptyHint")}</p>
       </div>
@@ -165,7 +164,7 @@ export function MealPlanWidget() {
                 type="button"
                 onClick={() => actions.openRecipe(entry.meal.id, { focus: true })}
                 aria-label={t("openLabel", { title: entry.meal.title })}
-                className="min-h-tap text-left font-heading text-title font-medium text-text-default underline decoration-border-stitch decoration-2 underline-offset-4"
+                className="min-h-tap text-left font-heading text-title font-medium text-text-default underline decoration-accent-default decoration-2 underline-offset-4"
               >
                 {entry.meal.title}
               </button>

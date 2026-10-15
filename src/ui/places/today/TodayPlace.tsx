@@ -1,11 +1,11 @@
 "use client";
 /**
- * Today: the focal hero (Lumi, the greeting and the date, on a stitched card with washi tape;
+ * Today: the focal hero (Lumi, the greeting and the date, on the soft pink → peach hero card;
  * 0038: one focal point, exaggerated scale), the allergy confirmations banner (0019 AI7), then a
  * card from each place that adds one, in dock order, each in its own error boundary (0018).
  */
 import { useFormatter, useTranslations } from "next-intl";
-import { LUMI_ART } from "@/ui/lumi/Lumi";
+import { LumiHalo } from "@/ui/lumi/Lumi";
 import { ConfirmBanner } from "@/ui/settings/ConfirmPrompt";
 import { useKitchenData } from "@/ui/sync/KitchenDataContext";
 import { PlaceErrorBoundary } from "../PlaceErrorBoundary";
@@ -25,8 +25,7 @@ export function TodayPlace({ onRetry }: PlaceProps) {
 
   return (
     <>
-      <div className="card-stitched relative mt-3 flex items-center gap-4 px-6 py-6">
-        <span aria-hidden="true" className="washi-tape" data-tone="peach" />
+      <div className="hero mt-3 flex items-center gap-4 px-6 py-6">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <p className="eyebrow" suppressHydrationWarning>
             {format.dateTime(now, { weekday: "long", month: "long", day: "numeric" })}
@@ -36,8 +35,7 @@ export function TodayPlace({ onRetry }: PlaceProps) {
           </h2>
           <p className="text-small text-text-muted">{t("intro")}</p>
         </div>
-        {/* eslint-disable-next-line @next/next/no-img-element -- a small static SVG */}
-        <img src={LUMI_ART.idle} alt="" width={96} height={96} className="size-sticker-lg shrink-0" />
+        <LumiHalo state="idle" size="lumi-lg" />
       </div>
       <ConfirmBanner />
       {cards.map((p) => {

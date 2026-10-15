@@ -4,7 +4,9 @@
 
 What the user sees and does; no technology. Where an outstanding question matters, the design follows its Rec, cites the ID and notes the alternative. "Kitchen" is the assistant's name (0020); Levi is Vero's husband; all wording is placeholder copy.
 
-> **Kitchen OS update (2026-10-15, 0042 / 0045).** The look is now the Kitchen OS layout with RecipeCat's cream style, light and dark: see [`docs/design/visual-direction.md`](../design/visual-direction.md) for the direction, the token table, contrast results, Lumi and the art inventory. The tokens and art are ported from Vero's private recipe-cat repo; this repo is public (0037), so Vero confirms they may be published before any push. **The assistant is now Lumi, a cat (she/her, KOS10)**; "Kitchen" stays the name of the Kitchen place. The flows below still describe the current widget workspace and dock; they get rewritten for the five-place dock (Today, Kitchen, Plan, Meals, List) with Phase 3. Until then, where this doc says "Kitchen" replies, read Lumi.
+> **Bright look (2026-10-15, 0048).** The look is the Kitchen OS layout (0042) in the bright prototype style, **light only**: warm white, white cards on soft shadows, plum ink, coral → orange pill buttons with ink text, a soft tint per place, emoji food tiles and the line-drawn Lumi. See [`docs/design/visual-direction.md`](../design/visual-direction.md) for the tokens, contrast results, the button fix, Lumi and the emoji tiles. Layout and behaviour below are unchanged by the reskin.
+>
+> **Kitchen OS update (2026-10-15, 0042 / 0045).** The tokens are adapted from Vero's private recipe-cat repo; this repo is public (0037), so Vero confirms they may be published before any push. **The assistant is now Lumi, a cat (she/her, KOS10)**; "Kitchen" stays the name of the Kitchen place. The flows below still describe the current widget workspace and dock; they get rewritten for the five-place dock (Today, Kitchen, Plan, Meals, List) with Phase 3. Until then, where this doc says "Kitchen" replies, read Lumi.
 
 ---
 
@@ -252,7 +254,7 @@ On the first real test a pasted list was lost. A list is **never dropped silentl
 - **Ticked rows** are muted and struck through and **stay put** (§2); next visit they sit at the bottom of their group. Anyone can untick. **Done shopping** appears once something is ticked.
 - **Appears** on its first item; **focused** by any list change (§2). **Order:** Kitchen, Shopping list, Meal plan, with Meal ideas or Recipe above when open; desktop the same, all expanded. A phone reopens with the last-focused widget on top, so the list is waiting at the store.
 - **States:** *Loading:* placeholders on first appearance. *Empty:* "Your list is clear. Tell me what you need." (only in the session it was emptied). *Error:* "Couldn't load your list · Retry". A failed tick puts the box back with "Couldn't save that · Retry". *Stale/offline:* "Offline · showing your list as of 6:42 pm. Ticking is paused until you're back online." (read-only offline, 0017).
-- **Visual:** existing tokens only (cream, 0042): `color.border.strong` box, `color.accent.default` fill, `color.text.muted` + strikethrough when ticked.
+- **Visual:** existing tokens only (bright, 0048): round `color.border.strong` box, `color.success.fill` with a white tick when ticked, `color.text.muted` + strikethrough.
 
 ### Getting items on
 | From | What happens |

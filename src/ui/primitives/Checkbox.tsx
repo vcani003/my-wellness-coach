@@ -1,6 +1,6 @@
 "use client";
 /**
- * A round "got it" check (Kitchen OS list box, cream colours). A real native checkbox sits on top,
+ * A round "got it" check (Kitchen OS list box, bright colours: green fill, white tick). A real native checkbox sits on top,
  * invisible, so it keeps its role, name, keyboard and form behaviour; the drawn box shows the state
  * with a tick shape as well as colour (WCAG 1.4.1), and the focus ring appears on the box. The
  * browser's own tick colour isn't used, so it reads the same in both themes (visual-direction §6).

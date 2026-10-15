@@ -13,7 +13,7 @@ import type { PastMeal } from "@/contracts/past-meals";
 import { useAskLumi } from "@/ui/chat/AskLumi";
 import { useFormatMsg } from "@/ui/chat/format-msg";
 import { actorName, byOther, sentenceCase } from "@/ui/fallbacks";
-import { LUMI_ART } from "@/ui/lumi/Lumi";
+import { LumiHalo } from "@/ui/lumi/Lumi";
 import { CloseIcon, MakeAgainIcon, SearchIcon, SparkleIcon } from "@/ui/primitives/icons";
 import { useKitchenData } from "@/ui/sync/KitchenDataContext";
 import { AllergenBadge } from "./AllergenBadge";
@@ -45,9 +45,8 @@ function IdeasSection() {
       {session.ideas ? (
         <MealIdeasWidget />
       ) : (
-        <div className="card-stitched relative flex items-center gap-4 px-6 py-6">
-          {/* eslint-disable-next-line @next/next/no-img-element -- a small static SVG */}
-          <img src={LUMI_ART.chef} alt="" width={96} height={96} className="size-sticker-lg shrink-0" />
+        <div className="card flex items-center gap-4 px-6 py-6">
+          <LumiHalo state="idle" size="lumi-lg" />
           <div className="flex flex-col items-start gap-3">
             <p className="text-body font-medium">{t("emptyBody")}</p>
             <button type="button" disabled={!canAsk} onClick={() => ask(t("ask"))} className="btn btn-primary">
@@ -114,7 +113,7 @@ function CookedBefore() {
             placeholder={t("searchPlaceholder")}
             autoComplete="off"
             enterKeyHint="search"
-            className="min-h-tap w-full rounded-button border-2 border-border-strong bg-surface-raised py-2 pr-7 pl-7 text-body placeholder:text-text-muted"
+            className="min-h-tap w-full rounded-button border-[1.5px] border-border-strong bg-surface-raised py-2 pr-7 pl-7 text-body placeholder:text-text-muted"
           />
           {query && (
             <button type="button" onClick={() => setQuery("")} aria-label={t("clear")} className="btn-icon absolute top-1/2 right-0 -translate-y-1/2">
