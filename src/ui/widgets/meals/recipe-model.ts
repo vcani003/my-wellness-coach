@@ -14,6 +14,8 @@ export interface RecipeRow {
   amount?: string;
   group: IngredientGroup;
   allergenFlags: AllergenFlag[];
+  /** Added or changed by the latest refinement (a brief highlight). */
+  changed?: true;
 }
 
 export interface RecipeDisplay {
@@ -27,6 +29,10 @@ export interface RecipeDisplay {
   /** writing = parts still arriving; saved = ticks and "Add Need items" work. */
   status: "writing" | "saved" | "failed" | "missing";
   version?: number;
+  /** Step positions added or changed by the latest refinement (a brief highlight). */
+  changedSteps?: number[];
+  /** Changes with each refinement, so a line changed again highlights again. */
+  changeKey?: string;
 }
 
 const same = (a: string, b: string) => a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase();
@@ -51,16 +57,24 @@ export function fromView(view: RecipeView): RecipeDisplay {
 }
 
 export function fromDraft(draft: RecipeDraft): RecipeDisplay {
+  const changedIngredients = new Set(draft.changed?.ingredients ?? []);
   return {
     title: draft.title,
     source: draft.source ?? "ai",
     allergenFlags: draft.allergenFlags,
-    ingredients: draft.ingredients.map(({ name, amount, group, allergenFlags }) => ({ name, ...(amount ? { amount } : {}), group, allergenFlags })),
+    ingredients: draft.ingredients.map(({ name, amount, group, allergenFlags }, i) => ({
+      name,
+      ...(amount ? { amount } : {}),
+      group,
+      allergenFlags,
+      ...(changedIngredients.has(i) ? { changed: true as const } : {}),
+    })),
     steps: draft.steps.filter((s) => typeof s === "string"),
     basics: draft.basics,
     basicsNote: draft.basicsNote,
     status: draft.status,
     version: draft.version,
+    ...(draft.changed ? { changedSteps: draft.changed.steps, changeKey: draft.key } : {}),
   };
 }
 

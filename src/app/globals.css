@@ -657,6 +657,33 @@
       transform: translateY(var(--motion-distance));
     }
   }
+
+  /*
+   * A recipe line a refinement just added or changed (ai.md §5 edit mode): the butter wash, briefly,
+   * then it settles back. With reduced motion there's no fade: the wash just stays on those lines.
+   */
+  [data-recipe-changed] {
+    border-radius: var(--radius-sm);
+    animation: recipe-changed 2600ms var(--ease-gentle) both;
+  }
+  @keyframes recipe-changed {
+    0% {
+      background: transparent;
+    }
+    15%,
+    65% {
+      background: var(--color-highlight-bg);
+    }
+    100% {
+      background: transparent;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    [data-recipe-changed] {
+      animation: none;
+      background: var(--color-highlight-bg);
+    }
+  }
 }
 
 /*

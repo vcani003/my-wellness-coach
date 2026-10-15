@@ -230,7 +230,11 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
                 const showBy = by && isTicked(row) && pendingTicks[tickKey(row.name)] === undefined;
                 const name = sentenceCase(row.name, locale);
                 return (
-                  <div key={`${g.key}-${row.name}`} className="flex flex-col py-1">
+                  <div
+                    key={`${g.key}-${row.name}${row.changed ? `-${recipe?.changeKey}` : ""}`}
+                    className="flex flex-col py-1"
+                    data-recipe-changed={row.changed ? "" : undefined}
+                  >
                     <label className="flex min-h-tap cursor-pointer items-center gap-3 rounded-md px-1">
                       <Checkbox
                         checked={isTicked(row)}
@@ -297,15 +301,22 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
             {t("steps")}
           </h3>
           <ol className="flex flex-col gap-3 text-body">
-            {recipe.steps.map((s, i) => (
-              <li key={i} className="flex items-start gap-3">
-                {/* The number is the list's own; this circle is how it looks (Kitchen OS steps). */}
-                <span aria-hidden="true" className="grid size-avatar shrink-0 place-items-center rounded-full border-2 border-border-outline bg-surface-soft text-small font-strong">
-                  {i + 1}
-                </span>
-                <span className="pt-1">{s}</span>
-              </li>
-            ))}
+            {recipe.steps.map((s, i) => {
+              const changed = recipe.changedSteps?.includes(i);
+              return (
+                <li
+                  key={changed ? `${i}-${recipe.changeKey}` : i}
+                  className="flex items-start gap-3"
+                  data-recipe-changed={changed ? "" : undefined}
+                >
+                  {/* The number is the list's own; this circle is how it looks (Kitchen OS steps). */}
+                  <span aria-hidden="true" className="grid size-avatar shrink-0 place-items-center rounded-full border-2 border-border-outline bg-surface-soft text-small font-strong">
+                    {i + 1}
+                  </span>
+                  <span className="pt-1">{s}</span>
+                </li>
+              );
+            })}
           </ol>
         </section>
       )}

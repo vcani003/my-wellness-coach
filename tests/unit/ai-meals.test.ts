@@ -20,6 +20,7 @@ import { getMealAI, notConfiguredMealAI } from "@/ai/meals";
 import { isBasic } from "@/ai/meals/basics";
 import { allergenExcusedIds, LOW_EXCUSES_ALLERGEN, rankUseItUp } from "@/ai/meals/use-it-up";
 import type { IdeasOutput, RecipeOutput } from "@/ai/meals/model-output";
+import { RECIPE_INSTRUCTIONS, RECIPE_REFINE_INSTRUCTIONS } from "@/ai/meals/prompts";
 import type { RecipeEvent, RecipeInput } from "@/ai/meals/types";
 import { computeAllergenFlags } from "@/shared/profile/allergens";
 import { ideasInput, kitchen, LEVI_SEAFOOD, mealContext, NOW, restriction, SHRIMP_KITCHEN, VERO_WEEK } from "@/ai/eval/fixtures";
@@ -399,13 +400,19 @@ describe("recipes", () => {
   });
 
   it("refining in chat sends the current recipe and the change, and saves a new version for the same meal", async () => {
-    const { meals, calls } = setup({ json: { ...OMELETTE, steps: ["Whisk the eggs.", "Cook on the stove, covered, until set."], reply: "Here it is with no oven." } });
+    const { reply: _r, ...body } = OMELETTE;
+    void _r;
+    const { meals, calls } = setup({
+      json: { mode: "rewrite", edits: [], recipe: { ...body, steps: ["Whisk the eggs.", "Cook on the stove, covered, until set."] }, reply: "Here it is with no oven." },
+    });
     const first = await setup({ json: OMELETTE }).meals.generateRecipe(recipeInput());
     if (!first.ok) throw new Error("first recipe failed");
     const result = await meals.generateRecipe(recipeInput({ refine: { messageId: "msg-9", text: "no oven please", current: first.recipe } }));
     const text = userText(calls[0].body);
+    expect(calls).toHaveLength(1);
+    expect(systemBlocks(calls[0].body)[1].text).toBe(RECIPE_REFINE_INSTRUCTIONS);
     expect(text).toContain("<change_request>\nno oven please\n</change_request>");
-    expect(text).toContain("<current_recipe>\nTitle: Spinach omelette\nServings: 2\nIngredients:\n- 4 eggs\n");
+    expect(text).toContain("<current_recipe>\nTitle: Spinach omelette\nServings: 2\nIngredients:\n1. 4 eggs [i3]\n");
     expect(result).toMatchObject({
       ok: true,
       reply: "Here it is with no oven.",
@@ -416,6 +423,101 @@ describe("recipes", () => {
   it("a recipe with no ingredients or steps is unusable: nothing proposed", async () => {
     const result = await setup({ json: { ...OMELETTE, steps: [] } }).meals.generateRecipe(recipeInput());
     expect(result).toMatchObject({ ok: false, reason: "failed" });
+  });
+});
+
+describe("refinement edit mode (ai.md §5): small changes edit the recipe in place", () => {
+  const blank = { name: "", amount: "", item: "", text: "" };
+  async function current() {
+    const first = await setup({ json: OMELETTE }).meals.generateRecipe(recipeInput());
+    if (!first.ok) throw new Error("first recipe failed");
+    return first.recipe;
+  }
+  const refine = async (text: string) => recipeInput({ refine: { messageId: "msg-9", text, current: await current() } });
+
+  it("'I'm using baby carrots too': one call, one `edit` part; only the added and edited lines change", async () => {
+    const before = await current();
+    const { meals, calls } = setup({
+      json: {
+        mode: "edit",
+        edits: [
+          { ...blank, op: "add_ingredient", at: 2, name: "baby carrots", amount: "1 handful" },
+          { ...blank, op: "change_step", at: 2, text: "Wilt the spinach and baby carrots in the oil." },
+        ],
+        recipe: null,
+        reply: "Added baby carrots and worked them into step 2.",
+      },
+    });
+    const events = await collect(meals.streamRecipe(await refine("I'm using baby carrots too")));
+    expect(calls).toHaveLength(1);
+    expect(events.map((e) => (e.type === "part" ? e.part : "done"))).toEqual(["edit", "done"]);
+    const edit = events[0].type === "part" && events[0].part === "edit" ? events[0].data : null;
+    expect(edit?.changed).toEqual({ ingredients: [2], steps: [1] });
+    expect(edit?.ingredients.map((i) => i.name)).toEqual(["eggs", "spinach", "baby carrots", "feta", "salt", "butter", "olive oil"]);
+    const done = events[1];
+    if (done.type !== "done" || !done.result.ok) throw new Error("refine failed");
+    const r = done.result;
+    expect(r.reply).toBe("Added baby carrots and worked them into step 2.");
+    // Everything not edited is exactly as it was.
+    expect(r.recipe.steps[0]).toBe(before.steps[0]);
+    expect(r.recipe.steps[2]).toBe(before.steps[2]);
+    expect(r.recipe.ingredients.filter((i) => i.name !== "baby carrots")).toEqual(before.ingredients);
+    expect(r.recipe.title).toBe(before.title);
+    expect(r.recipe.servings).toBe("2");
+    expect(r.recipe.summary).toBe(before.summary);
+    expect(r.operation).toMatchObject({ opId: "msg-9:recipe", evidence: "I'm using baby carrots too", target: { mealId: "meal-1" } });
+    expect(RecipeSave.safeParse(r.operation).success).toBe(true);
+  });
+
+  it("allergen flags are recomputed by code over the edited recipe (0019)", async () => {
+    const { meals } = setup({
+      json: { mode: "edit", edits: [{ ...blank, op: "add_ingredient", at: 0, name: "shrimp", amount: "100 g", item: "i1" }], recipe: null, reply: "Added the shrimp." },
+    });
+    const r = await meals.generateRecipe(await refine("I'm using the shrimp too"));
+    if (!r.ok) throw new Error("refine failed");
+    expect(r.recipe.ingredients[0]).toMatchObject({ name: "shrimp", itemId: "item-1", group: "kitchen" });
+    expect(r.recipe.ingredients[0].allergenFlags[0]).toMatchObject({ userId: "u-levi", subject: "seafood" });
+    expect(r.recipe.allergenFlags.map((f) => f.ingredient)).toContain("shrimp");
+  });
+
+  it("edits that don't check out (a position out of range) fall back to a full rewrite, never a failure", async () => {
+    const { meals, calls, logs } = setup(
+      { json: { mode: "edit", edits: [{ ...blank, op: "remove_step", at: 9 }], recipe: null, reply: "Skipped it." } },
+      { json: { ...OMELETTE, steps: ["Whisk the eggs.", "Cook and serve."], reply: "Here's the shorter version." } },
+    );
+    const events = await collect(meals.streamRecipe(await refine("skip step 9")));
+    expect(calls).toHaveLength(2);
+    expect(systemBlocks(calls[1].body)[1].text).toBe(RECIPE_INSTRUCTIONS);
+    expect(logs.some((l) => l.event === "ai.error" && /edits rejected/.test(l.reason))).toBe(true);
+    expect(events.some((e) => e.type === "part" && e.part === "edit")).toBe(false);
+    const done = events.at(-1);
+    expect(done?.type === "done" && done.result).toMatchObject({ ok: true, reply: "Here's the shorter version.", recipe: { steps: ["Whisk the eggs.", "Cook and serve."] } });
+  });
+
+  it("an answer that can't be read also falls back to the rewrite; a refusal doesn't (no second call)", async () => {
+    const unreadable = setup({ json: { oops: true } }, { json: OMELETTE });
+    expect(await unreadable.meals.generateRecipe(await refine("no feta"))).toMatchObject({ ok: true, reply: OMELETTE.reply });
+    expect(unreadable.calls).toHaveLength(2);
+    const refused = setup({ json: {}, stop: "refusal" }, { json: OMELETTE });
+    expect(await refused.meals.generateRecipe(await refine("no feta"))).toMatchObject({ ok: false, reason: "refusal", reply: MEAL_REFUSAL_REPLY });
+    expect(refused.calls).toHaveLength(1);
+  });
+
+  it("no edits (a question answered 'yes, that's fine'): nothing to save, no part", async () => {
+    const { meals } = setup({ json: { mode: "edit", edits: [], recipe: null, reply: "Yes, a nonstick pan is fine." } });
+    const events = await collect(meals.streamRecipe(await refine("is a nonstick pan ok?")));
+    expect(events.map((e) => e.type)).toEqual(["done"]);
+    expect(events[0].type === "done" && events[0].result).toMatchObject({ ok: true, unchanged: true, reply: "Yes, a nonstick pan is fine." });
+  });
+
+  it("a broad change ('make it vegetarian') rewrites: parts stream as for a fresh recipe", async () => {
+    const { reply: _r, ...body } = OMELETTE;
+    void _r;
+    const { meals, calls } = setup({ json: { mode: "rewrite", edits: [], recipe: { ...body, title: "Veggie omelette" }, reply: "Made it vegetarian." } });
+    const events = await collect(meals.streamRecipe(await refine("make it vegetarian")));
+    expect(calls).toHaveLength(1);
+    expect(events.map((e) => (e.type === "part" ? e.part : "done"))).toEqual(["meta", ...Array(6).fill("ingredient"), ...Array(3).fill("step"), "basics", "done"]);
+    expect(events.at(-1)).toMatchObject({ type: "done", result: { ok: true, reply: "Made it vegetarian.", recipe: { title: "Veggie omelette" } } });
   });
 });
 

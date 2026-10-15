@@ -62,7 +62,8 @@ async function bodiesByTask(): Promise<Record<string, Body>> {
   const messages: MessagesApi = { create: vi.fn(async (body) => ((out[task] = body as unknown as Body), msg)) };
   const streaming: StreamingMessagesApi = {
     stream: vi.fn((body) => {
-      out[task] = body as unknown as Body;
+      // The first call per task (a refinement that can't be read falls back to a second call).
+      out[task] ??= body as unknown as Body;
       return { async *textDeltas() {}, finalMessage: async () => msg };
     }),
   };
@@ -89,6 +90,11 @@ async function bodiesByTask(): Promise<Record<string, Body>> {
   await meals.generateMealIdeas(ideasInput(SHRIMP_KITCHEN, null));
   task = "recipe";
   await meals.generateRecipe(recipe);
+  task = "recipe-refine";
+  await meals.generateRecipe({
+    ...recipe,
+    refine: { messageId: "m", text: "no garlic", current: { title: "Spinach omelette", ingredients: [], steps: ["Cook."], servings: "2" } },
+  });
   task = "recipe-paste";
   await meals.readPastedRecipe({ ...recipe, messageId: "m", text: "Omelette: 2 eggs. Whisk and cook." });
   return out;
@@ -101,10 +107,10 @@ describe("structured-output schema limits (every task, the exact body sent)", ()
   });
 
   it("calls every task", async () => {
-    expect(Object.keys(await bodiesByTask()).sort()).toEqual(["ideas", "interpret", "recipe", "recipe-paste", "reword"]);
+    expect(Object.keys(await bodiesByTask()).sort()).toEqual(["ideas", "interpret", "recipe", "recipe-paste", "recipe-refine", "reword"]);
   });
 
-  it.each(["interpret", "reword", "ideas", "recipe", "recipe-paste"])("%s stays well under the union and optional limits", async (task) => {
+  it.each(["interpret", "reword", "ideas", "recipe", "recipe-refine", "recipe-paste"])("%s stays well under the union and optional limits", async (task) => {
     const schemas = strictSchemas((await bodiesByTask())[task]);
     const unions = schemas.reduce((n: number, s) => n + countUnions(s), 0);
     const optionals = schemas.reduce((n: number, s) => n + countOptionals(s), 0);

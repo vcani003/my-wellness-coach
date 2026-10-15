@@ -73,11 +73,13 @@ export function renderRecipeRequest(input: RecipeInput, now: Date): string {
   const parts = [...common(input, now), mealSection(input)];
   if (input.refine) {
     const c = input.refine.current;
+    const { toLabel } = labelMaps(input);
     const recipe = [
       `Title: ${c.title}`,
       ...(c.servings ? [`Servings: ${c.servings}`] : []),
       "Ingredients:",
-      ...c.ingredients.map((i) => `- ${i.amount ? `${i.amount} ` : ""}${i.name}`),
+      // Numbered, so an edit can say which line it changes (ai.md §5 edit mode).
+      ...c.ingredients.map((i, n) => `${n + 1}. ${i.amount ? `${i.amount} ` : ""}${i.name}${i.itemId && toLabel.get(i.itemId) ? ` [${toLabel.get(i.itemId)}]` : ""}`),
       "Steps:",
       ...c.steps.map((s, i) => `${i + 1}. ${s}`),
     ].join("\n");

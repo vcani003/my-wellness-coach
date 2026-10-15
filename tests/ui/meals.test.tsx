@@ -19,6 +19,7 @@ import { MealIdeasWidget } from "@/ui/widgets/meals/MealIdeasWidget";
 import { MealPlanWidget } from "@/ui/widgets/meals/MealPlanWidget";
 import { MealsProvider, type MealActions, type MealNotice } from "@/ui/widgets/meals/MealsContext";
 import { RecipeScreen } from "@/ui/widgets/meals/RecipeScreen";
+import { fromDraft } from "@/ui/widgets/meals/recipe-model";
 import { initialMealsSession, mealsReducer, type MealsSession } from "@/ui/widgets/meals/session";
 import { UpdateKitchenSheet } from "@/ui/widgets/meals/UpdateKitchenSheet";
 import { fakeActions, saved } from "../support/fake-actions";
@@ -164,6 +165,71 @@ describe("meal session reducer (the turn stream)", () => {
     expect(mealsReducer(done, { type: "streamEnded", key: "m1" }).recipes.meal1).toMatchObject({ status: "saved", version: 1 });
   });
 
+  describe("a refinement applied as edits (`edit` part, ai.md §5)", () => {
+    const ingredient = (name: string, group: "kitchen" | "need" | "basic" = "need") => ({ name, amount: null, itemId: null, group, allergenFlags: [] });
+    const v1: StreamEvent[] = [
+      { type: "recipe", mealId: "meal1", part: "meta", data: { title: "Stew", summary: "", servings: "2", source: "ai", allergenFlags: [] } },
+      { type: "recipe", mealId: "meal1", part: "ingredient", data: { ...ingredient("chicken"), index: 0 } },
+      { type: "recipe", mealId: "meal1", part: "ingredient", data: { ...ingredient("onion"), index: 1 } },
+      { type: "recipe", mealId: "meal1", part: "step", data: { index: 0, text: "Brown the chicken." } },
+      { type: "recipe", mealId: "meal1", part: "step", data: { index: 1, text: "Add the onion and simmer." } },
+      { type: "recipe.saved", mealId: "meal1", recipeId: "r1", version: 1, newVersion: 5 },
+    ];
+    const edit: StreamEvent = {
+      type: "recipe",
+      mealId: "meal1",
+      part: "edit",
+      data: {
+        title: "Stew",
+        summary: "",
+        servings: "2",
+        source: "ai",
+        allergenFlags: [],
+        ingredients: [ingredient("chicken"), ingredient("onion"), ingredient("baby carrots")],
+        steps: ["Brown the chicken.", "Add the onion and baby carrots and simmer."],
+        basics: [],
+        note: null,
+        changed: { ingredients: [2], steps: [1] },
+      },
+    };
+    const saved1 = mealsReducer(feed(v1, "m1"), { type: "streamEnded", key: "m1" });
+
+    it("keeps the recipe on screen: no blank draft at any point, only the edited lines change", () => {
+      // The refinement's stream starts: nothing about the shown recipe changes until the edit arrives.
+      const started = feed([{ type: "status", phase: "recipe" }], "m2", saved1);
+      expect(started.recipes.meal1).toBe(saved1.recipes.meal1);
+      const edited = feed([edit], "m2", started);
+      const d = edited.recipes.meal1;
+      expect(d.ingredients.map((i) => i.name)).toEqual(["chicken", "onion", "baby carrots"]);
+      expect(d.steps).toEqual(["Brown the chicken.", "Add the onion and baby carrots and simmer."]);
+      expect(d.title).toBe("Stew");
+      expect(d.changed).toEqual({ ingredients: [2], steps: [1] });
+      const shown = fromDraft(d);
+      expect(shown.ingredients.map((r) => Boolean(r.changed))).toEqual([false, false, true]);
+      expect(shown.changedSteps).toEqual([1]);
+      const saved = mealsReducer(feed([{ type: "recipe.saved", mealId: "meal1", recipeId: "r1", version: 2, newVersion: 6 }], "m2", edited), { type: "streamEnded", key: "m2" });
+      expect(saved.recipes.meal1).toMatchObject({ status: "saved", version: 2, changed: { ingredients: [2], steps: [1] } });
+    });
+
+    it("an edit that's never saved puts the previous recipe back (not 'Try again')", () => {
+      const ended = mealsReducer(feed([edit], "m2", saved1), { type: "streamEnded", key: "m2" });
+      expect(ended.recipes.meal1).toMatchObject({ status: "saved", version: 1, steps: ["Brown the chicken.", "Add the onion and simmer."] });
+      // With no recipe in the session (opened from the server), the saved one shows again.
+      expect(mealsReducer(feed([edit], "m2"), { type: "streamEnded", key: "m2" }).recipes.meal1).toBeUndefined();
+    });
+
+    it("a malformed edit is dropped, never thrown (0018)", () => {
+      expect(feed([{ ...edit, data: { nonsense: true } } as StreamEvent], "m2", saved1)).toBe(saved1);
+    });
+
+    it("a full rewrite still starts a fresh draft (as before) and clears the marks", () => {
+      const edited = feed([edit], "m2", saved1);
+      const rewrite = feed([v1[0]], "m3", edited);
+      expect(rewrite.recipes.meal1).toMatchObject({ key: "m3", ingredients: [], steps: [] });
+      expect(rewrite.recipes.meal1.changed).toBeUndefined();
+    });
+  });
+
   it("update-kitchen opens the sheet's request", () => {
     const s = feed([{ type: "update-kitchen", mealId: "meal1", title: "Omelette", items: [{ itemId: "eggs", name: "eggs" }] }]);
     expect(s.updateKitchen).toEqual({ mealId: "meal1", title: "Omelette", items: [{ itemId: "eggs", name: "eggs" }] });
@@ -262,6 +328,41 @@ describe("Recipe", () => {
     expect(screen.getByRole("button", { name: "Add to plan" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start cooking" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Done cooking" })).not.toBeInTheDocument();
+  });
+
+  it("a refinement's changed lines are marked for a brief highlight; the rest stay as they were", () => {
+    const edited = feed(
+      [
+        {
+          type: "recipe",
+          mealId: "meal1",
+          part: "edit",
+          data: {
+            title: "Spinach omelette",
+            summary: "",
+            servings: "2",
+            source: "ai",
+            allergenFlags: [],
+            ingredients: [
+              { name: "eggs", amount: "3", itemId: "eggs", group: "kitchen", allergenFlags: [] },
+              { name: "baby carrots", amount: "1 handful", itemId: null, group: "need", allergenFlags: [] },
+            ],
+            steps: ["Whisk the eggs.", "Cook with the baby carrots."],
+            basics: [],
+            note: null,
+            changed: { ingredients: [1], steps: [1] },
+          },
+        },
+        { type: "recipe.saved", mealId: "meal1", recipeId: "rec1", version: 2, newVersion: 9 },
+      ],
+      "m2",
+    );
+    show(<RecipeScreen mealId="meal1" initialRecipe={view} />, { state, session: edited });
+    const carrots = screen.getByRole("checkbox", { name: "Baby carrots" }).closest("[data-recipe-changed]");
+    expect(carrots).not.toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Eggs" }).closest("[data-recipe-changed]")).toBeNull();
+    const steps = screen.getAllByRole("listitem");
+    expect(steps.map((li) => li.hasAttribute("data-recipe-changed"))).toEqual([false, true]);
   });
 
   it("a tick shows at once and is saved; a refused tick goes back and offers Retry", async () => {

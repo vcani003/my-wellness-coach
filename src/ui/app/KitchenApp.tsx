@@ -254,9 +254,10 @@ function KitchenScreen({
         meals.onEvent(event, id, "chat");
       },
       onTurnEnd({ id, reply, result, error }) {
-        if (id) meals.onStreamEnd(id);
+        const recipeEdited = id ? meals.onStreamEnd(id) : false;
         const parts = [reply];
         if (error) parts.push(t("chat.errorNothingChanged"));
+        else if (recipeEdited) parts.push(t("meals.recipe.announceUpdated"));
         else if (result?.applied.some((a) => a.refs.length)) parts.push(t("chat.announceKitchenUpdated"));
         // A batch choice waits in the receipt (0025): say so, since nothing else points to it.
         if (result && !error) {

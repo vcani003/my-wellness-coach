@@ -45,9 +45,10 @@ function saved() {
 
 describe("refining builds on the latest saved version", () => {
   it("reads title and servings back from the saved text", () => {
-    expect(savedRecipeMeta(saved().text, "ai")).toEqual({ title: "Pasta bake", servings: "4" });
-    expect(savedRecipeMeta("Pasta bake\nA bake.\n\nIngredients", "ai")).toEqual({ title: "Pasta bake", servings: null });
-    expect(savedRecipeMeta("Serves 4\nanything pasted", "user")).toEqual({ title: null, servings: null });
+    expect(savedRecipeMeta(saved().text, "ai")).toEqual({ title: "Pasta bake", servings: "4", summary: "A weeknight bake from what Ana has." });
+    expect(savedRecipeMeta("Pasta bake\nA bake.\n\nIngredients", "ai")).toEqual({ title: "Pasta bake", servings: null, summary: "A bake." });
+    expect(savedRecipeMeta("Pasta bake\n\nServes 2\n\nIngredients", "ai")).toEqual({ title: "Pasta bake", servings: "2", summary: null });
+    expect(savedRecipeMeta("Serves 4\nanything pasted", "user")).toEqual({ title: null, servings: null, summary: null });
   });
 
   it("the refine context keeps servings, so scaling has a number to scale from (regression: it was always null)", () => {
@@ -62,7 +63,8 @@ describe("refining builds on the latest saved version", () => {
       { ...ctx, meal: { mealId: "meal-bake", title: "Pasta bake" }, refine: { messageId: "m-2", text: "I only have 2 cups of penne, not 4", current } },
       NOW,
     );
-    expect(prompt).toContain("<current_recipe>\nTitle: Pasta bake\nServings: 4\nIngredients:\n- 4 cups penne");
+    // Numbered, with the kitchen label, so an edit can name the line (ai.md §5 edit mode).
+    expect(prompt).toContain("<current_recipe>\nTitle: Pasta bake\nServings: 4\nIngredients:\n1. 4 cups penne [i1]\n2. 2 onions [i2]\n3. 300 ml cream\nSteps:\n1. Boil the penne.");
     expect(prompt).toContain("<change_request>\nI only have 2 cups of penne, not 4\n</change_request>");
   });
 });

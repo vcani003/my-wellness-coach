@@ -49,6 +49,13 @@ export interface RecipeDraft {
   /** writing → saved (`recipe.saved`), or failed (the stream ended without saving: parts dropped). */
   status: "writing" | "saved" | "failed";
   version?: number;
+  /**
+   * A refinement applied in place (`edit` part): positions of the lines it added or changed, for
+   * a brief highlight. Absent for a recipe written from scratch.
+   */
+  changed?: { ingredients: number[]; steps: number[] };
+  /** What was shown before an `edit` part, put back if that edit is never saved. */
+  previous?: RecipeDraft | null;
 }
 
 export interface UpdateKitchenRequest extends UpdateKitchenPrompt {
@@ -97,6 +104,50 @@ const Ingredient = z.object({
 });
 const Step = z.object({ index: z.number().int().nonnegative(), text: z.string() });
 const Basics = z.object({ basics: z.array(z.string()), note: Msg.nullish() });
+const Edit = z.object({
+  title: z.string(),
+  summary: z.string().optional().default(""),
+  source: z.enum(["ai", "user"]).optional(),
+  allergenFlags: z.array(AllergenFlag).optional().default([]),
+  ingredients: z.array(Ingredient.omit({ index: true })),
+  steps: z.array(z.string()),
+  basics: z.array(z.string()).optional().default([]),
+  note: Msg.nullish(),
+  changed: z.object({ ingredients: z.array(z.number().int()), steps: z.array(z.number().int()) }),
+});
+
+/**
+ * A refinement applied as edits: the whole new recipe replaces the shown one in place (nothing
+ * blanks), with the changed lines marked. The shown version is kept so an unsaved edit can be undone.
+ */
+function editDraft(existing: RecipeDraft | undefined, mealId: string, key: string, data: unknown): RecipeDraft | null {
+  const e = Edit.safeParse(data);
+  if (!e.success) return null;
+  const d = e.data;
+  const previous = existing && existing.key !== key ? { ...existing, previous: null } : (existing?.previous ?? null);
+  return {
+    mealId,
+    key,
+    title: d.title,
+    summary: d.summary,
+    source: d.source,
+    allergenFlags: d.allergenFlags,
+    ingredients: d.ingredients.map((i, index) => ({
+      index,
+      name: i.name,
+      group: i.group,
+      allergenFlags: i.allergenFlags,
+      ...(i.amount ? { amount: i.amount } : {}),
+      ...(i.itemId ? { itemId: i.itemId } : {}),
+    })),
+    steps: d.steps,
+    basics: d.basics,
+    basicsNote: d.note ?? null,
+    status: "writing",
+    changed: d.changed,
+    previous,
+  };
+}
 
 function emptyDraft(mealId: string, key: string): RecipeDraft {
   return { mealId, key, allergenFlags: [], ingredients: [], steps: [], basics: [], basicsNote: null, status: "writing" };
@@ -172,7 +223,16 @@ function onStream(state: MealsSession, key: string, event: StreamEvent): MealsSe
     }
     case "recipe": {
       const existing = state.recipes[event.mealId];
-      // A new stream for the meal (a refinement, or Try again) starts a fresh draft.
+      if (event.part === "edit") {
+        const edited = editDraft(existing, event.mealId, key, event.data);
+        if (!edited) return state;
+        return {
+          ...state,
+          recipes: { ...state.recipes, [event.mealId]: edited },
+          lastKind: { ...state.lastKind, [key]: { kind: "recipe", mealId: event.mealId } },
+        };
+      }
+      // A new stream for the meal (a full rewrite, or Try again) starts a fresh draft.
       let draft = existing && existing.key === key && existing.status === "writing" ? existing : emptyDraft(event.mealId, key);
       draft = recipePart(draft, event.part, event.data);
       return {
@@ -184,7 +244,7 @@ function onStream(state: MealsSession, key: string, event: StreamEvent): MealsSe
     case "recipe.saved": {
       const draft = state.recipes[event.mealId];
       if (!draft) return state;
-      return { ...state, recipes: { ...state.recipes, [event.mealId]: { ...draft, status: "saved", version: event.version } } };
+      return { ...state, recipes: { ...state.recipes, [event.mealId]: { ...draft, status: "saved", version: event.version, previous: null } } };
     }
     case "update-kitchen":
       return { ...state, updateKitchen: { mealId: event.mealId, title: event.title, items: event.items } };
@@ -202,9 +262,15 @@ export function mealsReducer(state: MealsSession, event: MealsEvent): MealsSessi
       let changed = false;
       for (const [mealId, d] of Object.entries(recipes)) {
         if (d.key === event.key && d.status === "writing") {
+          changed = true;
+          if (d.changed) {
+            // An edit that wasn't saved: the recipe is as it was (the chat reply says so).
+            if (d.previous) recipes[mealId] = d.previous;
+            else delete recipes[mealId];
+            continue;
+          }
           // No `recipe.saved` by the end: those parts weren't saved, so they go (backend §6).
           recipes[mealId] = { ...emptyDraft(mealId, d.key), title: d.title, status: "failed" };
-          changed = true;
         }
       }
       let ideas = state.ideas;

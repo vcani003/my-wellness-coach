@@ -7,7 +7,8 @@
  *   "add X and Y to the list [for Store]" · "the old X are gone" · "I defrosted the X" · "undo" ·
  *   "X goes under <category>" (CAT1; adds also get the shared keyword guess) ·
  *   "X goes in the pantry" / "put X in the fridge" (0041; adds get their place from the backend) ·
- *   "I was thinking a <dish>, with … I have X" / "I want to make <dish>" (MI1)
+ *   "I was thinking a <dish>, with … I have X" / "I want to make <dish>" (MI1) ·
+ *   with a recipe open: "I'm using X too", "no X", "use 3 X instead of 2", "skip step 2", "make it …"
  * and answers anything else politely with no changes. Everything it proposes still goes through
  * the real backend validate → apply path. The AI specialist replaces this folder (ai.md §9).
  */
@@ -18,6 +19,10 @@ import { mealOperations } from "../real/meal-ops";
 import type { ModelOutput } from "../real/model-output";
 import { CATEGORY_LABEL_EN, guessCategory } from "@/shared/item-category";
 import { matchIntent, type Segment } from "./patterns";
+
+/** The recipe changes the fake understands (fake/meals.ts `fakeEdits`), plus "make it vegetarian" (a rewrite). */
+export const FAKE_RECIPE_CHANGE =
+  /^(skip step \d+|use \d+ .+ instead of \d+|(no|without|i don'?t have( any)?) [a-z].*|i'?m (also )?using .+ too|make it .+)[.!?]*$/i;
 
 /**
  * Replies use verb-first wording ("moved the chicken thighs to the freezer"), never "the X is/are",
@@ -50,6 +55,21 @@ function itemOps(targets: Segment[], type: "item.update" | "item.use", fields: R
 export function createFakeInterpreter(recentChanges: RecentChangesLookup = async () => []): Interpreter {
   return {
     async interpret(req): Promise<InterpretResult> {
+      // A change to a recipe you have open ("no garlic", "skip step 2"): only when one exists.
+      if (FAKE_RECIPE_CHANGE.test(req.message.text.trim()) && req.state.meals.some((m) => m.recipe)) {
+        const out: ModelOutput = {
+          kind: "answer",
+          reply: "",
+          clarification: null,
+          rememberPreference: null,
+          listOfferAccepted: null,
+          generate: { what: "recipe_change", meal: "last_chosen" },
+          dish: null,
+          operations: [],
+        };
+        const m = mealOperations(out, req, new Date());
+        if (m.followUps.length) return { kind: "answer", proposal: null, reply: "", followUps: m.followUps };
+      }
       const intent = matchIntent(req.message.text);
       let operations: Op[] = [];
       let reply = "";

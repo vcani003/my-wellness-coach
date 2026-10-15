@@ -134,6 +134,8 @@ export function useMealsController(deps: {
   /** Choose streams: meal IDs each stream added, so its recipe can open the Recipe. */
   const addedMeals = useRef(new Map<string, Set<string>>());
   const focusedIdeas = useRef(new Set<string>());
+  /** Streams that changed a recipe in place (`edit` part), and whether it was saved. */
+  const editedIn = useRef(new Map<string, { mealId: string; saved: boolean }>());
 
   const onEvent = useCallback(
     (event: StreamEvent, key: string, via: "chat" | "choose") => {
@@ -152,6 +154,7 @@ export function useMealsController(deps: {
           break;
         }
         case "recipe":
+          if (event.part === "edit") editedIn.current.set(key, { mealId: event.mealId, saved: false });
           // Chose it in chat ("the first one"): the Recipe opens. A refinement doesn't move you.
           if (via === "chat" && event.part === "meta" && addedMeals.current.get(key)?.has(event.mealId)) {
             addedMeals.current.get(key)!.delete(event.mealId);
@@ -161,6 +164,10 @@ export function useMealsController(deps: {
         case "recipe.saved":
           knownVersion.current = Math.max(knownVersion.current, event.newVersion);
           void sync.check();
+          {
+            const edit = editedIn.current.get(key);
+            if (edit?.mealId === event.mealId) edit.saved = true;
+          }
           break;
         default:
           break;
@@ -169,10 +176,14 @@ export function useMealsController(deps: {
     [openRecipe, sync],
   );
 
-  const onStreamEnd = useCallback((key: string) => {
+  /** Ends a stream. True when it changed a recipe in place (the turn's announcement says so). */
+  const onStreamEnd = useCallback((key: string): boolean => {
     dispatch({ type: "streamEnded", key });
     addedMeals.current.delete(key);
     focusedIdeas.current.delete(key);
+    const edited = editedIn.current.get(key)?.saved ?? false;
+    editedIn.current.delete(key);
+    return edited;
   }, []);
 
   const tap = useCallback(

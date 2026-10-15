@@ -47,8 +47,12 @@ export const StreamEvent = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("recipe"),
     mealId: Id,
-    part: z.enum(["meta", "ingredient", "step", "basics"]),
-    /** Part-specific; `meta` carries `allergenFlags`. Shape owned by the AI specialist. */
+    /**
+     * `edit`: a refinement applied as edits (ai.md §5): the WHOLE resulting recipe plus `changed`
+     * line positions, sent once. The UI replaces the shown recipe in place (no blank-and-refill).
+     */
+    part: z.enum(["meta", "ingredient", "step", "basics", "edit"]),
+    /** Part-specific; `meta` and `edit` carry `allergenFlags`. Shape owned by the AI specialist. */
     data: z.unknown(),
   }),
   z.object({

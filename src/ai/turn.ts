@@ -23,7 +23,7 @@ import { applyProposedChange, chooseMealTap } from "@/domains/kitchen/commands";
 import { getKitchenState, getLatestIdeaSet, getRecipe } from "@/domains/kitchen/queries";
 import type { KitchenScope } from "@/shared/membership";
 import { msg } from "@/shared/messages";
-import { foldMealSteps, recipeParts, recipeStep, runFollowUps } from "./follow-ups";
+import { foldMealSteps, recipeParts, recipeStep, runFollowUps, withoutRecipeAnnouncement } from "./follow-ups";
 import type { InterpretRequest, Interpreter } from "./interpreter";
 import { notConfiguredMealAI, type MealAI } from "./meals";
 import { replyFromReceipt } from "./receipt-reply";
@@ -107,6 +107,7 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
     if (result && (result.rejected.length > 0 || result.applied.length === 0)) {
       reply = interpreter.reword ? await interpreter.reword(req, interpretation, result) : replyFromReceipt(result);
     }
+    reply = withoutRecipeAnnouncement(reply, folded.followUps);
     if (reply) yield { type: "text", delta: reply };
 
     // Meals: generated after the save, never before (§6).
