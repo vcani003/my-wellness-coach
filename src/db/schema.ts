@@ -317,6 +317,25 @@ export const itemCategoryPrefs = pgTable(
   (t) => [primaryKey({ columns: [t.kitchenId, t.standardName] })],
 );
 
+/**
+ * Places the user said, remembered per kitchen by standard name (0041): "onions go in the pantry"
+ * (or moving the onions there) makes later adds of onions go to the pantry. From
+ * `item.location.remembered`; mirrors `item_category_prefs`.
+ */
+export const itemLocationPrefs = pgTable(
+  "item_location_prefs",
+  {
+    kitchenId: text("kitchen_id")
+      .notNull()
+      .references(() => kitchens.id, { onDelete: "cascade" }),
+    standardName: text("standard_name").notNull(),
+    /** A `Location` ID. */
+    location: text("location").notNull(),
+    ...audit,
+  },
+  (t) => [primaryKey({ columns: [t.kitchenId, t.standardName] })],
+);
+
 export const meals = pgTable(
   "meals",
   {

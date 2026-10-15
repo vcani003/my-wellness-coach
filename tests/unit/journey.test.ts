@@ -19,7 +19,7 @@ function runPrimaryJourney() {
 }
 
 describe("primary journey (0005)", () => {
-  it("step 1: the four items appear, with only the name known", () => {
+  it("step 1: the four items appear, with only the name known (and the usual place, inferred)", () => {
     const { k, steps } = runPrimaryJourney();
     expect(steps.bought.rejected).toEqual([]);
     expect(steps.bought.applied.map((a) => a.summary.text)).toEqual([
@@ -29,7 +29,8 @@ describe("primary journey (0005)", () => {
       "Added yogurt",
     ]);
     const eggs = k.item("eggs")!;
-    expect(eggs.location).toBeUndefined(); // unknown stays unknown (0011)
+    // 0041: where it usually goes, recorded as inferred; quantity stays unknown (0011).
+    expect(eggs.location).toEqual({ value: "fridge", basis: "inferred", confidence: "medium" });
     expect(eggs.quantity).toBeUndefined();
     expect(eggs.createdBy).toBe("vero");
   });

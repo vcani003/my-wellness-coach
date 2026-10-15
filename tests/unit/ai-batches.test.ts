@@ -85,7 +85,7 @@ describe("what the model sees (0025)", () => {
     await interpreter.interpret(requestFor(k, "what do I have?"));
     await interpreter.interpret(request("what do I have?"));
     const user = calls[0].messages[0].content as string;
-    expect(user).toContain("i1: eggs · 18 eggs · not sure where · type dairy_eggs · 2 batches (Oct 2, today)");
+    expect(user).toContain("i1: eggs · 18 eggs · fridge · type dairy_eggs · 2 batches (Oct 2, today)");
     expect(user).toMatch(/i2: chicken thighs · freezer · type meat_seafood(\n| · added)/); // one batch: no batch list
     expect(user).not.toContain(k.state().items[0].batches![0].id); // no batch IDs for the model to copy
     const systems = calls.map((c) => (c.system as Anthropic.Beta.Messages.BetaTextBlockParam[])[0].text);
@@ -126,12 +126,12 @@ describe("batch phrases → operations the kitchen applies (0025)", () => {
 
   it("'the ones I just bought' targets the newest batch too", async () => {
     const k = kitchenWithBatches();
-    const text = "I put the ones I just bought in the fridge";
+    const text = "I put the ones I just bought in the freezer";
     const { operations } = await interpretAndApply(k, text, [
-      op({ action: "update", evidence: text, item: "i1", batch: "newest", location: said("fridge") }),
+      op({ action: "update", evidence: text, item: "i1", batch: "newest", location: said("freezer") }),
     ]);
     expect(operations[0]).toMatchObject({ type: "item.update", target: { which: "newest" } });
-    expect(eggBatches(k).map((b) => b.location?.value)).toEqual([undefined, "fridge"]);
+    expect(eggBatches(k).map((b) => b.location?.value)).toEqual(["fridge", "freezer"]);
   });
 
   it("'I used the old eggs' takes only the oldest batch", async () => {
@@ -210,11 +210,11 @@ describe("batch phrases → operations the kitchen applies (0025)", () => {
 
   it("an untargeted update goes to the oldest batch (the backend default)", async () => {
     const k = kitchenWithBatches();
-    const text = "the eggs are in the fridge";
-    const { operations } = await interpretAndApply(k, text, [op({ action: "update", evidence: text, item: "i1", location: said("fridge") })]);
+    const text = "the eggs are in the freezer";
+    const { operations } = await interpretAndApply(k, text, [op({ action: "update", evidence: text, item: "i1", location: said("freezer") })]);
     expect(operations[0]).toMatchObject({ type: "item.update", target: { itemId: k.item("eggs")!.id } });
     expect(operations[0]).not.toHaveProperty("target.which");
-    expect(eggBatches(k).map((b) => b.location?.value)).toEqual(["fridge", undefined]);
+    expect(eggBatches(k).map((b) => b.location?.value)).toEqual(["freezer", "fridge"]);
   });
 });
 

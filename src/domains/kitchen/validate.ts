@@ -37,8 +37,9 @@ import { applyProfileEvent, profileTouchedKeys, type ProfileState } from "@/shar
 import { validateProfileOperation } from "@/shared/profile/validate";
 import { canTransition } from "./lifecycle";
 import { openBatches, type Batch } from "./batches";
-import { categoryForNewItem, categoryOnRestock, categoryOnUpdate, defaultCategory } from "./categories";
+import { categoryForNewItem, categoryOnRestock, categoryOnUpdate, defaultCategory, effectiveCategory } from "./categories";
 import { CATEGORY_LABEL_EN } from "@/shared/item-category";
+import { placeForNewBatch } from "./places";
 import {
   KITCHEN_EVENT,
   apply,
@@ -50,6 +51,7 @@ import {
   type BatchDefrostedPayload,
   type BatchKeptPayload,
   type CategoryRememberedPayload,
+  type LocationRememberedPayload,
   type ChecklistTickedPayload,
   type Item,
   type ItemAddedPayload,
@@ -273,15 +275,21 @@ function addToKitchen(
   const same = Object.values(kitchen.items).filter((i) => i.standardName === std);
   const target =
     same.filter((i) => openBatches(i).length > 0).sort(byUpdatedDesc)[0] ?? same.sort(byUpdatedDesc)[0];
-  const remember = rememberCategory(std, category, kitchen, env);
+  const remember = [...rememberCategory(std, category, kitchen, env), ...rememberPlace(std, facts.location, kitchen, env)];
+  // 0041: the batch goes where it usually goes when no place was said.
+  const place = (cat: Fact<ItemCategory> | undefined, existing: Item | null) =>
+    placeForNewBatch({ given: facts.location, frozen: facts.frozen, name: name.value, standardName: std, category: cat, existing }, kitchen);
   if (!target) {
+    const itemCategory = categoryForNewItem(category, name.value, std, kitchen);
+    const location = place(itemCategory, null);
     const payload: ItemAddedPayload = {
       itemId: env.ctx.newId(),
       name,
       standardName: std,
-      category: categoryForNewItem(category, name.value, std, kitchen),
+      category: itemCategory,
       batchId: env.ctx.newId(),
       ...facts,
+      ...(location ? { location } : {}),
     };
     return {
       events: [env.make(k, KITCHEN_EVENT.itemAdded, payload, extra), ...remember],
@@ -300,7 +308,8 @@ function addToKitchen(
     events.push(emit(env, k, KITCHEN_EVENT.batchClosed, closed));
   }
   const batchId = env.ctx.newId();
-  const added: BatchAddedPayload = { itemId: target.id, batchId, ...facts };
+  const location = place(effectiveCategory(target, kitchen), target);
+  const added: BatchAddedPayload = { itemId: target.id, batchId, ...facts, ...(location ? { location } : {}) };
   events.push(env.make(k, KITCHEN_EVENT.batchAdded, added, extra));
   // The item keeps its category unless the user said one now (CAT1, said beats inferred).
   const recategorized = categoryOnRestock(target.category, category);
@@ -362,6 +371,24 @@ function rememberCategory(
   if (kitchen.categoryPrefs[std]?.category === category.value) return [];
   const payload: CategoryRememberedPayload = { standardName: std, category: category.value };
   return [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.categoryRemembered, payload)];
+}
+
+/**
+ * 0041: a place the user **said** is remembered for that standard name, so the next add of it goes
+ * there ("onions go in the pantry", "put the rice in the pantry"). Nothing for an implied or guessed
+ * place, or when that's already what's remembered.
+ */
+function rememberPlace(std: string, location: Fact<Location> | undefined, kitchen: KitchenEntities, env: OpEnv): EventEnvelope[] {
+  if (location?.basis !== "said" || !std) return [];
+  if (kitchen.locationPrefs?.[std]?.location === location.value) return [];
+  const payload: LocationRememberedPayload = { standardName: std, location: location.value };
+  return [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.locationRemembered, payload)];
+}
+
+/** The summary for a change that only remembered a place and/or a type for next time. */
+function rememberedMsg(name: string, f: { location?: Fact<Location> | null; category?: Fact<ItemCategory> | null }): Msg {
+  if (f.location?.basis === "said") return msg("PLACE_REMEMBERED", { name, location: f.location.value });
+  return msg("CATEGORY_REMEMBERED", categoryParams(name, f.category!.value));
 }
 
 const categoryParams = (name: string, category: ItemCategory) => ({ name, category, categoryName: CATEGORY_LABEL_EN[category] });
@@ -484,11 +511,13 @@ function itemUpdate(op: OperationOf<"item.update">, env: OpEnv): OpOutcome {
   if (match.kind === "none") {
     const name = f.name ?? nameFact(targetName(op.target));
     const std = standardName(name.value);
-    const remember = rememberCategory(std, set.category, env.kitchen, env);
-    // "Fish sauce goes under sauces" with no fish sauce in the kitchen: only remember it (CAT1).
-    if (Object.keys(set).every((key) => key === "category") && clear.length === 0) {
+    const remember = [...rememberCategory(std, set.category, env.kitchen, env), ...rememberPlace(std, set.location, env.kitchen, env)];
+    // "Fish sauce goes under sauces" / "onions go in the pantry" with none in the kitchen: only
+    // remember it (CAT1, 0041).
+    const onlyHabit = Object.keys(set).every((key) => key === "category" || (key === "location" && set.location?.basis === "said"));
+    if (onlyHabit && clear.length === 0) {
       if (remember.length === 0) return noChange();
-      return ok(remember, msg("CATEGORY_REMEMBERED", categoryParams(name.value, set.category!.value)), []);
+      return ok(remember, rememberedMsg(name.value, set), []);
     }
     const rest = compact({ ...set, name: undefined, standardName: undefined });
     const event = recordUnknownItem(name, env, rest);
@@ -498,7 +527,7 @@ function itemUpdate(op: OperationOf<"item.update">, env: OpEnv): OpOutcome {
 
   const item = match.item;
   const std = set.standardName ?? item.standardName;
-  const remember = rememberCategory(std, set.category, env.kitchen, env);
+  const remember = [...rememberCategory(std, set.category, env.kitchen, env), ...rememberPlace(std, set.location, env.kitchen, env)];
   // CAT1: said beats inferred, and a same-as-before category is no change.
   const category = categoryOnUpdate(item.category, set.category);
   if (category) set.category = category;
@@ -510,7 +539,7 @@ function itemUpdate(op: OperationOf<"item.update">, env: OpEnv): OpOutcome {
   }
   if (Object.keys(set).length === 0 && clear.length === 0) {
     if (remember.length === 0) return noChange();
-    return ok(remember, msg("CATEGORY_REMEMBERED", categoryParams(item.name.value, f.category!.value)), []);
+    return ok(remember, rememberedMsg(item.name.value, f), []);
   }
   const hasBatchFields =
     clear.length > 0 || Object.keys(set).some((key) => key !== "name" && key !== "standardName" && key !== "category");

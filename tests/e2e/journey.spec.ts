@@ -37,7 +37,7 @@ test("journey steps 1–4: bought → Kitchen shows items → froze → Freezer 
   await expect(composer(page)).toBeVisible();
   await expectAccessible(page, "empty kitchen");
 
-  // Step 3: "I bought …" → receipt with all 4 and Undo; Kitchen shows them as New; focus stays.
+  // Step 3: "I bought …" → receipt with all 4 and Undo; Kitchen shows them in the Fridge as New; focus stays.
   await say(page, "I bought eggs, chicken thighs, spinach and yogurt");
   const bought = lastReceipt(page);
   for (const line of ["Added eggs", "Added chicken thighs", "Added spinach", "Added yogurt"]) {
@@ -45,9 +45,10 @@ test("journey steps 1–4: bought → Kitchen shows items → froze → Freezer 
   }
   await expect(bought.getByRole("button", { name: "Undo: Added eggs, Added chicken thighs, Added spinach, Added yogurt" })).toBeVisible();
   await expect(composer(page)).toBeFocused();
-  const notSure = kitchen(page).getByRole("region", { name: "Not sure where" });
+  // 0041: each goes where it usually goes (all four: the Fridge), so nobody has to say.
+  const fridge = kitchen(page).getByRole("region", { name: "Fridge" });
   for (const name of ["Eggs", "Chicken thighs", "Spinach", "Yogurt"]) {
-    await expect(notSure.getByRole("listitem").filter({ hasText: name })).toContainText("New");
+    await expect(fridge.getByRole("listitem").filter({ hasText: name })).toContainText("New");
   }
   await expect(page.getByTestId("announcer")).toContainText("Kitchen updated.");
   await expectAccessible(page, "after bought");
@@ -61,14 +62,14 @@ test("journey steps 1–4: bought → Kitchen shows items → froze → Freezer 
   await expect(lastReceipt(page)).toContainText("Chicken thighs → freezer");
   const freezer = kitchen(page).getByRole("region", { name: "Freezer" });
   await expect(freezer.getByRole("listitem").filter({ hasText: "Chicken thighs" })).toContainText("Updated");
-  await expect(notSure.getByText("Chicken thighs")).toHaveCount(0);
+  await expect(fridge.getByText("Chicken thighs")).toHaveCount(0);
   await expectAccessible(page, "after froze");
 
   // Undo (step 9 of the script, done here): chicken goes back; the receipt says Undone.
   await lastReceipt(page).getByRole("button", { name: "Undo: Chicken thighs moved to the freezer" }).click();
   await expect(lastReceipt(page)).toContainText("Undone");
   await expect(kitchen(page).getByRole("region", { name: "Freezer" })).toHaveCount(0);
-  await expect(notSure.getByRole("listitem").filter({ hasText: "Chicken thighs" })).toBeVisible();
+  await expect(fridge.getByRole("listitem").filter({ hasText: "Chicken thighs" })).toBeVisible();
   await expect(page.getByTestId("announcer")).toContainText("Undone:");
   await expectAccessible(page, "after undo");
 });

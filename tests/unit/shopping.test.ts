@@ -390,7 +390,8 @@ describe("Do later → To review (shopping-list card)", () => {
     ]);
     expect(resolved.rejected).toEqual([]);
     expect(resolved.applied[0].summary).toMatchObject({ code: "SHOPPING_DONE", params: { count: 2, names: "garlic, ginger" } });
-    expect(resolved.events.map((e) => e.type)).toEqual(["item.added", "shopping.moved", "item.added", "shopping.moved", "review.resolved"]);
+    // The place the user picked for ginger is remembered for next time (0041).
+    expect(resolved.events.map((e) => e.type)).toEqual(["item.added", "shopping.moved", "item.added", "item.location.remembered", "shopping.moved", "review.resolved"]);
     expect(new Set(resolved.events.map((e) => e.changeSetId)).size).toBe(1);
     expect(resolved.applied[0].refs.at(-1)).toEqual({ kind: "review", id: reviewId, change: "updated" });
     expect(k.kitchen.reviews[reviewId].status).toBe("done");

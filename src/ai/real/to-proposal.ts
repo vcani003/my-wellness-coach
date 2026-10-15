@@ -14,9 +14,15 @@
  *   remembered correction. A `said` category needs the user's words to talk about categories
  *   ("goes under sauces"), else an add's is downgraded to `inferred` (a said one is remembered)
  *   and an update's is dropped: an update only ever carries the user's own correction.
+ * - Places (0041): an add carries the model's usual-place guess (`inferred`, medium); the backend
+ *   still prefers a said place, then a remembered one. A said place, or an implied one with high
+ *   confidence, needs the user's words to talk about a place ("in the freezer", "froze"); else an
+ *   add's is downgraded to a medium guess (a said one would be remembered, and a high one would
+ *   beat the household's remembered place) and an update's is dropped: the model never moves an
+ *   item by itself.
  * - The result must pass the contract's Zod schema, or nothing is proposed.
  */
-import type { BatchWhich, Fact, ItemCategory, ShoppingSource } from "@/contracts/common";
+import type { BatchWhich, Fact, ItemCategory, Location, ShoppingSource } from "@/contracts/common";
 import type { ItemBatchTarget, Operation, ShoppingTarget } from "@/contracts/operations";
 import { nameTokens, standardName } from "@/shared/text";
 import { ProposedChange } from "@/contracts/proposed-change";
@@ -100,6 +106,21 @@ function categoryOf(op: ModelOp, action: "add" | "update", text: string, evidenc
   return said ? f : { ...f, basis: "inferred" };
 }
 
+/**
+ * The user's words talk about a place (0041): "in the freezer", "put the rice in the pantry",
+ * "I froze the beef", "onions go in the pantry". Without this, a place is the model's guess.
+ */
+export const PLACE_WORDS =
+  /\b(fridge|refrigerat\w*|freezer|pantry|cupboard|cabinet|shelf|counter|froze|frozen|freez\w*|chill(ed)?|thaw\w*|defrost\w*)\b|tủ lạnh|ngăn đá/i;
+
+/** The place to propose for an add or update, after the guards above (or none). */
+function locationOf(location: Fact<Location> | undefined, action: "add" | "update", text: string): Fact<Location> | undefined {
+  if (!location) return undefined;
+  if (PLACE_WORDS.test(text)) return location;
+  if (action === "update") return undefined;
+  return { value: location.value, basis: "inferred", confidence: "medium" };
+}
+
 function namedBatch(op: ModelOp, evidenceOk: boolean): BatchWhich | undefined {
   if (!op.batch || !evidenceOk) return undefined;
   return BATCH_WORDS.test(op.evidence) ? op.batch : undefined;
@@ -177,15 +198,16 @@ function toOperationOrNull(op: ModelOp, opId: string, req: InterpretRequest, lab
       return {
         ...common,
         type: "item.add",
-        fields: { name: addName as Fact<string>, quantity, location, frozen, ...(category && { category }) },
+        fields: { name: addName as Fact<string>, quantity, location: locationOf(location, "add", req.message.text), frozen, ...(category && { category }) },
       };
     }
     case "update": {
       if (!target) return null;
       const category = categoryOf(op, "update", req.message.text, evidenceOk);
+      const place = locationOf(location, "update", req.message.text);
       const fields = {
         ...(quantity && { quantity }),
-        ...(location && { location }),
+        ...(place && { location: place }),
         ...(frozen && { frozen }),
         ...(category && { category }),
       };

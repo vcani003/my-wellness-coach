@@ -6,6 +6,7 @@
  *   "I bought X, Y and Z" · "I froze the X" · "I used the rest of the X" · "X is running low" ·
  *   "add X and Y to the list [for Store]" · "the old X are gone" · "I defrosted the X" · "undo" ·
  *   "X goes under <category>" (CAT1; adds also get the shared keyword guess) ·
+ *   "X goes in the pantry" / "put X in the fridge" (0041; adds get their place from the backend) ·
  *   "I was thinking a <dish>, with … I have X" / "I want to make <dish>" (MI1)
  * and answers anything else politely with no changes. Everything it proposes still goes through
  * the real backend validate → apply path. The AI specialist replaces this folder (ai.md §9).
@@ -64,7 +65,9 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
           reply = `All set: added ${names(intent.items)}.`;
           break;
         case "froze":
-          operations = itemOps(intent.targets, "item.update", { location: said("freezer"), frozen: said(true) });
+          // "Froze" implies the freezer (inferred, high), like the real interpreter; only a place
+          // the user names is remembered (0041).
+          operations = itemOps(intent.targets, "item.update", { location: { value: "freezer", basis: "inferred", confidence: "high" }, frozen: said(true) });
           reply = `All set: moved the ${names(intent.targets)} to the freezer.`;
           break;
         case "usedUp":
@@ -88,6 +91,10 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
         case "category":
           operations = [{ opId: "", type: "item.update", evidence: req.message.text.trim(), target: { name: intent.target.name }, fields: { category: said(intent.category) } }];
           reply = `Done: the ${intent.target.name} is under ${CATEGORY_LABEL_EN[intent.category]} now.`;
+          break;
+        case "place":
+          operations = [{ opId: "", type: "item.update", evidence: req.message.text.trim(), target: { name: intent.target.name }, fields: { location: said(intent.location) } }];
+          reply = `Done: I'll put the ${intent.target.name} in the ${intent.location} from now on.`;
           break;
         case "low":
           operations = itemOps(intent.targets, "item.use", { stock: said("low") });

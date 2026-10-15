@@ -252,9 +252,9 @@ describe("the fake interpreter (CAT1)", () => {
     expect(k.kitchen.categoryPrefs["tofu"]?.category).toBe("dairy_eggs");
   });
 
-  it("'put X in the fridge' is not a category; nearest category words map to IDs", async () => {
+  it("'put X in the fridge' is not a category (it's a place, 0041); nearest category words map to IDs", async () => {
     const r = await fake.interpret(requestFor(new MemoryKitchen(), "put the milk in the fridge"));
-    expect(r.proposal).toBeNull();
+    expect(r.proposal?.operations).toEqual([expect.objectContaining({ type: "item.update", fields: { location: said("fridge") } })]);
     expect(categoryFromWords("sauces")).toBe("sauces_condiments");
     expect(categoryFromWords("the Spices")).toBe("spices_seasonings");
     expect(categoryFromWords("noodles")).toBe("rice_noodles_grains");

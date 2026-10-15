@@ -17,6 +17,8 @@ const TEMPLATES: Record<string, string> = {
   // categories (CAT1). `category` is the ID; `categoryName` the English name.
   ITEM_CATEGORY: "{name} → {categoryName}",
   CATEGORY_REMEMBERED: "I'll put {name} under {categoryName} from now on",
+  // places (0041). `location` is the ID.
+  PLACE_REMEMBERED: "I'll put {name} in the {location} from now on",
   ITEM_USED: "Used {name}",
   ITEM_LOW: "{name}: running low",
   ITEM_OUT: "{name}: out",

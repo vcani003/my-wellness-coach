@@ -124,6 +124,15 @@ export interface CategoryPref extends AuditFields {
   category: ItemCategory;
 }
 
+/**
+ * A place the user said for a name (0041: "onions go in the pantry", or moving an item), remembered
+ * per kitchen so future adds of that standard name go there. Mirrors `CategoryPref` (0032).
+ */
+export interface LocationPref extends AuditFields {
+  standardName: string;
+  location: Location;
+}
+
 export interface KitchenEntities {
   items: Record<string, Item>;
   meals: Record<string, Meal>;
@@ -134,9 +143,11 @@ export interface KitchenEntities {
   shopping: Record<string, ShoppingItem>;
   /** Keyed by standard name (CAT1). */
   categoryPrefs: Record<string, CategoryPref>;
+  /** Keyed by standard name (0041). */
+  locationPrefs: Record<string, LocationPref>;
 }
 
-export type KitchenEntity = Item | Meal | Recipe | Tick | Review | ShoppingItem | CategoryPref;
+export type KitchenEntity = Item | Meal | Recipe | Tick | Review | ShoppingItem | CategoryPref | LocationPref;
 
 export const emptyKitchen = (): KitchenEntities => ({
   items: {},
@@ -146,6 +157,7 @@ export const emptyKitchen = (): KitchenEntities => ({
   reviews: {},
   shopping: {},
   categoryPrefs: {},
+  locationPrefs: {},
 });
 
 export const tickId = (mealId: string, ingredientKey: string) => `${mealId}|${ingredientKey}`;
@@ -175,6 +187,7 @@ export const KITCHEN_EVENT = {
   batchKept: "item.batch.kept",
   batchDefrosted: "item.batch.defrosted",
   categoryRemembered: "item.category.remembered",
+  locationRemembered: "item.location.remembered",
 } as const;
 
 type ItemFactFields = Pick<Item, "quantity" | "location" | "frozen" | "opened" | "occurredAt">;
@@ -239,6 +252,11 @@ export interface BatchDefrostedPayload {
 export interface CategoryRememberedPayload {
   standardName: string;
   category: ItemCategory;
+}
+/** A place the user said, remembered for this standard name (0041). Its own event, so Undo restores it. */
+export interface LocationRememberedPayload {
+  standardName: string;
+  location: Location;
 }
 export interface ItemRemovedPayload {
   itemId: string;
@@ -361,6 +379,8 @@ export function kitchenTouchedKeys(event: EventEnvelope): string[] {
       return [`shopping:${p.shoppingItemId as string}`];
     case KITCHEN_EVENT.categoryRemembered:
       return [`catpref:${p.standardName as string}`];
+    case KITCHEN_EVENT.locationRemembered:
+      return [`locpref:${p.standardName as string}`];
     case CHANGESET_REVERTED:
       return Object.keys((event.payload as ChangesetRevertedPayload).restore);
     default:
@@ -376,6 +396,7 @@ const COLLECTION = {
   review: "reviews",
   shopping: "shopping",
   catpref: "categoryPrefs",
+  locpref: "locationPrefs",
 } as const satisfies Record<string, keyof KitchenEntities>;
 
 export function getKitchenEntity(state: KitchenEntities, key: string): KitchenEntity | null {
@@ -546,6 +567,16 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
         ...(prev ? { createdAt: prev.createdAt, createdBy: prev.createdBy, ...stamp(event) } : created(event)),
       };
       return put(state, "categoryPrefs", p.standardName, pref);
+    }
+    case KITCHEN_EVENT.locationRemembered: {
+      const p = event.payload as LocationRememberedPayload;
+      const prev = state.locationPrefs?.[p.standardName];
+      const pref: LocationPref = {
+        standardName: p.standardName,
+        location: p.location,
+        ...(prev ? { createdAt: prev.createdAt, createdBy: prev.createdBy, ...stamp(event) } : created(event)),
+      };
+      return put(state, "locationPrefs", p.standardName, pref);
     }
     case KITCHEN_EVENT.itemRemoved: {
       const p = event.payload as ItemRemovedPayload;

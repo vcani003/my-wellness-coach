@@ -10,9 +10,9 @@
  *     and the kitchen version in the same transaction.
  * Any failure rolls everything back: the kitchen is unchanged.
  */
-import { and, asc, eq, gt, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { changeSets, kitchens, mealIdeas, meals, users } from "@/db/schema";
+import { changeSets, itemBatches, kitchens, mealIdeas, meals, users } from "@/db/schema";
 import type { Db, Queryable } from "@/db/client";
 import { ApplyResult, type ApplyResult as ApplyResultT } from "@/contracts/apply-result";
 import type { Msg, Quantity, ShoppingSource } from "@/contracts/common";
@@ -30,6 +30,7 @@ import { getKitchenEntity, replay } from "./state";
 import { loadKitchenEntities, persistKitchenEntities, replaceKitchenProjections } from "./store";
 import { SOFT_SUMMARY_CODES, planProposal, touchedKeys, type RevertPlan } from "./validate";
 import { getRecipe, ideaFlags, itemNames, readKitchenState } from "./queries";
+import { PLACES_SORT_ACTION, placesSortProposalId, planPlacesSort, sortedReply, type PlannedMove } from "./sort-places";
 
 export type ApplyOutcome =
   | { ok: true; result: ApplyResultT }
@@ -264,6 +265,78 @@ export function undo(db: Db, scope: KitchenScope, args: { changeSetId: string; t
     source: { via: "button", action: "undo" },
     operations: [{ opId: "undo", type: "changeset.revert", target: { changeSetId: args.changeSetId } }],
   });
+}
+
+// ─── Sorting "Not sure where" once (0041) ─────────────────────────────────────────────
+
+export { placesSortProposalId } from "./sort-places";
+
+export type PlacesSortOutcome =
+  | { ran: false }
+  | {
+      ran: true;
+      result: ApplyResultT;
+      moves: PlannedMove[];
+      /** Open batches still with no place (genuinely ambiguous, or past the move limit). */
+      unplaced: number;
+      /** The one-line chat message ("I sorted 9 items …"); "" when nothing moved. */
+      reply: string;
+      /** True when this caller's load made the change set (so the receipt and Undo are theirs, 0017). */
+      mine: boolean;
+    };
+
+/**
+ * Put this kitchen's unplaced items where they usually go, **once per kitchen** (0041; see
+ * `sort-places.ts`): one change set with the fixed key `placesSortProposalId`, which is also the
+ * "done" mark, so it never runs again (not after an Undo either) and two loads at once apply it
+ * once. Cheap when there's nothing to do: one small query, plus one while unplaced items remain.
+ * Throws only on a database failure (the caller isolates it, 0018).
+ */
+export async function applyPlacesSortOnce(db: Db, scope: KitchenScope, options: { now?: Date } = {}): Promise<PlacesSortOutcome> {
+  const [unplacedRow] = await db
+    .select({ id: itemBatches.id })
+    .from(itemBatches)
+    .where(and(eq(itemBatches.kitchenId, scope.kitchenId), isNull(itemBatches.closedAt), isNull(itemBatches.location)))
+    .limit(1);
+  if (!unplacedRow) return { ran: false };
+  const proposalId = placesSortProposalId(scope.kitchenId);
+  const done = () =>
+    db
+      .select({ actorId: changeSets.actorId })
+      .from(changeSets)
+      .where(and(eq(changeSets.kitchenId, scope.kitchenId), eq(changeSets.proposalId, proposalId)))
+      .limit(1);
+  if ((await done()).length) return { ran: false };
+
+  const [kitchen] = await db.select({ version: kitchens.version }).from(kitchens).where(eq(kitchens.id, scope.kitchenId));
+  if (!kitchen) return { ran: false };
+  const { moves, unplaced } = planPlacesSort(await loadKitchenEntities(db, scope.kitchenId));
+  const operations: Operation[] = moves.map((m, n) => ({
+    opId: `sort-${n + 1}`,
+    type: "item.update",
+    target: { itemId: m.itemId, batchId: m.batchId },
+    fields: { location: m.location },
+  }));
+  // Even with nothing to move, the (empty) change set is saved: it's the "already sorted" mark.
+  const outcome = await applyProposedChange(
+    db,
+    scope,
+    { proposalId, kitchenId: scope.kitchenId, basedOnVersion: kitchen.version, source: { via: "button", action: PLACES_SORT_ACTION }, operations },
+    options.now ? { now: options.now } : {},
+  );
+  if (!outcome.ok) return { ran: false };
+  const appliedIds = new Set(outcome.result.applied.map((a) => a.opId));
+  const applied = moves.filter((_, n) => appliedIds.has(`sort-${n + 1}`));
+  const left = unplaced + (moves.length - applied.length);
+  const [row] = await done();
+  return {
+    ran: true,
+    result: outcome.result,
+    moves: applied,
+    unplaced: left,
+    reply: applied.length ? sortedReply(applied, left) : "",
+    mine: row?.actorId === scope.userId,
+  };
 }
 
 // ─── Shopping list buttons (0027) ─────────────────────────────────────────────────────

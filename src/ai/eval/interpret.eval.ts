@@ -1,8 +1,9 @@
 /**
  * Real-model eval for the interpreter (ai.md §8), scored by exact rules, not by another AI.
  * Run with `npm run eval`; skipped unless ANTHROPIC_API_KEY is set. Costs real money: about
- * 39 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list
- * (0027), older and newer batches (0025), a dish named in chat (MI1) and item categories (CAT1).
+ * 44 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list
+ * (0027), older and newer batches (0025), a dish named in chat (MI1), item categories (CAT1) and
+ * inferred places (0041).
  */
 import { afterAll, describe, expect, it } from "vitest";
 import type { Operation, OperationOf, OperationType } from "@/contracts/operations";
@@ -83,8 +84,9 @@ const cases: Case[] = [
       expect(addNamed(ops, "nước mắm")?.fields.name.value).toBe("nước mắm (fish sauce)");
       expect(addNamed(ops, "jasmine rice")?.fields.name.value).toBe("jasmine rice");
       expect(addNamed(ops, "bánh phở")?.fields.quantity?.value.asSaid).toMatch(/2 bags/);
-      // groceries get no location unless said
-      expect(addNamed(ops, "rau răm")?.fields.location ?? null).toBeNull();
+      // 0041: groceries go where they usually go, as inferred (never "said" when no place was said)
+      expect(addNamed(ops, "rau răm")?.fields.location).toMatchObject({ value: "fridge", basis: "inferred" });
+      expect(addNamed(ops, "bánh phở")?.fields.location).toMatchObject({ value: "pantry", basis: "inferred" });
       expect(only(ops, "item.remove")).toHaveLength(0);
     },
   },
@@ -290,12 +292,12 @@ const cases: Case[] = [
     },
   },
   {
-    name: "bought chicken with a quantity, no location",
+    name: "bought chicken with a quantity, no place said (usual place, inferred)",
     text: "I bought 2 lbs of chicken thighs",
     check: (r, ops) => {
       const add = addNamed(ops, "chicken");
       expect(add?.fields.quantity?.value).toMatchObject({ asSaid: expect.stringMatching(/2 lbs/), amount: 2 });
-      expect(add?.fields.location ?? null).toBeNull();
+      expect(add?.fields.location).toMatchObject({ value: "fridge", basis: "inferred" });
     },
   },
   {
@@ -531,6 +533,58 @@ const cases: Case[] = [
     check: (r) => {
       answerOnly(r);
       expect(r.reply).toMatch(/\b(no|don't|not)\b/i);
+    },
+  },
+  // Places (0041): Kitchen infers where things go
+  {
+    name: "places: an add with no place said gets the usual place, inferred",
+    text: "I bought milk, jasmine rice, frozen peas and onions",
+    check: (r, ops) => {
+      expect(r.kind).toBe("change");
+      const where = (needle: string) => addNamed(ops, needle)?.fields.location;
+      expect(where("milk")).toMatchObject({ value: "fridge", basis: "inferred" });
+      expect(where("jasmine rice")).toMatchObject({ value: "pantry", basis: "inferred" });
+      expect(where("frozen peas")?.value).toBe("freezer");
+      expect(where("onion")).toMatchObject({ value: "pantry", basis: "inferred" });
+      for (const o of only(ops, "item.add")) expect(o.fields.location?.basis ?? "inferred").toBe("inferred");
+    },
+  },
+  {
+    name: "places: a said place wins",
+    text: "bought milk, it's going in the freezer",
+    check: (r, ops) => {
+      expect(addNamed(ops, "milk")?.fields.location).toMatchObject({ value: "freezer", basis: "said" });
+    },
+  },
+  {
+    name: "places: genuinely ambiguous things stay unsorted",
+    text: "I bought bananas and avocados",
+    check: (r, ops) => {
+      expect(r.kind).toBe("change");
+      expect(addNamed(ops, "banana")?.fields.location ?? null).toBeNull();
+      expect(addNamed(ops, "avocado")?.fields.location ?? null).toBeNull();
+    },
+  },
+  {
+    name: "places: 'onions go in the pantry' moves the listed onions (said, remembered by the app)",
+    text: "onions go in the pantry",
+    items: [{ name: "onions", location: "fridge", category: "produce" }, { name: "milk", location: "fridge", category: "dairy_eggs" }],
+    check: (r, ops) => {
+      const [upd] = only(ops, "item.update");
+      targets(upd, "item-1");
+      expect(upd.fields.location).toMatchObject({ value: "pantry", basis: "said" });
+      expect(only(ops, "item.add")).toHaveLength(0);
+    },
+  },
+  {
+    name: "places: a habit for something not in the kitchen is an update by name, never an add",
+    text: "we always keep the bread in the freezer",
+    items: [{ name: "milk", location: "fridge", category: "dairy_eggs" }],
+    check: (r, ops) => {
+      expect(only(ops, "item.add")).toHaveLength(0);
+      const [upd] = only(ops, "item.update");
+      expect(upd.target).toMatchObject({ name: expect.stringMatching(/bread/i) });
+      expect(upd.fields.location).toMatchObject({ value: "freezer", basis: "said" });
     },
   },
 ];

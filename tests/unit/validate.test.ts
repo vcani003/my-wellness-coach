@@ -297,7 +297,8 @@ describe("corrections", () => {
       { type: "item.update", target: { name: "yogurt" }, fields: { location: said("freezer") }, corrects: wrong.id },
       { type: "item.update", target: { name: "yogurt" }, fields: { frozen: said(true) }, corrects: "no-such-event" },
     ]);
-    expect(fix.events.map((e) => e.corrects)).toEqual([wrong.id, wrong.id]);
+    // The yogurt's said place is also remembered (0041), in the same correction.
+    expect(fix.events.map((e) => e.corrects)).toEqual([wrong.id, wrong.id, wrong.id]);
     expect(codes(fix)).toEqual(["UNKNOWN_TARGET"]);
   });
 });

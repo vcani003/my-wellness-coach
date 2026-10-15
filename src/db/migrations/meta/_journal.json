@@ -78,6 +78,13 @@
       "when": 1792013920342,
       "tag": "0010_item_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792089007418,
+      "tag": "0011_item_location_prefs",
+      "breakpoints": true
     }
   ]
 }

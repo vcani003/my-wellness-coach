@@ -3,11 +3,11 @@
  * same transaction as their events (backend-data.md §3).
  */
 import { and, eq } from "drizzle-orm";
-import { checklistTicks, itemBatches, itemCategoryPrefs, items, meals, recipes, reviews, shoppingItems } from "@/db/schema";
+import { checklistTicks, itemBatches, itemCategoryPrefs, itemLocationPrefs, items, meals, recipes, reviews, shoppingItems } from "@/db/schema";
 import type { Queryable } from "@/db/client";
-import type { ItemCategory, MealStatus, ReviewKind, ReviewOrigin, ShoppingSource } from "@/contracts/common";
+import type { ItemCategory, Location, MealStatus, ReviewKind, ReviewOrigin, ShoppingSource } from "@/contracts/common";
 import { compact, splitEntityKey } from "@/shared/events/types";
-import type { CategoryPref, Item, KitchenEntities, Meal, Recipe, Review, ShoppingItem, ShoppingStatus, Tick } from "./state";
+import type { CategoryPref, Item, KitchenEntities, LocationPref, Meal, Recipe, Review, ShoppingItem, ShoppingStatus, Tick } from "./state";
 import { tickId } from "./state";
 import { deriveItem, ensureBatches, type Batch, type BatchCloseReason } from "./batches";
 
@@ -141,9 +141,13 @@ export function categoryPrefFromRow(r: typeof itemCategoryPrefs.$inferSelect): C
   return { standardName: r.standardName, category: r.category as ItemCategory, ...auditFrom(r) };
 }
 
+export function locationPrefFromRow(r: typeof itemLocationPrefs.$inferSelect): LocationPref {
+  return { standardName: r.standardName, location: r.location as Location, ...auditFrom(r) };
+}
+
 /** The whole kitchen as the pure state (all rows, including done meals and `out` items). */
 export async function loadKitchenEntities(db: Queryable, kitchenId: string): Promise<KitchenEntities> {
-  const [itemRows, batchRows, mealRows, recipeRows, tickRows, reviewRows, shoppingRows, prefRows] = await Promise.all([
+  const [itemRows, batchRows, mealRows, recipeRows, tickRows, reviewRows, shoppingRows, prefRows, placeRows] = await Promise.all([
     db.select().from(items).where(eq(items.kitchenId, kitchenId)),
     db.select().from(itemBatches).where(eq(itemBatches.kitchenId, kitchenId)),
     db.select().from(meals).where(eq(meals.kitchenId, kitchenId)),
@@ -152,6 +156,7 @@ export async function loadKitchenEntities(db: Queryable, kitchenId: string): Pro
     db.select().from(reviews).where(eq(reviews.kitchenId, kitchenId)),
     db.select().from(shoppingItems).where(eq(shoppingItems.kitchenId, kitchenId)),
     db.select().from(itemCategoryPrefs).where(eq(itemCategoryPrefs.kitchenId, kitchenId)),
+    db.select().from(itemLocationPrefs).where(eq(itemLocationPrefs.kitchenId, kitchenId)),
   ]);
   const batchesByItem = new Map<string, (typeof itemBatches.$inferSelect)[]>();
   for (const b of batchRows) batchesByItem.set(b.itemId, [...(batchesByItem.get(b.itemId) ?? []), b]);
@@ -163,6 +168,7 @@ export async function loadKitchenEntities(db: Queryable, kitchenId: string): Pro
     reviews: Object.fromEntries(reviewRows.map((r) => [r.id, reviewFromRow(r)])),
     shopping: Object.fromEntries(shoppingRows.map((r) => [r.id, shoppingFromRow(r)])),
     categoryPrefs: Object.fromEntries(prefRows.map((r) => [r.standardName, categoryPrefFromRow(r)])),
+    locationPrefs: Object.fromEntries(placeRows.map((r) => [r.standardName, locationPrefFromRow(r)])),
   };
 }
 
@@ -335,6 +341,16 @@ export async function persistKitchenEntities(
         }
         break;
       }
+      case "locpref": {
+        await db
+          .delete(itemLocationPrefs)
+          .where(and(eq(itemLocationPrefs.kitchenId, kitchenId), eq(itemLocationPrefs.standardName, id)));
+        const e = state.locationPrefs?.[id];
+        if (e) {
+          await db.insert(itemLocationPrefs).values({ kitchenId, standardName: e.standardName, location: e.location, ...auditTo(e) });
+        }
+        break;
+      }
       default:
         // Profile keys are persisted by the shared profile store.
         break;
@@ -352,6 +368,7 @@ export async function replaceKitchenProjections(db: Queryable, kitchenId: string
   await db.delete(reviews).where(eq(reviews.kitchenId, kitchenId));
   await db.delete(shoppingItems).where(eq(shoppingItems.kitchenId, kitchenId));
   await db.delete(itemCategoryPrefs).where(eq(itemCategoryPrefs.kitchenId, kitchenId));
+  await db.delete(itemLocationPrefs).where(eq(itemLocationPrefs.kitchenId, kitchenId));
   const keys = [
     ...Object.keys(state.items).map((id) => `item:${id}`),
     ...Object.keys(state.meals).map((id) => `meal:${id}`),
@@ -360,6 +377,7 @@ export async function replaceKitchenProjections(db: Queryable, kitchenId: string
     ...Object.keys(state.reviews).map((id) => `review:${id}`),
     ...Object.keys(state.shopping).map((id) => `shopping:${id}`),
     ...Object.keys(state.categoryPrefs).map((id) => `catpref:${id}`),
+    ...Object.keys(state.locationPrefs ?? {}).map((id) => `locpref:${id}`),
   ];
   await persistKitchenEntities(db, kitchenId, state, keys);
 }

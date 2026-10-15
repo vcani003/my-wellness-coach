@@ -4,7 +4,7 @@
  * The AI specialist deletes this folder when the real interpreter lands.
  */
 
-import type { ItemCategory } from "@/contracts/common";
+import type { ItemCategory, Location } from "@/contracts/common";
 import { foldText } from "@/shared/text";
 
 export type FakeIntent =
@@ -20,6 +20,7 @@ export type FakeIntent =
   | { kind: "meal"; action: "meal_choose" | "meal_plan" | "meal_start_cooking" | "meal_done"; label: string }
   | { kind: "dish"; title: string; evidence: string; notes: string; have: Segment[] }
   | { kind: "category"; target: Segment; category: ItemCategory }
+  | { kind: "place"; target: Segment; location: Location }
   | { kind: "unknown" };
 
 /** A piece of the message: `raw` is exactly as typed (used as evidence), `name` is cleaned. */
@@ -117,11 +118,21 @@ export function categoryFromWords(text: string): ItemCategory | null {
   return CATEGORY_WORDS.find(([re]) => re.test(words))?.[1] ?? null;
 }
 
+/** "the fridge" / "pantry" → its place (0041), else null. */
+export function placeFromWords(text: string): Location | null {
+  const m = /^(?:the\s+|my\s+|our\s+)?(fridge|freezer|pantry)\b/.exec(foldText(text));
+  return (m?.[1] as Location | undefined) ?? null;
+}
+
+/** "Onions go in the pantry" / "put the milk in the freezer" (0041): a said place, remembered. */
 function categoryIntent(text: string): FakeIntent | null {
   for (const re of CATEGORY_MOVE) {
     const m = re.exec(text);
-    const category = m && categoryFromWords(m[2]);
-    if (m && category) return { kind: "category", target: toSegment(m[1]), category };
+    if (!m) continue;
+    const category = categoryFromWords(m[2]);
+    if (category) return { kind: "category", target: toSegment(m[1]), category };
+    const location = placeFromWords(m[2]);
+    if (location) return { kind: "place", target: toSegment(m[1]), location };
   }
   return null;
 }

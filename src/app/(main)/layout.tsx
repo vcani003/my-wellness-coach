@@ -6,13 +6,14 @@
  * Kitchen widget shows its own error state with Retry; if the chat fails, the chat loads it
  * itself (with "Try again") instead of the page failing (0018). It also reads which of your
  * allergies or diets someone else added and you haven't confirmed (AI7), for the home banner;
- * if that fails, there's simply no banner.
+ * if that fails, there's simply no banner. Before reading, it sorts "Not sure where" once (0041).
  */
 import { Suspense, type ReactNode } from "react";
 import type { ChatHistoryPage } from "@/contracts/chat-history";
 import type { KitchenState } from "@/contracts/kitchen-state";
 import { listChatHistory } from "@/domains/chat/queries";
 import { getKitchenState } from "@/domains/kitchen/queries";
+import { sortUnplacedOnce } from "@/server/places-sort";
 import { getSettingsView } from "@/server/account/settings";
 import { getScope, getSession } from "@/server/session";
 import { KitchenApp } from "@/ui/app/KitchenApp";
@@ -36,6 +37,9 @@ async function Main({ children }: { children: ReactNode }) {
   try {
     const ctx = await getScope(session.kitchenId);
     if (ctx) {
+      // 0041: items saved before Kitchen inferred places are sorted once, as one change set with
+      // a receipt and Undo in this person's chat. Never throws; cheap once done.
+      await sortUnplacedOnce(ctx.db, ctx.scope);
       const [kitchen, chat, profile] = await Promise.allSettled([
         getKitchenState(ctx.db, ctx.scope),
         listChatHistory(ctx.db, ctx.scope),

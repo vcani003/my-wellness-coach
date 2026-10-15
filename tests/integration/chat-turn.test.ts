@@ -59,7 +59,8 @@ describe("chat turn with the fake interpreter", () => {
     const undone = await turn(vero, "undo");
     expect(undone.result?.applied[0].summary.code).toBe("UNDONE");
     expect(undone.result?.undoable).toBe(false);
-    expect((await where(vero))["chicken thighs"]).toBe("unknown");
+    // Back where Kitchen first put it (0041: the usual place, inferred).
+    expect((await where(vero))["chicken thighs"]).toBe("fridge");
     expect(undone.reply).toBe("No problem, that's undone.");
     expect(froze.reply).toBe("All set: moved the chicken to the freezer.");
   });
