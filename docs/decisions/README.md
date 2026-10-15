@@ -41,3 +41,4 @@ One line per decision. Read the full record only when it's relevant to your task
 | [0035](0035-future-assistants-and-name.md) | "You & household" shared; household Kitchen-only; Fitness Coach / Health Tracker; never jump, show cue; "Kitchen" for MVP 1 |
 | [0036](0036-item-action-details.md) | Item actions: whole-item Out, no chat echo, oldest batch, defrost on move-out, rename receipt |
 | [0037](0037-public-repo-as-is.md) | Repo goes public as is (no history rewrite); secrets scan clean; fictional data from now on |
+| [0038](0038-design-philosophy.md) | Design philosophy: boring → layout; no focal point → contrast; doesn't stand out → scale; plain → details |

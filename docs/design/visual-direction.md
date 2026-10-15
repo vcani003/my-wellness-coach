@@ -34,6 +34,15 @@ Kitchen is used standing at the counter, mid-task, often tired. Calm means the s
 
 ---
 
+## Design philosophy (Vero, 0038)
+Four checks for every screen and mockup. Each pairs a symptom with a fix:
+1. **If it looks boring, adjust the layout.**
+2. **No focal point? Use contrast.**
+3. **If it doesn't stand out, exaggerate the scale.**
+4. **If it feels plain, add more details.**
+
+UX runs these four checks on every design review, and Frontend on every screen before it ships. Fixes stay inside the Clay & Honey tokens, so calm (§1) still holds: contrast and scale create the focal point, and noise doesn't.
+
 ## 2. What's the same in all three
 
 - **Token names are semantic** (named for their role, not their look), so dark mode later is just a second set of values under `[data-theme="dark"]` with no component changes (0017). In CSS, dots become hyphens: `color.text.muted` → `--color-text-muted`. (Frontend's example name `color.danger` is `color.error.*` here.)
