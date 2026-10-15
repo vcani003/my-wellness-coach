@@ -36,3 +36,7 @@ One line per decision. Read the full record only when it's relevant to your task
 | [0030](0030-item-actions.md) | ⋯ menu on items (Used up, Low, Move, Change type, Edit, Remove) + swipe-to-remove; Counter as a place |
 | [0031](0031-desktop-layout-and-design-system.md) | Desktop layout epic (explore → decide → design system → build); own design system on Base UI; Figma benched |
 | [0032](0032-categories-and-search.md) | By place (default) / By type, 12 types, search |
+| [0033](0033-one-chat-routes-to-assistants.md) | One chat; the AI routes each message to the right assistant; no assistant switcher (future) |
+| [0034](0034-layout-option-2.md) | Layout option 2 (nav, main view, chat) on desktop and phone; phone tab bar; floating chat button |
+| [0035](0035-future-assistants-and-name.md) | "You & household" shared; household Kitchen-only; Fitness Coach / Health Tracker; never jump, show cue; "Kitchen" for MVP 1 |
+| [0036](0036-item-action-details.md) | Item actions: whole-item Out, no chat echo, oldest batch, defrost on move-out, rename receipt |

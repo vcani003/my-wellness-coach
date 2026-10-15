@@ -19,6 +19,8 @@ You said: put in fake names and emails, then make it public. **The catch:** fake
 - **Nothing becomes public until you say "go" here**, after I show you a summary of what's in it.
 The alternative is rewriting the private repo's whole history and making that public. That's riskier: it breaks the other working copies and is easy to get subtly wrong.
 
+**Update 2026-10-15:** Vero asked for the history-rewrite route instead, and says the names and allergy are example data. Plan: [plans/history-rewrite.md](plans/history-rewrite.md). **Rec: option A, email only.** It's small: about 1–1.5 h of agent time and about 15–20 min of yours. We can prove no code changed. Deleting and recreating the GitHub repo needs your "go".
+
 > Answer:
 
 ## Setup tasks
@@ -110,5 +112,10 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | SL6 | Do later details | [0027](decisions/0027-shopping-list-in-mvp.md) |
 | CL1 | On the go | Remote Control for now; cloud later |
 | GH1 | Public repo | Yes, with fake details; how is GH3 |
+| B2 | Layout | [0034](decisions/0034-layout-option-2.md): option 2 on desktop and phone (tab bar); floating chat button when minimized |
+| AS1a | One chat or one per assistant | [0033](decisions/0033-one-chat-routes-to-assistants.md): one chat, AI routes |
+| AS1 b,c,e,f | Shared settings, household, names, focus | [0035](decisions/0035-future-assistants-and-name.md) |
+| NM1 | App name | [0035](decisions/0035-future-assistants-and-name.md): "Kitchen" for MVP 1 |
+| IA2–IA6 | Item action details | [0036](decisions/0036-item-action-details.md): all Recs |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |

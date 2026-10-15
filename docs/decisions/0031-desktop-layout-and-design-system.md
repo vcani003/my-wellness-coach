@@ -6,3 +6,5 @@
 - **B1:** UX mocks up all three options (dashboard grid · three-pane with nav and collapsible chat · focus + context) as interactive HTML in Clay & Honey with realistic content. Vero picks or mixes.
 - **Design system (DL2):** keep **Base UI** (unstyled, accessible primitives) plus **our own Clay & Honey tokens**. Formalise them into a single tokens source, a documented component set and a **component gallery page**. No styled third-party library.
 - **Figma is benched for now.** Mockups are HTML pages.
+
+> **Updated by [0034](0034-layout-option-2.md) (2026-10-15):** the phone changes too: option 2, with a bottom tab bar.
