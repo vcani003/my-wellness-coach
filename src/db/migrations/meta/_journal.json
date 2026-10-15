@@ -82,8 +82,15 @@
     {
       "idx": 11,
       "version": "7",
-      "when": 1792089007418,
-      "tag": "0011_item_location_prefs",
+      "when": 1792088959310,
+      "tag": "0011_recipe_box",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792090039017,
+      "tag": "0012_item_location_prefs",
       "breakpoints": true
     }
   ]

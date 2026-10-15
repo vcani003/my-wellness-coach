@@ -22,6 +22,7 @@ import { loadKitchenEntities } from "./store";
 import { computeUseItUpSignals, type UseItUpSignal } from "./use-it-up";
 
 export { computeUseItUpSignals, signalFor, type UseItUpSignal } from "./use-it-up";
+export { findPastMealsByTitle, listPastMeals } from "./past-meals";
 
 export async function getKitchenVersion(db: Queryable, scope: KitchenScope): Promise<number> {
   const rows = await db.select({ version: kitchens.version }).from(kitchens).where(eq(kitchens.id, scope.kitchenId));
@@ -30,6 +31,10 @@ export async function getKitchenVersion(db: Queryable, scope: KitchenScope): Pro
 
 function actorIds(kitchen: KitchenEntities): string[] {
   const ids = new Set<string>();
+  for (const m of Object.values(kitchen.meals)) {
+    if (m.noteBy) ids.add(m.noteBy);
+    if (m.cookedBy) ids.add(m.cookedBy);
+  }
   for (const coll of [kitchen.items, kitchen.meals, kitchen.recipes, kitchen.ticks, kitchen.reviews, kitchen.shopping]) {
     for (const e of Object.values(coll)) {
       ids.add(e.createdBy);

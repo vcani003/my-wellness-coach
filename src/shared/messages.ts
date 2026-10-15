@@ -37,6 +37,7 @@ const TEMPLATES: Record<string, string> = {
   MEAL_STATUS: "{title}: {status}",
   MEAL_NOTE_SAVED: "Saved a note on {title}",
   RECIPE_SAVED: "Saved the recipe for {title}",
+  MEAL_MADE_AGAIN: "Making {title} again",
   TICKED: "Ticked {ingredient}",
   UNTICKED: "Unticked {ingredient}",
   NO_CHANGE: "Nothing to change",
@@ -80,6 +81,8 @@ const TEMPLATES: Record<string, string> = {
   UNDO_OF_UNDO: "An undo can't be undone; tell me what to fix",
   NOT_ON_LIST: "{name} isn't on the shopping list any more",
   NOT_TICKED: "{name} isn't ticked yet",
+  ALREADY_MAKING: "{title} is already in your plan",
+  RECIPE_LOCKED: "{title} is finished, so its recipe stays as it was. Make it again to change it.",
   // errors
   INVALID_PROPOSAL: "I couldn't understand that change, so nothing changed",
   SAVE_FAILED: "I couldn't save that, so nothing changed",

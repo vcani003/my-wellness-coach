@@ -496,6 +496,14 @@ export function moveMeal(db: Db, scope: KitchenScope, args: TapArgs & { mealId: 
   ]);
 }
 
+/**
+ * "Make again" (0040 C): a new chosen meal whose v1 recipe copies `fromMealId`'s cooked version.
+ * The new meal is the `added` meal ref of the result; the source meal is never changed.
+ */
+export function makeMealAgain(db: Db, scope: KitchenScope, args: TapArgs & { fromMealId: string }) {
+  return tap(db, scope, args, "meal.makeAgain", [{ opId: "make-again", type: "meal.makeAgain", fromMealId: args.fromMealId }]);
+}
+
 /** Shared recipe-checklist ticks (M6, 0013): the other member sees who ticked. */
 export function tickIngredient(db: Db, scope: KitchenScope, args: TapArgs & { mealId: string; ingredient: string; ticked: boolean }) {
   return tap(db, scope, args, args.ticked ? "checklist.tick" : "checklist.untick", [

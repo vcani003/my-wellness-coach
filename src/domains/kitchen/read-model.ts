@@ -240,6 +240,10 @@ export function buildRecipeView(
         [meal?.title ?? "", ...recipe.ingredients.map((i) => i.name)].filter(Boolean),
         ctx.restrictions,
       ),
+      // RBX3: an older note with no writer recorded reads as the cook's.
+      ...(meal?.note
+        ? { note: { text: meal.note, by: actorRef(meal.noteBy ?? meal.cookedBy ?? meal.updatedBy, ctx.names) } }
+        : {}),
       ...audit(recipe, ctx.names),
     };
     const parsed = RecipeView.safeParse(view);

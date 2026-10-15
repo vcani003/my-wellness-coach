@@ -452,7 +452,7 @@ const cases: Case[] = [
         expect(r.followUps).toEqual([expect.objectContaining({ kind: "recipe", meal: { mealId: "meal-1" }, refine: text })]);
         expect(ops.filter((o) => o.type.startsWith("item.") || o.type === "meal.choose")).toHaveLength(0);
         // The recipe step answers the question with the recipe in hand; the router doesn't pre-judge it.
-        expect(r.reply).not.toMatch(/^(yes|no)\b/i);
+        expect(r.reply).not.toMatch(/^(yes|no)\b(?! problem)/i);
       },
     }),
   ),

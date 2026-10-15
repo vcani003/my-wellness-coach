@@ -18,6 +18,7 @@ import {
   addRecipeNeedsToShoppingList,
   addShoppingItems,
   doneShopping,
+  makeMealAgain,
   moveMeal,
   planMeal,
   queueAfterCooking,
@@ -178,6 +179,55 @@ export async function chooseMeal(input: z.input<typeof ChooseInput>): Promise<Ch
     return { ok: true, result, mealId, recipe, notes, reply };
   } catch (error) {
     console.error("actions: chooseMeal failed", { error });
+    return { ok: false, reason: msg("SAVE_FAILED"), retryable: true };
+  }
+}
+
+const MakeAgainInput = z.object({ ...Tap, fromMealId: Id });
+
+export type MakeAgainResult =
+  | {
+      ok: true;
+      /** The receipt ("Making Chicken curry again"), with one Undo. */
+      result: ApplyResult;
+      /** The new meal (status "chosen"). */
+      mealId: string;
+      /** Its v1 recipe, copied from the cooked one, flagged against today's allergies; null if the old meal had none. */
+      recipe: RecipeView | null;
+    }
+  | {
+      ok: false;
+      reason: Msg;
+      retryable: boolean;
+      /** RBX1: this dish's made-again copy is still in the plan (`ALREADY_MAKING`); open it instead. */
+      activeMealId?: string;
+    };
+
+/**
+ * "Make again" from Cooked before (0040 C): a new chosen meal whose recipe copies the cooked
+ * version, refinable as usual. The old meal is never changed. No AI call, so no rate limit.
+ */
+export async function makeAgain(input: z.input<typeof MakeAgainInput>): Promise<MakeAgainResult> {
+  const parsed = MakeAgainInput.safeParse(input);
+  if (!parsed.success) return { ok: false, reason: msg("INVALID_PROPOSAL"), retryable: false };
+  try {
+    const ctx = await getScope(parsed.data.kitchenId);
+    if (!ctx) return { ok: false, reason: msg("NOT_ALLOWED"), retryable: false };
+    const outcome = await makeMealAgain(ctx.db, ctx.scope, parsed.data);
+    if (!outcome.ok) return { ok: false, ...outcome.error };
+    const mealId = outcome.result.applied[0]?.refs.find((r) => r.kind === "meal" && r.change === "added")?.id;
+    if (!mealId) {
+      const reason = outcome.result.rejected[0]?.reason ?? msg("UNKNOWN_TARGET");
+      const active = reason.code === "ALREADY_MAKING" ? reason.params.mealId : undefined;
+      return { ok: false, reason, retryable: false, ...(typeof active === "string" ? { activeMealId: active } : {}) };
+    }
+    const recipe = await getRecipe(ctx.db, ctx.scope, mealId).catch((error) => {
+      console.error("actions: makeAgain couldn't read the new recipe", { error });
+      return null;
+    });
+    return { ok: true, result: outcome.result, mealId, recipe };
+  } catch (error) {
+    console.error("actions: makeAgain failed", { error });
     return { ok: false, reason: msg("SAVE_FAILED"), retryable: true };
   }
 }

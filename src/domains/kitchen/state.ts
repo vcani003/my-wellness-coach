@@ -67,6 +67,12 @@ export interface Meal extends AuditFields {
   recipeId?: string;
   note?: string;
   cookedAt?: string;
+  /** Who marked it Done (0040 RB5). Absent on rows from before migration 0011: read `updatedBy`. */
+  cookedBy?: string;
+  /** Who wrote `note` (0040 RBX3). Absent on rows from before migration 0011: read as the cook. */
+  noteBy?: string;
+  /** "Make again" (0040 C): the Done meal this one repeats. */
+  madeAgainFromMealId?: string;
 }
 
 export interface Recipe extends AuditFields {
@@ -78,6 +84,8 @@ export interface Recipe extends AuditFields {
   ingredients: RecipeIngredient[];
   steps: string[];
   basicsAssumed: string[];
+  /** "Make again" (0040 C): the cooked version this was copied from. */
+  copiedFromRecipeId?: string;
 }
 
 export interface Tick extends AuditFields {
@@ -270,6 +278,8 @@ export interface MealChosenPayload {
   notes?: string;
   /** false when an existing meal is chosen again (it becomes the most recently chosen). */
   isNew: boolean;
+  /** "Make again" (0040 C): the Done meal this one repeats (`Meal.madeAgainFromMealId`). */
+  fromMealId?: string;
 }
 export interface MealTransitionedPayload {
   mealId: string;
@@ -292,6 +302,8 @@ export interface RecipeSavedPayload {
   ingredients: RecipeIngredient[];
   steps: string[];
   basicsAssumed: string[];
+  /** "Make again" (0040 C): the cooked version this was copied from. */
+  copiedFromRecipeId?: string;
 }
 export interface ChecklistTickedPayload {
   mealId: string;
@@ -591,6 +603,7 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
         title: p.title,
         status: "chosen",
         ideaId: p.ideaId,
+        ...(p.fromMealId ? { madeAgainFromMealId: p.fromMealId } : {}),
         chosenAt: event.recordedAt,
         ...created(event),
       };
@@ -603,15 +616,21 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
       const next: Meal = { ...prev, status: p.to, ...stamp(event) };
       if (p.planPosition === null) delete next.planPosition;
       else if (p.planPosition !== undefined) next.planPosition = p.planPosition;
-      if (p.to === "done") next.cookedAt = event.occurredAt ?? event.recordedAt;
-      if (p.note !== undefined) next.note = p.note;
+      if (p.to === "done") {
+        next.cookedAt = event.occurredAt ?? event.recordedAt;
+        next.cookedBy = event.actor;
+      }
+      if (p.note !== undefined) {
+        next.note = p.note;
+        next.noteBy = event.actor;
+      }
       return put(state, "meals", next.id, next);
     }
     case KITCHEN_EVENT.mealNoted: {
       const p = event.payload as MealNotedPayload;
       const prev = state.meals[p.mealId];
       if (!prev) return state;
-      return put(state, "meals", prev.id, { ...prev, note: p.note, ...stamp(event) });
+      return put(state, "meals", prev.id, { ...prev, note: p.note, noteBy: event.actor, ...stamp(event) });
     }
     case KITCHEN_EVENT.recipeSaved: {
       const p = event.payload as RecipeSavedPayload;
@@ -624,6 +643,7 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
         ingredients: p.ingredients,
         steps: p.steps,
         basicsAssumed: p.basicsAssumed,
+        ...(p.copiedFromRecipeId ? { copiedFromRecipeId: p.copiedFromRecipeId } : {}),
         ...created(event),
       };
       let next = put(state, "recipes", recipe.id, recipe);

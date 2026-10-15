@@ -108,5 +108,7 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | NM1 | App name | [0035](decisions/0035-future-assistants-and-name.md): "Kitchen" for MVP 1 |
 | IA2–IA6 | Item action details | [0036](decisions/0036-item-action-details.md): all Recs |
 | GH3 | Making the code public safely | [0037](decisions/0037-public-repo-as-is.md): public as is, no rewrite; secrets scan clean |
+| RB1–RB9 | Past recipes | [0040](decisions/0040-recipe-box.md): all Recs |
+| RBX1–RBX3 | Recipe box details | [0040](decisions/0040-recipe-box.md): all Recs |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |

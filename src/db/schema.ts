@@ -352,6 +352,18 @@ export const meals = pgTable(
     recipeId: text("recipe_id"),
     note: text("note"),
     cookedAt: ts("cooked_at"),
+    /**
+     * Who marked it Done (0040 RB5, "who cooked it"). Migration 0011, additive: backfilled from
+     * the done event; null on a row an older build wrote, read as `updated_by`.
+     */
+    cookedBy: text("cooked_by"),
+    /** Who wrote `note` (0040 RBX3). Migration 0011, backfilled; null on older rows: read as the cook. */
+    noteBy: text("note_by"),
+    /**
+     * "Make again" (0040 C, RBX1): the Done meal this one repeats. Migration 0011. A live meal with
+     * this set is the dish's active copy, so Make again doesn't create a second one.
+     */
+    madeAgainFromMealId: text("made_again_from_meal_id"),
     ...audit,
   },
   (t) => [index("meals_kitchen_idx").on(t.kitchenId, t.status)],
@@ -372,6 +384,8 @@ export const recipes = pgTable(
     ingredients: jsonb("ingredients").$type<RecipeIngredient[]>().notNull(),
     steps: jsonb("steps").$type<string[]>().notNull(),
     basicsAssumed: jsonb("basics_assumed").$type<string[]>().notNull(),
+    /** "Make again" (0040 C): the cooked recipe version this one was copied from. Migration 0011. */
+    copiedFromRecipeId: text("copied_from_recipe_id"),
     ...audit,
   },
   (t) => [index("recipes_meal_idx").on(t.kitchenId, t.mealId)],

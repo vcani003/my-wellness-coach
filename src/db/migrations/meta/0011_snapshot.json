@@ -1,5 +1,5 @@
 {
-  "id": "46b33483-b04e-4b05-b332-9e9f70ae0f9d",
+  "id": "7201048b-c10e-4af5-ad5f-3e4c7d942e4a",
   "prevId": "ed9ea3a9-133b-476c-892b-c5a26c7fdea1",
   "version": "7",
   "dialect": "postgresql",
@@ -980,83 +980,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.item_location_prefs": {
-      "name": "item_location_prefs",
-      "schema": "",
-      "columns": {
-        "kitchen_id": {
-          "name": "kitchen_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "standard_name": {
-          "name": "standard_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "location": {
-          "name": "location",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_by": {
-          "name": "updated_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "item_location_prefs_kitchen_id_kitchens_id_fk": {
-          "name": "item_location_prefs_kitchen_id_kitchens_id_fk",
-          "tableFrom": "item_location_prefs",
-          "tableTo": "kitchens",
-          "columnsFrom": [
-            "kitchen_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "item_location_prefs_kitchen_id_standard_name_pk": {
-          "name": "item_location_prefs_kitchen_id_standard_name_pk",
-          "columns": [
-            "kitchen_id",
-            "standard_name"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.items": {
       "name": "items",
       "schema": "",
@@ -1458,6 +1381,24 @@
         "cooked_at": {
           "name": "cooked_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cooked_by": {
+          "name": "cooked_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "note_by": {
+          "name": "note_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "made_again_from_meal_id": {
+          "name": "made_again_from_meal_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -1904,6 +1845,12 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
+        },
+        "copied_from_recipe_id": {
+          "name": "copied_from_recipe_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

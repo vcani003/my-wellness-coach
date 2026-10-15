@@ -162,6 +162,10 @@ export const KitchenState = z.object({
 });
 export type KitchenState = z.infer<typeof KitchenState>;
 
+/** The after-cooking note (0013 M8) and who wrote it: "Ben's note: used half the coconut milk" (0040 RBX3). */
+export const MealNote = z.object({ text: z.string(), by: ActorRef });
+export type MealNote = z.infer<typeof MealNote>;
+
 export const RecipeView = z.object({
   id: Id,
   meal: MealRef,
@@ -174,6 +178,8 @@ export const RecipeView = z.object({
   steps: z.array(z.string()),
   basicsAssumed: z.array(z.string()),
   allergenFlags: z.array(AllergenFlag),
+  /** The meal's after-cooking note, if one was saved (RBX3). Shown on the read-only Done recipe. */
+  note: MealNote.optional(),
   ...Audit,
 });
 export type RecipeView = z.infer<typeof RecipeView>;
