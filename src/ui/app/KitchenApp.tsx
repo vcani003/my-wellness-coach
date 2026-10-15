@@ -556,7 +556,7 @@ function KitchenScreen({
               </p>
             )}
 
-            <div id="chat-log" ref={logRef} className="chat-log min-h-0 flex-1 overflow-y-auto px-4 pt-1 pb-2 desk:pt-3">
+            <div id="chat-log" ref={logRef} className="chat-log relative min-h-0 flex-1 overflow-y-auto px-4 pt-1 pb-2 desk:pt-3">
               <MessageList
                 chat={chat.state}
                 onRetry={chat.retry}
