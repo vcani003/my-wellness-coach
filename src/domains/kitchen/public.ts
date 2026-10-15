@@ -3,13 +3,17 @@
  * (e.g. Fitness) reads Kitchen only through this file, never through its tables or prompts.
  * The UI and AI code use `commands` and `queries` instead.
  */
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { z } from "zod";
 import type { Queryable } from "@/db/client";
-import { changeSets, itemBatches } from "@/db/schema";
+import { changeSets, events, itemBatches } from "@/db/schema";
+import { AppliedOp } from "@/contracts/apply-result";
 import type { ActorRef } from "@/contracts/common";
+import { kitchenStream } from "@/shared/events/types";
 import { actorRef, loadNames } from "@/shared/identity";
 import type { KitchenScope } from "@/shared/membership";
 import { readKitchenState } from "./queries";
+import { KITCHEN_EVENT } from "./state";
 
 export interface KitchenSummary {
   kitchenId: string;
@@ -106,4 +110,73 @@ export async function getUnansweredBatchIds(db: Queryable, scope: KitchenScope, 
       ),
     );
   return new Set(rows.map((r) => r.id));
+}
+
+/** One tap on a receipt's batch choice (0025): "Those are gone" (`gone`) or "Still have them" (`keep`). */
+export interface BatchAnswerChangeSet {
+  changeSetId: string;
+  /** The kitchen version it produced, so it can be matched to a receipt that came before it. */
+  version: number;
+  itemId: string;
+  /** The older batches it answered for. */
+  batchIds: string[];
+  choice: "gone" | "keep";
+  applied: AppliedOp[];
+  /** You can still undo it (only "Those are gone" ever can). */
+  undoable: boolean;
+}
+
+const StoredAnswer = z.object({ undoable: z.boolean(), applied: z.array(AppliedOp) });
+
+/**
+ * Your own batch-choice taps (`closeBatch` / `keepOlderBatch`) on any of these older batch IDs,
+ * not undone, oldest first. Lets a reloaded chat receipt show its answer like the live one did
+ * (tester re-run 2026-10-14, step 28). Answers given in chat, by someone else, or undone since
+ * are left out, as the live receipt never shows them. A change set we can't read is skipped (0018).
+ */
+export async function getBatchAnswers(db: Queryable, scope: KitchenScope, batchIds: string[]): Promise<BatchAnswerChangeSet[]> {
+  if (batchIds.length === 0) return [];
+  const rows = await db
+    .select({ changeSetId: events.changeSetId, type: events.type, payload: events.payload })
+    .from(events)
+    .where(
+      and(
+        eq(events.stream, kitchenStream(scope.kitchenId)),
+        eq(events.actorId, scope.userId),
+        eq(events.via, "button"),
+        isNull(events.reverses),
+        inArray(events.type, [KITCHEN_EVENT.batchClosed, KITCHEN_EVENT.batchKept]),
+        inArray(sql<string>`${events.payload}->>'batchId'`, [...new Set(batchIds)]),
+      ),
+    );
+  const byChangeSet = new Map<string, { itemId: string; batchIds: string[]; choice: "gone" | "keep" }>();
+  for (const r of rows) {
+    const p = r.payload as { itemId?: unknown; batchId?: unknown; reason?: unknown };
+    if (typeof p.itemId !== "string" || typeof p.batchId !== "string") continue;
+    const choice = r.type === KITCHEN_EVENT.batchKept ? "keep" : p.reason === "gone" ? "gone" : null;
+    if (!choice) continue;
+    const entry = byChangeSet.get(r.changeSetId) ?? { itemId: p.itemId, batchIds: [], choice };
+    entry.batchIds.push(p.batchId);
+    byChangeSet.set(r.changeSetId, entry);
+  }
+  if (byChangeSet.size === 0) return [];
+  const sets = await db
+    .select({ id: changeSets.id, version: changeSets.version, result: changeSets.result })
+    .from(changeSets)
+    .where(
+      and(
+        eq(changeSets.kitchenId, scope.kitchenId),
+        inArray(changeSets.id, [...byChangeSet.keys()]),
+        isNull(changeSets.revertsChangeSetId),
+        isNull(changeSets.revertedByChangeSetId),
+      ),
+    );
+  const out: BatchAnswerChangeSet[] = [];
+  for (const cs of sets) {
+    const answer = byChangeSet.get(cs.id);
+    const stored = StoredAnswer.safeParse(cs.result);
+    if (!answer || cs.version === null || !stored.success) continue;
+    out.push({ changeSetId: cs.id, version: cs.version, ...answer, applied: stored.data.applied, undoable: stored.data.undoable });
+  }
+  return out.sort((a, b) => a.version - b.version);
 }

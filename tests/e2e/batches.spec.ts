@@ -92,3 +92,41 @@ test("batches: buy eggs twice → the choice → Those are gone → Undo; defros
   await expect(chicken).toContainText("Defrosted");
   await expectAccessible(page, "defrosted chicken");
 });
+
+// Tester re-run 2026-10-14, step 28: after a reload the answer was gone from the receipt and its
+// one Undo had become the purchase's. It must read exactly as it did live.
+test("batches: Those are gone → reload → the line and its Undo are still there → Undo works", async ({ page, baseURL }) => {
+  // A saved answer once kept the receipt re-rendering until React gave up (desktop): fail on that.
+  const loops: string[] = [];
+  page.on("console", (m) => {
+    if (m.text().includes("Maximum update depth exceeded")) loops.push(m.text());
+  });
+  await resetAndActAs(page, baseURL!);
+  await say(page, "I bought eggs");
+  await expect(lastReceipt(page)).toContainText("Added eggs");
+  await say(page, "I bought eggs");
+  await choice(page).getByRole("button", { name: /^Those are gone: eggs from / }).click();
+  const goneUndo = () => lastReceipt(page).getByRole("button", { name: "Undo: Eggs: those are gone (1 batch left)" });
+  await expect(goneUndo()).toBeFocused();
+
+  await page.reload();
+  await expect(lastReceipt(page)).toContainText("Added eggs (2 batches)");
+  await expect(lastReceipt(page)).toContainText("Eggs: those are gone (1 batch left)");
+  await expect(goneUndo()).toBeVisible();
+  await expect(lastReceipt(page).getByRole("button", { name: /^Undo/ })).toHaveCount(1);
+  await expect(choice(page)).toHaveCount(0);
+  await expectAccessible(page, "reloaded answered choice");
+
+  // Undo steps back the answer: two batches and the choice again, then Undo is for the purchase.
+  await goneUndo().click();
+  await expect(eggsRow(page).getByRole("button", { name: /^Eggs/ })).toContainText("2 batches");
+  await expect(choice(page).getByRole("button", { name: /^Those are gone: eggs from / })).toBeFocused();
+  await expect(lastReceipt(page).getByRole("button", { name: "Undo: Added eggs (2 batches)" })).toBeVisible();
+  await expect(lastReceipt(page)).not.toContainText("those are gone");
+
+  // And a reload now shows the open choice, not the undone answer.
+  await page.reload();
+  await expect(choice(page)).toBeVisible();
+  await expect(lastReceipt(page).getByRole("button", { name: "Undo: Added eggs (2 batches)" })).toBeVisible();
+  expect(loops).toEqual([]);
+});

@@ -10,8 +10,9 @@ import type { StreamEvent } from "@/contracts/stream";
 import { ChatHistoryPage } from "@/contracts/chat-history";
 import { getInterpreter, handleChatTurn, type ChatTurnInput } from "@/ai";
 import type { Interpreter, InterpretRequest } from "@/ai/interpreter";
-import { getRecentTurns, listChatHistory } from "@/domains/chat/queries";
+import { getRecentTurns, listChatHistory, matchBatchAnswers } from "@/domains/chat/queries";
 import { saveUserMessage } from "@/domains/chat/commands";
+import { closeBatches, keepBatches, undo } from "@/domains/kitchen/commands";
 import { getKitchenState } from "@/domains/kitchen/queries";
 import type { KitchenScope } from "@/shared/membership";
 import { newKitchen, openLocalDb } from "../support/db";
@@ -182,6 +183,107 @@ describe("saved chat", () => {
     expect(Date.parse(bought.undoneAt!)).not.toBeNaN();
     // The undo's own receipt is not itself undone.
     expect(undid.undone).toBe(false);
+  });
+
+  describe("a receipt's batch choice after a reload (0025; tester re-run 2026-10-14, step 28)", () => {
+    let taps = 0;
+    const tapId = () => `hist-tap-${++taps}`;
+    async function twoEggTurns() {
+      const k = await newKitchen(db, ["Vero", "Levi"]);
+      const vero = await k.scope("Vero");
+      await turn(vero, "I bought eggs");
+      await turn(vero, "I bought eggs");
+      const receipts = async (scope = vero) =>
+        (await listChatHistory(db, scope)).messages.flatMap((m) => (m.receipt ? [m.receipt] : []));
+      const second = (await receipts())[1];
+      const offer = second.applied[0].batchOffers![0];
+      return { k, vero, receipts, second, offer };
+    }
+
+    it("'Those are gone' comes back with the receipt, undoable; once undone, the open choice comes back instead", async () => {
+      const { vero, receipts, second, offer } = await twoEggTurns();
+      expect(second.batchAnswers).toBeUndefined();
+      const gone = await closeBatches(db, vero, { tapId: tapId(), basedOnVersion: second.newVersion, itemId: offer.itemId, batchIds: offer.older.map((o) => o.batchId) });
+      if (!gone.ok) throw new Error(gone.error.reason.text);
+
+      const page = await listChatHistory(db, vero);
+      expect(ChatHistoryPage.safeParse(page).success).toBe(true);
+      const [first, after] = page.messages.flatMap((m) => (m.receipt ? [m.receipt] : []));
+      expect(first.batchAnswers).toBeUndefined();
+      // The answered offer stays (its older batch is closed now), with the answer next to it.
+      expect(after.applied[0].batchOffers).toEqual([offer]);
+      expect(after.batchAnswers).toEqual([
+        {
+          itemId: offer.itemId,
+          newBatchId: offer.newBatchId,
+          choice: "gone",
+          changeSetId: gone.result.changeSetId,
+          applied: gone.result.applied,
+          undoable: true,
+        },
+      ]);
+      expect(after.batchAnswers![0].applied.map((a) => a.summary.code)).toEqual(["ITEM_BATCH_GONE"]);
+
+      const back = await undo(db, vero, { changeSetId: gone.result.changeSetId, tapId: tapId(), basedOnVersion: gone.result.newVersion });
+      if (!back.ok) throw new Error(back.error.reason.text);
+      const reopened = (await receipts())[1];
+      expect(reopened.batchAnswers).toBeUndefined();
+      expect(reopened.applied[0].batchOffers).toEqual([offer]);
+    });
+
+    it("'Still have them' comes back too, not undoable; someone else's answer never shows on your receipt", async () => {
+      const { k, vero, receipts, second, offer } = await twoEggTurns();
+      const levi = await k.scope("Levi");
+      const ids = offer.older.map((o) => o.batchId);
+      const kept = await keepBatches(db, vero, { tapId: tapId(), basedOnVersion: second.newVersion, itemId: offer.itemId, batchIds: ids });
+      if (!kept.ok) throw new Error(kept.error.reason.text);
+      expect((await receipts())[1].batchAnswers).toMatchObject([{ choice: "keep", undoable: false, changeSetId: kept.result.changeSetId }]);
+
+      // Levi closing them (e.g. on his own receipt) isn't an answer on Vero's.
+      const gone = await closeBatches(db, levi, { tapId: tapId(), basedOnVersion: kept.result.newVersion, itemId: offer.itemId, batchIds: ids });
+      if (!gone.ok) throw new Error(gone.error.reason.text);
+      expect((await receipts())[1].batchAnswers?.map((a) => a.changeSetId)).toEqual([kept.result.changeSetId]);
+    });
+  });
+
+  it("matches each answer to one receipt: the exact offer first, then the newest one before it", () => {
+    const at = "2026-10-02T10:00:00.000Z";
+    const row = (changeSetId: string, newVersion: number, newBatchId: string, older: string[]) =>
+      ({
+        receipt: {
+          changeSetId,
+          newVersion,
+          undoable: true,
+          rejected: [],
+          applied: [
+            {
+              opId: "1",
+              summary: { code: "ITEM_BATCH_ADDED", params: {}, text: "" },
+              refs: [],
+              batchOffers: [{ itemId: "eggs", name: "eggs", newBatchId, older: older.map((batchId) => ({ batchId, addedAt: at })) }],
+            },
+          ],
+        },
+      }) as unknown as Parameters<typeof matchBatchAnswers>[0][number];
+    // Three purchases: the 2nd offers b1; the 3rd offers b1 and b2.
+    const rows = [row("r2", 2, "b2", ["b1"]), row("r3", 3, "b3", ["b1", "b2"])];
+    const answer = (changeSetId: string, version: number, batchIds: string[]) => ({
+      changeSetId,
+      version,
+      itemId: "eggs",
+      batchIds,
+      choice: "gone" as const,
+      applied: [],
+      undoable: true,
+    });
+    const where = (found: ReturnType<typeof answer>[]) =>
+      Object.fromEntries([...matchBatchAnswers(rows, found)].map(([r, list]) => [r, list.map((a) => a.changeSetId)]));
+    expect(where([answer("a", 4, ["b1"])])).toEqual({ r2: ["a"] });
+    expect(where([answer("a", 4, ["b1", "b2"])])).toEqual({ r3: ["a"] });
+    expect(where([answer("a", 4, ["b1"]), answer("b", 5, ["b2"])])).toEqual({ r2: ["a"], r3: ["b"] });
+    // Never on a receipt from after the answer, or for batches it never offered.
+    expect(where([answer("a", 2, ["b1"])])).toEqual({});
+    expect(where([answer("a", 4, ["zz"])])).toEqual({});
   });
 
   it("if the chat can't be saved or read, the turn still applies and finishes (0018)", async () => {

@@ -10,10 +10,14 @@
  *   (tester run 2026-10-14 found two stacked Undo buttons). Focus moves to that Undo.
  *   "Still have them" → `keepOlderBatch`, a soft change with no Undo (focus moves to the result).
  * - Results and failures are announced through the one polite live region; nothing crashes (0018).
+ * - A saved receipt brings its answers back (`answers`, from chat history): the result in place
+ *   and, for "Those are gone", the same one Undo, so a reload looks as it did live (tester re-run
+ *   2026-10-14, step 28). Being redrawn, it never moves focus.
  */
 import { useFormatter, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApplyResult, AppliedOp, BatchOffer } from "@/contracts/apply-result";
+import type { BatchAnswer } from "@/contracts/chat-history";
 import type { Msg } from "@/contracts/common";
 import type { KitchenState } from "@/contracts/kitchen-state";
 import { useAnnounce } from "@/ui/a11y/Announcer";
@@ -69,33 +73,54 @@ export interface UndoStep {
   /** What it undoes, in plain words, for the Undo button's name. */
   plain: string;
   pending: boolean;
+  /** Redrawn from saved chat rather than just answered: the receipt doesn't move focus to it. */
+  saved?: boolean;
   run: () => void;
 }
 export type OnUndoStep = (key: string, step: UndoStep | null) => void;
 
-export function BatchOffers({ offers, onUndoStep }: { offers: BatchOffer[]; onUndoStep: OnUndoStep }) {
+export function BatchOffers({
+  offers,
+  answers = [],
+  onUndoStep,
+}: {
+  offers: BatchOffer[];
+  /** A saved receipt's answers (chat history), matched to offers by item and new batch. */
+  answers?: readonly BatchAnswer[];
+  onUndoStep: OnUndoStep;
+}) {
   return (
     <>
       {offers.map((offer) => (
-        <BatchOfferChoice key={`${offer.itemId}:${offer.newBatchId}`} offer={offer} onUndoStep={onUndoStep} />
+        <BatchOfferChoice
+          key={`${offer.itemId}:${offer.newBatchId}`}
+          offer={offer}
+          saved={answers.find((a) => a.itemId === offer.itemId && a.newBatchId === offer.newBatchId)}
+          onUndoStep={onUndoStep}
+        />
       ))}
     </>
   );
 }
 
+/** What an answer needs: a live ApplyResult or a saved `BatchAnswer`. */
+type AnswerResult = Pick<ApplyResult, "changeSetId" | "applied" | "undoable">;
+
 type Phase =
   | { kind: "idle"; failed?: Msg }
   | { kind: "pending"; choice: "keep" | "gone" }
-  | { kind: "answered"; choice: "keep" | "gone"; result: ApplyResult; undo: "idle" | "pending" | "refused" };
+  | { kind: "answered"; choice: "keep" | "gone"; result: AnswerResult; undo: "idle" | "pending" | "refused"; saved?: boolean };
 
-function BatchOfferChoice({ offer, onUndoStep }: { offer: BatchOffer; onUndoStep: OnUndoStep }) {
+function BatchOfferChoice({ offer, saved, onUndoStep }: { offer: BatchOffer; saved?: BatchAnswer; onUndoStep: OnUndoStep }) {
   const t = useTranslations("receipt");
   const formatMsg = useFormatMsg();
   const words = useBatchOfferWords();
   const announce = useAnnounce();
   const actions = useKitchenActions();
   const { snapshot } = useKitchenData();
-  const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+  const [phase, setPhase] = useState<Phase>(() =>
+    saved ? { kind: "answered", choice: saved.choice, result: saved, undo: "idle", saved: true } : { kind: "idle" },
+  );
   const focusNext = useRef<"result" | "gone" | null>(null);
   const resultRef = useRef<HTMLParagraphElement>(null);
   const goneRef = useRef<HTMLButtonElement>(null);
@@ -127,15 +152,33 @@ function BatchOfferChoice({ offer, onUndoStep }: { offer: BatchOffer; onUndoStep
 
   // "Those are gone" hands its Undo to the receipt's one Undo button while it can be undone.
   const stepKey = `${offer.itemId}:${offer.newBatchId}`;
+  // Runs only when the step itself changes, never on every render: a saved answer re-sent on each
+  // render kept the receipt re-rendering until React gave up ("Maximum update depth exceeded",
+  // desktop, after a reload). `run` reads the latest answer through a ref so it is never stale.
+  const answered = phase.kind === "answered" ? phase : null;
+  const stepActive = Boolean(answered && answered.choice === "gone" && answered.result.undoable && answered.undo !== "refused");
+  const stepPlain = answered && stepActive ? answered.result.applied.map((a) => formatMsg(a.summary, "plain")).join(", ") : "";
+  const stepPending = answered?.undo === "pending";
+  const stepSaved = Boolean(answered?.saved);
+  const runStep = useRef<() => void>(() => {});
   useEffect(() => {
-    const answered = phase.kind === "answered" ? phase : null;
-    if (answered && answered.choice === "gone" && answered.result.undoable && answered.undo !== "refused") {
-      const plain = answered.result.applied.map((a) => formatMsg(a.summary, "plain")).join(", ");
-      onUndoStep(stepKey, { key: stepKey, plain, pending: answered.undo === "pending", run: () => void undo(answered) });
+    runStep.current = () => {
+      if (answered) void undo(answered);
+    };
+  });
+  useEffect(() => {
+    if (stepActive) {
+      onUndoStep(stepKey, {
+        key: stepKey,
+        plain: stepPlain,
+        pending: stepPending,
+        ...(stepSaved ? { saved: true } : {}),
+        run: () => runStep.current(),
+      });
     } else {
       onUndoStep(stepKey, null);
     }
-  });
+  }, [onUndoStep, stepKey, stepActive, stepPlain, stepPending, stepSaved]);
   useEffect(() => () => onUndoStep(stepKey, null), [onUndoStep, stepKey]);
 
   const older = openOlder(offer, snapshot.state);

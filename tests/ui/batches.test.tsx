@@ -183,6 +183,51 @@ describe("Receipt batch choice", () => {
     expect(within(card).getByRole("button", { name: /^Undo/ })).toHaveAccessibleName("Undo: Added eggs (2 batches)");
   });
 
+  it("a saved receipt (after a reload) shows its answer and the same one Undo, without moving focus (re-run step 28)", async () => {
+    const oneLeft = kitchen([eggs([batch("b2", OCT14)])], 3);
+    const undo = vi.fn(async () => ok(result(kitchen([eggs([batch("b1", OCT2), batch("b2", OCT14)])], 4), "UNDONE")));
+    const saved: ReceiptModel = {
+      ...purchase,
+      batchAnswers: [
+        {
+          itemId: "eggs",
+          newBatchId: "b2",
+          choice: "gone",
+          changeSetId: "cs-gone",
+          applied: [{ opId: "close-1", summary: m("ITEM_BATCH_GONE", { name: "eggs", left: 1 }), refs: [] }],
+          undoable: true,
+        },
+      ],
+    };
+    renderWithIntl(<Harness initial={oneLeft} actions={{ undo }} receipt={saved} />);
+    const card = screen.getByRole("region", { name: "What changed" });
+    expect(card).toHaveTextContent("Eggs: those are gone (1 batch left)");
+    const undoButton = within(card).getByRole("button", { name: /^Undo/ });
+    expect(undoButton).toHaveAccessibleName("Undo: Eggs: those are gone (1 batch left)");
+    expect(within(card).getAllByRole("button", { name: /^Undo/ })).toHaveLength(1);
+    expect(undoButton).not.toHaveFocus();
+
+    await userEvent.click(undoButton);
+    expect(undo).toHaveBeenCalledWith("cs-gone");
+    const gone = await screen.findByRole("button", { name: "Those are gone: eggs from Oct 2" });
+    await waitFor(() => expect(gone).toHaveFocus());
+    expect(within(card).getByRole("button", { name: /^Undo/ })).toHaveAccessibleName("Undo: Added eggs (2 batches)");
+  });
+
+  it("a saved 'Still have them' shows its line, with Undo still for the purchase", () => {
+    const kept = kitchen([eggs([batch("b1", OCT2, { keptAt: OCT14 }), batch("b2", OCT14)])], 3);
+    const saved: ReceiptModel = {
+      ...purchase,
+      batchAnswers: [
+        { itemId: "eggs", newBatchId: "b2", choice: "keep", changeSetId: "cs-keep", applied: [{ opId: "keep-1", summary: m("ITEM_BATCH_KEPT", { name: "eggs" }), refs: [] }], undoable: false },
+      ],
+    };
+    renderWithIntl(<Harness initial={kept} actions={{}} receipt={saved} />);
+    const card = screen.getByRole("region", { name: "What changed" });
+    expect(card).toHaveTextContent("Kept the older eggs");
+    expect(within(card).getByRole("button", { name: /^Undo/ })).toHaveAccessibleName("Undo: Added eggs (2 batches)");
+  });
+
   it("Still have them → keepOlderBatch; the result is focused, with no Undo (a soft change)", async () => {
     const kept = kitchen([eggs([batch("b1", OCT2, { keptAt: OCT14 }), batch("b2", OCT14)])], 3);
     const keepOlderBatch = vi.fn(async () => ok(result(kept, "ITEM_BATCH_KEPT", { name: "eggs" }, false)));

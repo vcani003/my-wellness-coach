@@ -232,4 +232,15 @@ describe("chat reducer: saved pages", () => {
     const s = chatReducer(initialChatState, { type: "historyLoaded", which: "latest", messages: turn("t1", "x", "y.", receipt("cs-1", "eggs", false, true)), nextCursor: null });
     expect(s.messages[1]).toMatchObject({ receipt: { changeSetId: "cs-1", undoable: false, undo: "done" } });
   });
+
+  it("a saved receipt keeps its batch-choice answers (re-run step 28)", () => {
+    const batchAnswers = [{ itemId: "eggs", newBatchId: "b2", choice: "gone" as const, changeSetId: "cs-gone", applied: [], undoable: true }];
+    const s = chatReducer(initialChatState, {
+      type: "historyLoaded",
+      which: "latest",
+      messages: turn("t1", "x", "y.", { ...receipt("cs-1", "eggs", true), batchAnswers }),
+      nextCursor: null,
+    });
+    expect(s.messages[1]).toMatchObject({ receipt: { changeSetId: "cs-1", batchAnswers } });
+  });
 });

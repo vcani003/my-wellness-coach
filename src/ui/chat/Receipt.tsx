@@ -45,10 +45,10 @@ export function Receipt({
     setSteps((prev) => {
       const at = prev.findIndex((s) => s.key === key);
       if (!step) return at === -1 ? prev : prev.filter((s) => s.key !== key);
-      const next = { key, plain: step.plain, pending: step.pending };
+      const next = { key, plain: step.plain, pending: step.pending, ...(step.saved ? { saved: true } : {}) };
       if (at === -1) return [...prev, next];
       const old = prev[at];
-      if (old.plain === next.plain && old.pending === next.pending) return prev;
+      if (old.plain === next.plain && old.pending === next.pending && old.saved === next.saved) return prev;
       return prev.map((s, i) => (i === at ? next : s));
     });
   }, []);
@@ -58,7 +58,8 @@ export function Receipt({
   const undoRef = useRef<HTMLButtonElement>(null);
   const focusedStep = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (step && step.key !== focusedStep.current) undoRef.current?.focus();
+    // An answer redrawn from saved chat isn't new, so it never moves focus.
+    if (step && step.key !== focusedStep.current && !step.saved) undoRef.current?.focus();
     focusedStep.current = step?.key;
   }, [step]);
 
@@ -104,7 +105,7 @@ export function Receipt({
       </ul>
 
       {/* "You also had eggs from Oct 2: Still have them · Those are gone" (0025); gone once the purchase is undone. */}
-      {offers.length > 0 && !undone && <BatchOffers offers={offers} onUndoStep={onUndoStep} />}
+      {offers.length > 0 && !undone && <BatchOffers offers={offers} answers={receipt.batchAnswers} onUndoStep={onUndoStep} />}
 
       {(showUndo || undone || receipt.undo === "refused" || onView) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">

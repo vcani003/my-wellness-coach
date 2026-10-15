@@ -5,7 +5,7 @@
  * older pages on "Show earlier messages", and live turns append as before.
  */
 import type { AppliedOp, ApplyResult, RejectedOp } from "@/contracts/apply-result";
-import type { ChatHistoryMessage, ChatReceipt } from "@/contracts/chat-history";
+import type { BatchAnswer, ChatHistoryMessage, ChatReceipt } from "@/contracts/chat-history";
 import type { Msg } from "@/contracts/common";
 
 export interface UserMessage {
@@ -25,6 +25,8 @@ export interface Receipt {
   rejected: RejectedOp[];
   undo: "idle" | "pending" | "done" | "refused";
   undoReason?: Msg;
+  /** A saved receipt's batch-choice answers, drawn as they were live (step 28, 2026-10-14 re-run). */
+  batchAnswers?: BatchAnswer[];
 }
 
 export interface AssistantMessage {
@@ -81,7 +83,8 @@ export const replyId = (userMessageId: string) => `${userMessageId}:reply`;
 
 /**
  * A live ApplyResult or a saved receipt (the same minus `state`) as the receipt card's model. A
- * saved receipt that was undone since comes back as Undone, exactly as after a live Undo.
+ * saved receipt that was undone since comes back as Undone, exactly as after a live Undo, and
+ * one whose batch choice was answered comes back with that answer in place.
  */
 export function toReceipt(result: ApplyResult | ChatReceipt): Receipt {
   const undone = "undone" in result && result.undone === true;
@@ -93,6 +96,7 @@ export function toReceipt(result: ApplyResult | ChatReceipt): Receipt {
     applied: result.applied,
     rejected: result.rejected,
     undo: undone ? "done" : "idle",
+    ...("batchAnswers" in result && result.batchAnswers?.length ? { batchAnswers: result.batchAnswers } : {}),
   };
 }
 
