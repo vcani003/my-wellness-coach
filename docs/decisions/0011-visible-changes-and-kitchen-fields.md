@@ -11,3 +11,5 @@
 - **Food age:** the Kitchen widget shows "added X days ago" when the date is known. No freshness prediction.
 - **Defrosted food (DF1, 2026-10-15):** defrosting moves an item from the Freezer to the **Fridge**, as *inferred*, unless the user says where (for example the **Counter**, 0030).
 
+
+> **Changed by [0041](0041-infer-storage-place.md) (2026-10-15):** storage place is now inferred when not said.

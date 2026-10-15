@@ -44,3 +44,4 @@ One line per decision. Read the full record only when it's relevant to your task
 | [0038](0038-design-philosophy.md) | Design philosophy: boring → layout; no focal point → contrast; doesn't stand out → scale; plain → details |
 | [0039](0039-recipe-amounts-stay-in-recipe.md) | "I only have N" while a recipe is open changes the recipe only; kitchen adjusted after cooking or inferred |
 | [0040](0040-recipe-box.md) | Recipe box: Cooked before (Done only, grouped, search name+ingredient), Make again, chat offers past recipe, allergies flagged |
+| [0041](0041-infer-storage-place.md) | Kitchen infers storage place (inferred, correctable, remembered); existing unsorted items sorted once with Undo |
