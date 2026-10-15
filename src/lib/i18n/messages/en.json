@@ -103,6 +103,7 @@
         "MEAL_PLANNED": "added {title} to the meal plan",
         "MEAL_STATUS": "{status, select, cooking {started cooking {title}} done {made {title}} cancelled {cancelled {title}} other {updated {title}}}",
         "RECIPE_SAVED": "saved a recipe for {title}",
+        "MEAL_MADE_AGAIN": "chose {title} to make again",
         "other": "made a change"
       }
     },
@@ -271,6 +272,9 @@
     "MEAL_STATUS": "{title}: {status}",
     "MEAL_NOTE_SAVED": "Saved a note on {title}",
     "RECIPE_SAVED": "Saved the recipe for {title}",
+    "MEAL_MADE_AGAIN": "Making {title} again",
+    "ALREADY_MAKING": "{title} is already in your plan",
+    "RECIPE_LOCKED": "{title} is finished, so its recipe stays as it was. Make it again to change it.",
     "TICKED": "Ticked {ingredient}",
     "UNTICKED": "Unticked {ingredient}",
     "REVIEW_QUEUED": "Saved for later in To review",

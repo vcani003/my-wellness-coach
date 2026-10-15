@@ -178,6 +178,18 @@ export const MealChoose = z.object({
   target: z.union([z.strictObject({ ideaId: Id }), z.strictObject({ mealId: Id }), NamedDish]),
 });
 
+/**
+ * "Make again" (0040 C): a new `chosen` meal with the source meal's title, whose recipe v1 copies
+ * the source's **cooked** version (its newest; A2 locks versions at Done). The source meal is never
+ * changed. Only from a Done meal. Kitchen item links (`itemId`) aren't copied, so the recipe is
+ * matched against today's kitchen by name; allergen flags are computed on read, as always (0019).
+ */
+export const MealMakeAgain = z.object({
+  ...common,
+  type: z.literal("meal.makeAgain"),
+  fromMealId: Id,
+});
+
 export const MealPlan = z.object({
   ...common,
   type: z.literal("meal.plan"),
@@ -405,6 +417,7 @@ export const Operation = z.discriminatedUnion("type", [
   ItemBatchKeep,
   ItemDefrost,
   MealChoose,
+  MealMakeAgain,
   MealPlan,
   MealTransition,
   RecipeSave,
