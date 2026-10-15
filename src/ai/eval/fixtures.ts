@@ -112,8 +112,9 @@ export function request(
   items: ItemSpec[] = [],
   history: InterpretRequest["history"] = [],
   list: ListSpec[] = [],
+  meals: ReturnType<typeof mealInProgress>[] = [],
 ): InterpretRequest {
-  const state = kitchen(items, 3, list);
+  const state = meals.length ? KitchenState.parse({ ...kitchen(items, 3, list), meals }) : kitchen(items, 3, list);
   return {
     kitchenId: state.kitchenId,
     userId: "u-vero",
@@ -166,6 +167,46 @@ export const CURRY_KITCHEN: ItemSpec[] = [
   { name: "chicken thighs", location: "fridge", batches: [3, 0] },
   { name: "jasmine rice", location: "pantry" },
 ];
+
+/** Ana's kitchen for the cook-along curry (step 1–5 journey): no coconut milk, no garam masala. */
+export const COOK_ALONG_KITCHEN: ItemSpec[] = [
+  { name: "chicken breasts", location: "fridge", daysAgo: 1 },
+  { name: "onions", location: "pantry" },
+  { name: "garlic", location: "pantry" },
+  { name: "ginger", location: "fridge" },
+  { name: "canned chopped tomatoes", location: "pantry" },
+  { name: "Greek yogurt", location: "fridge" },
+  { name: "basmati rice", location: "pantry" },
+];
+
+/** Ben's everyday kitchen for cook-along routing and the pasta journey: no cream, no parmesan. */
+export const PASTA_KITCHEN: ItemSpec[] = [
+  { name: "penne", location: "pantry" },
+  { name: "spinach", location: "fridge", daysAgo: 1 },
+  { name: "milk", location: "fridge" },
+  { name: "cheddar", location: "fridge" },
+  { name: "garlic", location: "pantry" },
+  { name: "canned chopped tomatoes", location: "pantry" },
+  { name: "beef mince", location: "fridge", daysAgo: 1 },
+  { name: "honey", location: "pantry" },
+];
+
+/** A meal in progress with a recipe (so "recipe_change" has something to refine). */
+export function mealInProgress(id: string, title: string, status: "chosen" | "cooking" = "chosen") {
+  const at = new Date(NOW.getTime() - 600_000).toISOString();
+  return {
+    id,
+    title,
+    status,
+    chosenAt: at,
+    recipe: { id: `${id}-recipe`, version: 1, source: "ai" as const },
+    allergenFlags: [],
+    createdAt: at,
+    createdBy: actor,
+    updatedAt: at,
+    updatedBy: actor,
+  };
+}
 
 export const MEMBERS = [
   { userId: "u-vero", name: "Vero" },

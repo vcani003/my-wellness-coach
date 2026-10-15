@@ -9,7 +9,18 @@ import type { Operation, OperationOf, OperationType } from "@/contracts/operatio
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult } from "../interpreter";
 import { createRealInterpreter, type UsageLog } from "../real";
-import { CURRY_KITCHEN, FIRST_TEST_MESSAGE, NAMED_DISH_MESSAGE, request, VERO_LIST, VERO_PANTRY, type ItemSpec, type ListSpec } from "./fixtures";
+import {
+  PASTA_KITCHEN,
+  CURRY_KITCHEN,
+  FIRST_TEST_MESSAGE,
+  mealInProgress,
+  NAMED_DISH_MESSAGE,
+  request,
+  VERO_LIST,
+  VERO_PANTRY,
+  type ItemSpec,
+  type ListSpec,
+} from "./fixtures";
 
 const usage: UsageLog[] = [];
 const interpreter = createRealInterpreter({
@@ -25,6 +36,7 @@ type Case = {
   items?: ItemSpec[];
   history?: InterpretRequest["history"];
   list?: ListSpec[];
+  meals?: ReturnType<typeof mealInProgress>[];
   check: (r: InterpretResult, ops: Operation[]) => void;
 };
 
@@ -408,6 +420,40 @@ const cases: Case[] = [
       expect(r.followUps?.some((f) => f.kind === "ideas")).toBe(false);
     },
   },
+  // Cook-along (any dish): a named dish from the kitchen, then each change refines the same recipe.
+  {
+    name: "cook-along 1: 'a pasta bake tonight with what I have' → the dish is chosen and a recipe follows, no idea cards",
+    text: "I want to make a pasta bake tonight with what I have",
+    items: PASTA_KITCHEN,
+    check: (r, ops) => {
+      const [choose] = only(ops, "meal.choose");
+      expect(choose?.target).toMatchObject({ title: expect.stringMatching(/pasta bake/i) });
+      expect(r.followUps).toEqual([expect.objectContaining({ kind: "recipe" })]);
+      expect(r.followUps?.some((f) => f.kind === "ideas")).toBe(false);
+    },
+  },
+  ...[
+    { dish: "Tomato soup", text: "I only have 1 can of tomatoes, not 2" },
+    { dish: "Beef stir-fry", text: "Can I use honey instead of brown sugar?" },
+    { dish: "Spinach pasta", text: "I actually don't have parmesan, will that be fine?" },
+  ].map(
+    ({ dish, text }, i): Case => ({
+      name: `cook-along ${i + 2}: ${dish}, '${text}' → refines its recipe (recipe_change), no kitchen edits`,
+      text,
+      items: PASTA_KITCHEN,
+      meals: [mealInProgress("meal-1", dish, "cooking")],
+      history: [
+        { role: "user", text: `I want to make ${dish.toLowerCase()} tonight with what I have` },
+        { role: "assistant", text: `${dish} it is. Here's a recipe.` },
+      ],
+      check: (r, ops) => {
+        expect(r.followUps).toEqual([expect.objectContaining({ kind: "recipe", meal: { mealId: "meal-1" }, refine: text })]);
+        expect(ops.filter((o) => o.type.startsWith("item.") || o.type === "meal.choose")).toHaveLength(0);
+        // The recipe step answers the question with the recipe in hand; the router doesn't pre-judge it.
+        expect(r.reply).not.toMatch(/^(yes|no)\b/i);
+      },
+    }),
+  ),
   {
     name: "a named dish 'or something else?' → ideas, nothing chosen",
     text: "i was thinking a chicken curry, or something else?",
@@ -492,7 +538,7 @@ const cases: Case[] = [
 describe.skipIf(!process.env.ANTHROPIC_API_KEY)("interpreter eval (real model)", () => {
   for (const c of cases) {
     it(c.name, async () => {
-      const result = await interpreter.interpret(request(c.text, c.items, c.history, c.list));
+      const result = await interpreter.interpret(request(c.text, c.items, c.history, c.list, c.meals));
       console.info(`[${c.name}] ${result.kind}: ${result.reply}`);
       c.check(result, opsOf(result));
     });
