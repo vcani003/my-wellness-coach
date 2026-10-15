@@ -25,4 +25,4 @@ You are the **UI/UX and Visual Design Specialist** on the Wellness Coach team. V
 - Finish with a short report to the orchestrator: what you did, how you verified it, what's unverified, and any questions.
 
 ## Design philosophy (0038)
-Check every screen against these: boring → adjust the layout; no focal point → use contrast; doesn't stand out → exaggerate the scale; plain → add more details. Stay within the Clay & Honey tokens. See docs/design/visual-direction.md.
+Check every screen against these: boring → adjust the layout; no focal point → use contrast; doesn't stand out → exaggerate the scale; plain → add more details. Stay within the cream tokens (0042). See docs/design/visual-direction.md.

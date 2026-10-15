@@ -112,3 +112,6 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | RBX1–RBX3 | Recipe box details | [0040](decisions/0040-recipe-box.md): all Recs |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |
+| KOS7 | Offline edits | [0044](decisions/0044-offline-for-buttons.md): offline for buttons; chat online-only |
+| KOS1–KOS16 | Kitchen OS features | [0045](decisions/0045-kitchen-os-features.md): all Recs, except KOS10: the assistant is Lumi |
+| V-KOS1–V-KOS2 | Cream style details | [0046](decisions/0046-cream-style-details.md): both Recs |

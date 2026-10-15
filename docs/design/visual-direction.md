@@ -1,238 +1,210 @@
-# Visual direction: calm
+# Visual direction: Kitchen OS layout, cream style
 
-**Status:** Proposed, for Vero to choose (V1) · 2026-10-14 · UI/UX specialist
-**See it:** open [`preview.html`](preview.html) in a browser and switch between the three directions.
-
-Decision 0022 makes calm the starting mood. This doc says what calm means in Kitchen, offers three ways to look calm, and recommends one. **Vero chooses.** Whichever she picks becomes the token file Frontend implements (0017, frontend §4).
-
----
-
-## 1. What calm means here
-
-Kitchen is used standing at the counter, mid-task, often tired. Calm means the screen never raises your pulse and never makes you hunt.
-
-1. **Quiet by default, clear when it matters.** Most of the screen is soft neutrals. Colour only appears when it *means* something, so when it does appear you notice it.
-2. **Status is information, not alarm.** "Low" is a fact about the yogurt, not a warning. Counts are plain text ("To review (1)"), never red bubbles.
-3. **Room to breathe.** Generous spacing, readable 16 px text, one obvious action per card, short lists grouped under plain headings.
-4. **Nothing moves unless you did something.** Motion is short and soft, with no bounce, shake, pulse or looping animation. With reduced motion turned on, changes just appear.
-5. **Always reversible, never scolding.** Undo is always visible beside the change. The voice is warm, brief and practical (0020): no lecturing, no guilt, no exclamation marks.
-6. **Words carry meaning, not colour alone** (0002). Every highlight, flag and state has text; colour and icons only reinforce it.
-
-**What we avoid:** alarm-red badges and counting dots · warning triangles · dense lists and tiny grey text · ALL-CAPS headings · nagging ("Don't forget!", streaks, expiry countdowns, "you haven't logged…") · toasts that vanish before you've read them · modal pop-ups for things that can wait · "Oops!" or "Something went wrong" · spinners that spin forever with no words.
-
-### Calm in the moments that matter
-
-| Moment | How it looks | Never |
-|---|---|---|
-| **"What changed" receipt** (0007, 0011) | A raised card under the reply. A small tick in the success colour, one plain line per change, and **Undo** beside it. It stays put; it's part of the conversation. | A green flash, a toast that disappears, confetti |
-| **Undo** | A quiet text button in the accent colour, always in the same place. Once used, the lines are struck through with "Undone" in muted text. If it can't undo: "Can't undo this now. Tell me what to fix." | A red "Reverted!" banner or a confirmation dialog |
-| **"New" / "Updated"** | A soft butter-coloured wash on the row plus a small "New" or "Updated" label. It fades in once and stays until your next message (ux §1). | Blinking, pulsing, or colour with no label |
-| **Allergy flag** (0019) | The **one reserved colour** in each direction: a soft plum panel with a firm plum bar on the left, a shield icon, the word **Allergy**, whose allergy it is and their own note. It sits right above Choose and can't be dismissed. Plum is never used for anything else, so it becomes a signal you learn. | Red, warning triangles, "Danger", "Safe", or any medical advice |
-| **To review** (0013) | One quiet line at the top of Kitchen: "To review (1)" with what it is and a chevron. | A badge, a dot on the app icon, a pop-up |
-| **Errors** (0018) | Shown in place, in a plain sentence, with a way forward: "I couldn't save that, so nothing changed. [Try again]". Muted brick text on a pale tint, inside the widget or bubble it belongs to. Everything else keeps working. | A full-screen error, a modal, an error code, blame |
-| **Offline / stale** | A neutral line: "Offline · showing your kitchen as of 6:42 pm". | A warning colour; it's not your fault and not urgent |
+**Status:** Accepted direction ([0042](../decisions/0042-kitchen-os-ui.md), Vero, 2026-10-15) · tokens ported 2026-10-15 (Phase 2) · UI/UX specialist
+**Supersedes:** Clay & Honey ([0024](../decisions/0024-visual-direction-clay-and-honey.md)). The old three-direction study and `preview.html` are kept in git history only; `preview.html` still shows Clay & Honey and is out of date.
+**Source of truth for values:** [`src/app/globals.css`](../../src/app/globals.css). This doc explains them; if the two disagree, the CSS wins and this doc gets fixed.
 
 ---
 
-## Design philosophy (Vero, 0038)
-Four checks for every screen and mockup. Each pairs a symptom with a fix:
+## 1. The direction
+
+- **Layout and navigation: Kitchen OS.** A phone app with five places in a bottom dock (Today, Kitchen, Plan, Meals, List), a header with household avatars, and the chat (reply, chips, message box) above the dock, plus a "What changed" bar with Undo. The screens are Frontend's Phase 3; flows stay in [`ux.md`](../architecture/ux.md).
+- **Visual system: RecipeCat cream.** Warm cream paper, brown "ink" outlines, peach accents, a dashed peach **stitch** inside cards, **washi tape** on hero cards, hand-drawn **sticker art**, and **Lumi**, the assistant's cat (she/her, KOS10, [0045](../decisions/0045-kitchen-os-features.md)): the voice in chat and a main visual element, not a corner decoration. Rounded **Fredoka** headings over **Nunito** body text. **Light and dark** ("night kitchen") themes.
+- **Not taken from Kitchen OS:** its bright "kawaii" palette (coral / mint / lavender gradients, `kitchen.css`). Vero chose cream colours with the Kitchen OS layout, so every Kitchen OS colour is re-mapped to a cream token (§4, "Kitchen OS → cream").
+
+### Credit and the public-repo caveat
+The tokens, sticker art and cat art come from Vero's private **recipe-cat** repo: tokens from `design/build_tokens.py` / `src/styles/tokens.css` (with its WCAG report in `design/tokens.json`), art from `public/art/`, and the layout look from `src/kitchen/ui/kitchen.css` and `explorations/kitchen-os/prototype-bright.html`. recipe-cat has **no licence file**, so the art is Vero's own, all rights reserved. **This repo is public (0037). Before anything on `ui/kitchen-os` is pushed, Vero confirms the ported art and tokens may be published (0042).** Fredoka and Nunito are SIL Open Font License and self-hosted by `next/font`.
+
+---
+
+## 2. Calm, in the cream style
+
+Calm (0022) still holds. Cream is playful, so calm here means **playful in the art, quiet in the behaviour**:
+
+1. **Colour means something.** Cream and ink everywhere; peach for the one main action; butter for "New / Updated"; matcha for done; sky for focus; plum **only** for allergies.
+2. **Status is information, not alarm.** "Low" is a fact, not a warning. Counts are plain text, never red bubbles.
+3. **Room to breathe.** 16 px body, 44 px or larger tap targets, one obvious action per card.
+4. **Nothing moves unless you did something.** Short, soft motion. The small "pop" overshoot is for Lumi and celebrations only (§5). Lumi is still when idle (no ambient blink); she tilts only while she's writing and hops once when happy. Reduced motion turns every movement off.
+5. **Always reversible, never scolding.** Undo is always beside the change. Voice per 0020: warm, brief, practical.
+6. **Words carry meaning, not colour alone** (0002). Stitch, tape, stickers and Lumi are decoration; they never carry meaning on their own.
+
+**Still avoided:** alarm-red badges and counting dots · warning triangles (recipe-cat's `warning.svg` was deliberately not ported) · nagging and expiry countdowns · toasts that vanish · "Oops!" · endless spinners.
+
+**Where cream bends the old calm rules** (open for Vero, see the report's proposed question): cream uses small ALL-CAPS eyebrows ("STEP 4 OF 12") and a springy pop on enter. The tokens support both, but default to calm: `ease-gentle` everywhere, `ease-pop` only for Lumi. recipe-cat's Lumi also blinks on a loop; that is left out for calm.
+
+### Calm in the moments that matter (unchanged in meaning, restyled)
+| Moment | Cream look |
+|---|---|
+| **"What changed" bar** | Raised cream card with ink outline; a matcha tick (`success.text`) per line; **Undo** in `accent.text`. It stays put. |
+| **"New" / "Updated"** | Butter wash (`highlight.bg`) plus the word "New" / "Updated". Fades in once (`motion.duration.slow`). |
+| **Allergy flag** (0019) | The one reserved colour: soft plum panel, firm plum bar, the word **Allergy**, whose allergy and their note. Plum is never used for anything else, including Kitchen OS's lavender "est." pill. |
+| **Errors** (0018) | In place, plain sentence, a way forward, `error.text` on `error.bg`. |
+| **Offline / stale** | Neutral muted line, not a warning colour. |
+
+---
+
+## 3. Design philosophy (Vero, 0038)
+Four checks for every screen and mockup:
 1. **If it looks boring, adjust the layout.**
 2. **No focal point? Use contrast.**
 3. **If it doesn't stand out, exaggerate the scale.**
 4. **If it feels plain, add more details.**
 
-UX runs these four checks on every design review, and Frontend on every screen before it ships. Fixes stay inside the Clay & Honey tokens, so calm (§1) still holds: contrast and scale create the focal point, and noise doesn't.
-
-## 2. What's the same in all three
-
-- **Token names are semantic** (named for their role, not their look), so dark mode later is just a second set of values under `[data-theme="dark"]` with no component changes (0017). In CSS, dots become hyphens: `color.text.muted` → `--color-text-muted`. (Frontend's example name `color.danger` is `color.error.*` here.)
-- **Type sizes** (one scale for all, chosen for reading at arm's length; 16 px also stops iPhone zooming into the message box):
-
-| Token | Size / line height | Used for |
-|---|---|---|
-| `font.size.caption` | 13 / 18 px | "New" labels, "added 3 days ago", group headings |
-| `font.size.small` | 15 / 22 px | Receipt lines, card details, the allergy note |
-| `font.size.body` | 16 / 24 px | Chat, item names, the message box |
-| `font.size.title` | 18 / 24 px | Widget titles, meal names |
-| `font.size.heading` | 22 / 28 px | Screen titles (Recipe, See all) |
-
-- **Spacing:** a 4 px base. `space.1`–`space.7` = 4 · 8 · 12 · 16 · 24 · 32 · 48 px. Rows have 12 px vertical padding, cards 16 px inside, widgets 24 px apart. Tap targets are 44 px (frontend §6).
-- **Focus:** a 2 px ring in `color.focus-ring`, with a 2 px gap in the surface colour, so it shows on every background including filled buttons.
-- **Reduced motion:** all `motion.duration.*` tokens become 0 ms. Highlights appear at full strength at once, nothing slides, and the typing dots become the static words "Kitchen is writing…".
-- **Fonts** are all free for commercial use under the SIL Open Font License, from Google Fonts. In the app, Next.js downloads them at build time and serves them itself (`next/font`), so no request goes to Google from Vero's phone. **Icons:** [Lucide](https://lucide.dev) (ISC licence) for A and B, [Phosphor](https://phosphoricons.com) (MIT) for C; both are free for commercial use.
-
----
-
-## 3. The three directions
-
-### A. Linen & Sage
-*"A slow morning: linen light, a pot of herbs on the sill."*
-
-Warm off-white paper, soft sage green and a gentle serif for headings. It feels homely and grown-up, like a good cookbook. Butter-yellow "New" washes read as fresh. The plum allergy flag and brick error sit far from sage, so they stay unmistakable.
-
-- **Type:** **Fraunces** (a soft, warm serif) for widget titles and meal names only, at 18 px and up, weight 560. **Figtree** (a friendly, very legible sans) for everything else, 400 / 500 / 600.
-- **Shape:** medium-soft corners. Cards have a whisper of warm shadow plus a hairline border.
-- **Motion:** unhurried, a plain gentle ease.
-- **Icons:** Lucide, 1.5 px stroke, rounded ends.
-- **Microcopy:** "Got it. Eggs are in, and the chicken's in the freezer." · "Undone. The chicken's back in the fridge." · "I couldn't save that, so nothing changed. Try again?" · "Your kitchen is empty. Tell me what you've got."
-
-### B. Still Water
-*"Cool and clear, like a glass of water on a quiet table."*
-
-Misty blue-grey surfaces, a deep teal accent, flat cards with hairline borders and almost no shadow. The calm of a tidy, airy room. It's the most minimal and the easiest to read: Atkinson Hyperlegible was designed by the Braille Institute for low-vision readers. It can feel a little cool for a kitchen.
-
-- **Type:** **Atkinson Hyperlegible** for everything, 400 and 700. One family, so it's the lightest to load.
-- **Shape:** the crispest corners. Depth comes from borders, not shadows.
-- **Motion:** the quickest of the three, still soft, with a smooth slow-down at the end.
-- **Icons:** Lucide, 1.75 px stroke.
-- **Microcopy:** "Done. Eggs added; chicken thighs → freezer." · "Undone." · "Couldn't save that. Nothing changed. [Try again]" · "1 thing to review."
-
-### C. Clay & Honey
-*"Cosy and rounded: an afternoon with tea in a hand-thrown mug."*
-
-Cream surfaces, a terracotta-clay accent, big round corners, soft diffused shadows and a rounded typeface. The warmest and most playful. The trade-offs: the clay accent sits closer to the brick error colour (words still tell them apart), and the larger corners and padding fit slightly less on a phone screen.
-
-- **Type:** **Nunito** (rounded ends) for everything, 400 / 600 / 700.
-- **Shape:** the roundest corners; pill-shaped buttons.
-- **Motion:** the slowest of the three, with a soft settle.
-- **Icons:** Phosphor Regular, 2 px stroke, rounded.
-- **Microcopy:** "All set: eggs are in, and the chicken's tucked in the freezer." · "No problem, that's undone." · "That didn't save, so nothing's changed. Want to try again?" · "Welcome back. One thing's waiting in To review."
-
-**In every direction** the allergy flag reads, word for word: "**Allergy** · Contains shrimp: Levi's seafood allergy. Medicine on hand?" with their own note under it (0019). No direction changes that wording.
+Fixes stay inside the **cream tokens**. In cream, "add more details" has ready answers: a stitch, a washi strip on the hero card, a sticker, Lumi. "Exaggerate the scale" uses `text-display` and the large stickers. Calm (§2) still holds: contrast and scale make the focal point, noise doesn't.
 
 ---
 
 ## 4. Tokens
 
-### Colour (light theme)
+Rules: semantic names only (0017, 0031). Tailwind's default palette, type, radii, shadows and spacing are reset, so only these exist. Utility names are the token names: `color.text.muted` → `--color-text-muted` → `text-text-muted`. Dark mode is the same names with new values; components never change for it.
 
-| Token | Role | A. Linen & Sage | B. Still Water | C. Clay & Honey |
-|---|---|---|---|---|
-| `color.surface.default` | Page and workspace | `#F7F4EE` | `#F2F5F6` | `#FAF4EC` |
-| `color.surface.raised` | Cards, chat dock, sheets | `#FFFDF9` | `#FFFFFF` | `#FFFBF6` |
-| `color.surface.sunken` | Message box, tags, group headers | `#EEE9E0` | `#E6ECEE` | `#F1E8DC` |
-| `color.text.default` | Main text | `#2E2A25` | `#1E2A30` | `#33281F` |
-| `color.text.muted` | Secondary text ("added 3 days ago") | `#625B51` | `#52626A` | `#685A4D` |
-| `color.text.inverse` | Text on the accent | `#FFFDF9` | `#FFFFFF` | `#FFFBF6` |
-| `color.border.default` | Decorative dividers and card edges | `#E3DCD0` | `#D9E1E4` | `#E8DCCC` |
-| `color.border.strong` | Edges of inputs and checkboxes | `#8A8274` | `#7C8A91` | `#94826F` |
-| `color.accent.default` | Primary buttons, chat button | `#4D6A54` | `#37677A` | `#9A4E2F` |
-| `color.accent.text` | Links, Undo, See all | `#43604A` | `#305E70` | `#8E4729` |
-| `color.accent.soft` | Your own chat bubble | `#E4ECE3` | `#DDEAEE` | `#F6E3D8` |
-| `color.focus-ring` | Keyboard focus | `#3B6E8C` | `#2E5FA8` | `#2F6A6A` |
-| `color.highlight.bg` | "New" / "Updated" wash, new-reply dot | `#FBF0D2` | `#FAF2D3` | `#FAEFC9` |
-| `color.highlight.text` | "New" / "Updated" label | `#6A4D10` | `#644C12` | `#654A0E` |
-| `color.success.bg` | Success tint | `#E5EFE4` | `#E1F0E7` | `#E6EFE0` |
-| `color.success.text` | Receipt tick, "Saved" | `#2F6640` | `#286445` | `#3A6135` |
-| `color.allergy.bg` | Allergy panel (reserved) | `#F5EBF3` | `#F4EAF2` | `#F3E9F2` |
-| `color.allergy.text` | Allergy text (reserved) | `#5E2B58` | `#5F2A59` | `#5A2A57` |
-| `color.allergy.border` | Allergy bar and icon (reserved) | `#8C4C84` | `#8E4986` | `#87487F` |
-| `color.warning.bg` | "Can't undo this now" and similar | `#F8EED9` | `#F9EFD8` | `#F8EDD6` |
-| `color.warning.text` | Warning text | `#6E4D12` | `#6C4C10` | `#6B4A0F` |
-| `color.error.bg` | Error tint | `#F9E9E6` | `#FBE8E6` | `#F9E6E3` |
-| `color.error.text` | Error text | `#9A3329` | `#9C2F2A` | `#9B2D2A` |
-| `color.selected.bg` | Chosen card, selected option | `#E4ECE3` | `#DDEAEE` | `#F6E3D8` |
-| `color.selected.border` | Edge of the selected item | `#4D6A54` | `#37677A` | `#9A4E2F` |
+**Themes.** Light is the default. Dark turns on automatically when the phone is in dark mode (`prefers-color-scheme`), or with `<html data-theme="dark">`; `<html data-theme="light">` forces light even on a dark phone. Dark mode is in MVP 1 (KOS14, 0045). A theme switch in Settings is not built yet (Phase 3 or later; it only needs to set `data-theme`). `tests/ui/design-tokens.test.ts` checks that the dark theme is complete, that its two copies match, every contrast pair below, and the meta colours.
 
-### Type, shape, depth and motion
+### Colour
 
-| Token | A. Linen & Sage | B. Still Water | C. Clay & Honey |
+| Token | Role | Light | Dark |
 |---|---|---|---|
-| `font.family.heading` | Fraunces, Georgia, serif | Atkinson Hyperlegible, system-ui, sans-serif | Nunito, system-ui, sans-serif |
-| `font.family.body` | Figtree, system-ui, sans-serif | Atkinson Hyperlegible, system-ui, sans-serif | Nunito, system-ui, sans-serif |
-| `font.weight.regular / medium / strong` | 400 / 500 / 600 | 400 / 400 / 700 | 400 / 600 / 700 |
-| `radius.sm / md / lg` | 8 / 12 / 20 px | 6 / 10 / 16 px | 12 / 18 / 26 px |
-| `radius.button` | 12 px | 10 px | 999 px (pill) |
-| `elevation.card` | `0 1px 2px rgb(46 42 37 / .06)` + border | none (border only) | `0 2px 10px rgb(51 40 31 / .07)` |
-| `elevation.dock` (dock, sheets) | `0 -4px 16px rgb(46 42 37 / .08)` | `0 -1px 0 #D9E1E4, 0 -2px 10px rgb(30 42 48 / .05)` | `0 -6px 24px rgb(51 40 31 / .10)` |
-| `motion.duration.quick` (press, hover) | 120 ms | 100 ms | 140 ms |
-| `motion.duration.gentle` (dock, sheets, accordion) | 280 ms | 240 ms | 320 ms |
-| `motion.duration.slow` (highlight fade-in, reorder) | 480 ms | 400 ms | 560 ms |
-| `motion.easing.gentle` | `cubic-bezier(0.25, 0.1, 0.25, 1)` | `cubic-bezier(0.2, 0, 0, 1)` | `cubic-bezier(0.33, 1, 0.68, 1)` |
-| `icon.stroke` | 1.5 px | 1.75 px | 2 px |
+| `surface.default` | Page and stage | `#FFF6EC` | `#2B1E17` |
+| `surface.raised` | Cards, chat, dock, sheets | `#FFFDF8` | `#3B2A21` |
+| `surface.sunken` | Message box, tags, group headers | `#F7EADC` | `#241913` |
+| `surface.soft` *(new)* | Quiet peach fill: ingredient chips, pills | `#FFE9DE` | `#523829` |
+| `text.default` | Main text (ink) | `#5B3A29` | `#FFEEDD` |
+| `text.muted` | Secondary text | `#7E5843` | `#E5C7AE` |
+| `text.faint` *(new)* | **Disabled only**, never for reading or placeholders | `#A88B78` | `#A88A74` |
+| `text.on-accent` *(new)* | Text on peach / butter / matcha fills | `#5B3A29` | `#3A2418` |
+| `text.inverse` | Legacy alias of `text.on-accent` (existing buttons) | `#5B3A29` | `#3A2418` |
+| `text.on-error` *(new)* | Text on a destructive (`error.text`) button | `#FFFDF8` | `#2B1E17` |
+| `border.default` | Decorative dividers only | `#ECDCCB` | `#54402F` |
+| `border.strong` | Input and checkbox edges | `#7E5843` | `#C49A7C` |
+| `border.outline` *(new)* | The sticker ink outline on cards, buttons, chips | `#5B3A29` | `#C49A7C` |
+| `border.stitch` *(new)* | Dashed inner stitch (decorative) | `#FFB89A` | `#B27459` |
+| `accent.default` | Primary button fill, chat button (peach) | `#FFB89A` | `#F7A786` |
+| `accent.strong` *(new)* | Pressed / hover on the accent | `#F59873` | `#FFBFA4` |
+| `accent.text` | Links, Undo, eyebrows | `#A84A26` | `#FFB89A` |
+| `accent.soft` | Your own chat bubble | `#FFE9DE` | `#523829` |
+| `focus-ring` | Keyboard focus (sky, never brown) | `#2B7A97` | `#8FD3EA` |
+| `highlight.bg` / `.text` | "New" / "Updated" | `#FFF1CC` / `#7A4E0E` | `#4A3A1C` / `#FFD98E` |
+| `success.bg` / `.text` | Done, receipt tick | `#E4F0DC` / `#3E6834` | `#33402C` / `#BEE0B1` |
+| `warning.bg` / `.text` | "Can't undo this now" | `#FFF1CC` / `#7A4E0E` | `#4A3A1C` / `#FFD98E` |
+| `error.bg` / `.text` | Errors | `#FFE1DC` / `#9E2B25` | `#4E2622` / `#FFAAA1` |
+| `info.bg` / `.text` *(new)* | Neutral notes | `#E0F0F5` / `#2C6273` | `#22383F` / `#B5DEEA` |
+| `allergy.bg` / `.text` / `.border` | **Reserved: allergy flags only** (KOS15, 0045) | `#F6E9F4` / `#5A2A57` / `#87487F` | `#3F2440` / `#F4D6F0` / `#C88DC1` |
+| `selected.bg` / `.border` | Chosen card, selected option | `#FFE9DE` / `#A84A26` | `#523829` / `#FFB89A` |
+| `place.fridge` / `.freezer` / `.pantry` *(new)* | Place tiles (Kitchen OS) | `#E4F0DC` / `#E0F0F5` / `#FFF1CC` | `#33402C` / `#22383F` / `#4A3A1C` |
+| `scrim` *(new)* | Behind sheets | ink at 35% | near-black at 60% |
 
-None of the easings overshoot or bounce.
+Cream has no plum, so the allergy colours are a cream-warmed version of the 0024 plum, with new dark values.
+
+**Art colours** (`--art-ink`, `--art-cream`, `--art-peach`, `--art-blush`, `--art-matcha`, `--art-butter`, `--art-sky`) are plain CSS variables, not utilities. They match the hexes baked into the SVGs, stay the same in both themes, and are for art only (washi tape, Lumi). Never use them for UI text or fills.
+
+### Kitchen OS → cream (for Frontend's Phase 3)
+| Kitchen OS (`kitchen.css`) | Use instead |
+|---|---|
+| `--bg`, `--surface`, `--card` | `surface.default`, `surface.raised`, `surface.raised` + `border.outline` |
+| `--ink`, `--ink-2`, `--ink-3` | `text.default`, `text.muted`, `text.muted` (`--ink-3` fails AA as text) |
+| `--line` | `border.default` |
+| `--coral` button gradient, `--coral-soft` | `accent.default` fill with `text.on-accent` and an ink outline; `surface.soft` |
+| `--mint` / `--lemon` / `--red` / `--sky` (+ `-soft`) | `success.*` / `warning.*` / `error.*` / `info.*` |
+| `--lav`, `--lav-soft` ("est." pill, edit note) | `info.*`. **Never lavender**: it reads as the allergy plum |
+| `.tile.t-fridge / t-freezer / t-pantry` | `place.fridge / freezer / pantry` |
+| `.hero` pink→orange gradient, white text | `card-stitched` + `washi-tape` on `surface.raised`; no gradient |
+| soft blurred shadows | `shadow-card` (offset "sticker" shadow) |
+| `outline: 3px solid var(--sky)` | `focus-ring`, already global |
+| 36 px `.btn.small`, `.seg`, 40 px `.qty` | grow to `spacing.tap` (44 px) |
+
+### Type
+Fredoka (headings, `font-heading`; `h1`–`h3` get it by default) and Nunito (body, `font-body`). Both are variable fonts, so any weight works. Sizes follow the Kitchen OS phone scale: cream's 18 px body was made for a full-screen cooking canvas and would crowd a screen that also holds a header, chat and dock.
+
+| Token | Size / line | Used for |
+|---|---|---|
+| `text.caption` | 13 / 18 px | Eyebrows, "New", meta lines (Kitchen OS's 12 px raised to 13) |
+| `text.small` | 14 / 20 px | Reasons, receipt lines, chips |
+| `text.body` | 16 / 22 px | Chat, item names, message box (16 px stops iPhone zoom) |
+| `text.title` | 20 / 24 px | Card titles, meal names |
+| `text.heading` | 22 / 28 px | Header title |
+| `text.display` *(new)* | 30 / 34 px | Hero titles (Today greeting) |
+| `text.step` *(new)* | 24–28 px, 1.25 | One cook step at a time |
+| `font.weight.regular / medium / strong` | 500 / 600 / 800 | Body / Fredoka headings and labels / names and buttons |
+
+### Space, size, shape, depth
+- **Space:** unchanged 4 px base, `spacing.1`–`7` = 4 · 8 · 12 · 16 · 24 · 32 · 48 px; `spacing.tap` 44 px.
+- **New sizes:** `spacing.icon-lg` 28 · `spacing.tile` 46 · `spacing.sticker-sm/md/lg` 56 / 72 / 96 · `spacing.lumi` 64 px (Lumi beside a greeting).
+- **Radius:** `xs` 8 · `sm` 12 · `md` 20 (rows, tiles) · `lg` 28 (cards) · `sheet` 32 · `button` pill · `full`.
+- **Outline widths** (CSS variables): `--border-hair` 2 px · `--border-thin` 2.5 px (chips, inputs, stitch) · `--border-card` 3 px · `--border-stitch-inset` 9 px.
+- **Shadows** (theme-aware): `shadow-card` 0 6px 0 offset · `shadow-sticker` · `shadow-pop` (sheets, menus) · `shadow-dock` · `shadow-fab` · `shadow-glow` (butter glow, optional "this changed").
+- **Focus:** 3 px `focus-ring` with a 2 px gap, on everything.
+
+### Components in `globals.css`
+- **`.card-stitched`:** raised surface, 3 px ink outline, `radius.lg`, offset shadow, dashed peach stitch 9 px inside. Decorative only.
+- **`.washi-tape`** (+ `data-tone="peach | sky | blush | butter"`, matcha by default): a strip on top of a hero card. Put it on an `aria-hidden` element inside a positioned card. At most one per screen, on the focal card (0038 check 2).
 
 ---
 
-## 5. Contrast (WCAG 2.2 AA)
+## 5. Motion
+| Token | Value | Use |
+|---|---|---|
+| `motion.duration.quick` | 150 ms | Press, hover |
+| `motion.duration.gentle` | 300 ms | Sheets, dock, a place's content rising in |
+| `motion.duration.slow` | 560 ms | Highlight fade-in |
+| `--motion-distance` | 10 px | How far content rises on enter |
+| `ease-gentle` | `cubic-bezier(0.2, 0.8, 0.2, 1)` | Default for everything |
+| `ease-exit` | `cubic-bezier(0.4, 0, 1, 1)` | Leaving |
+| `ease-pop` | `cubic-bezier(0.34, 1.56, 0.64, 1)` | Small overshoot: **Lumi and celebrations only** |
 
-Computed with the WCAG relative-luminance formula. Text needs **4.5:1**; focus rings, control edges and meaningful non-text marks need **3:1**. **Every pair passes in all three directions; no compromises were needed.** `color.border.default` is decorative (card edges and dividers), which WCAG exempts, so it's never the only edge of a control; `color.border.strong` is used for those. Where a row lists several ratios they follow the order in the "Pair" column.
-
-#### Contrast, direction A: Linen & Sage
-
-| Pair | Needs | Ratio | |
-|---|---|---|---|
-| Body text on surface / raised / sunken | 4.5:1 | 13.0 / 14.0 / 11.8 | Pass |
-| Muted text on surface / raised / sunken | 4.5:1 | 6.1 / 6.6 / 5.5 | Pass |
-| Inverse text on accent (primary button, chat button) | 4.5:1 | 5.9 | Pass |
-| Accent text (links, Undo, See all) on surface / raised | 4.5:1 | 6.4 / 6.9 | Pass |
-| Body text on accent soft (your bubble) / selected | 4.5:1 | 11.8 / 11.8 | Pass |
-| Body / label / muted text on the New–Updated wash | 4.5:1 | 12.5 / 6.9 / 5.9 | Pass |
-| Success text on success tint / on raised | 4.5:1 | 5.7 / 6.7 | Pass |
-| Allergy text on allergy tint | 4.5:1 | 9.2 | Pass |
-| Warning text on warning tint | 4.5:1 | 6.7 | Pass |
-| Error text on error tint / on raised | 4.5:1 | 6.2 / 7.2 | Pass |
-| Focus ring vs surface / raised / sunken | 3:1 | 5.0 / 5.4 / 4.6 | Pass |
-| Control border (inputs, checkboxes) vs surface / raised | 3:1 | 3.5 / 3.7 | Pass |
-| Primary button and chat button vs surface | 3:1 | 5.5 | Pass |
-| New-reply dot vs chat button | 3:1 | 5.3 | Pass |
-| Allergy bar and icon vs raised / vs allergy tint | 3:1 | 5.9 / 5.2 | Pass |
-| Selected border vs surface / raised | 3:1 | 5.5 / 5.9 | Pass |
-
-#### Contrast, direction B: Still Water
-
-| Pair | Needs | Ratio | |
-|---|---|---|---|
-| Body text on surface / raised / sunken | 4.5:1 | 13.4 / 14.7 / 12.3 | Pass |
-| Muted text on surface / raised / sunken | 4.5:1 | 5.8 / 6.3 / 5.3 | Pass |
-| Inverse text on accent (primary button, chat button) | 4.5:1 | 6.2 | Pass |
-| Accent text (links, Undo, See all) on surface / raised | 4.5:1 | 6.5 / 7.1 | Pass |
-| Body text on accent soft (your bubble) / selected | 4.5:1 | 12.0 / 12.0 | Pass |
-| Body / label / muted text on the New–Updated wash | 4.5:1 | 13.1 / 7.2 / 5.6 | Pass |
-| Success text on success tint / on raised | 4.5:1 | 5.9 / 7.0 | Pass |
-| Allergy text on allergy tint | 4.5:1 | 9.1 | Pass |
-| Warning text on warning tint | 4.5:1 | 6.9 | Pass |
-| Error text on error tint / on raised | 4.5:1 | 6.2 / 7.4 | Pass |
-| Focus ring vs surface / raised / sunken | 3:1 | 5.8 / 6.3 / 5.3 | Pass |
-| Control border (inputs, checkboxes) vs surface / raised | 3:1 | 3.25 / 3.6 | Pass |
-| Primary button and chat button vs surface | 3:1 | 5.7 | Pass |
-| New-reply dot vs chat button | 3:1 | 5.5 | Pass |
-| Allergy bar and icon vs raised / vs allergy tint | 3:1 | 6.1 / 5.2 | Pass |
-| Selected border vs surface / raised | 3:1 | 5.7 / 6.2 | Pass |
-
-#### Contrast, direction C: Clay & Honey
-
-| Pair | Needs | Ratio | |
-|---|---|---|---|
-| Body text on surface / raised / sunken | 4.5:1 | 13.1 / 13.9 / 11.8 | Pass |
-| Muted text on surface / raised / sunken | 4.5:1 | 6.1 / 6.5 / 5.5 | Pass |
-| Inverse text on accent (primary button, chat button) | 4.5:1 | 5.8 | Pass |
-| Accent text (links, Undo, See all) on surface / raised | 4.5:1 | 6.2 / 6.6 | Pass |
-| Body text on accent soft (your bubble) / selected | 4.5:1 | 11.5 / 11.5 | Pass |
-| Body / label / muted text on the New–Updated wash | 4.5:1 | 12.5 / 7.2 / 5.8 | Pass |
-| Success text on success tint / on raised | 4.5:1 | 6.0 / 6.9 | Pass |
-| Allergy text on allergy tint | 4.5:1 | 9.3 | Pass |
-| Warning text on warning tint | 4.5:1 | 6.9 | Pass |
-| Error text on error tint / on raised | 4.5:1 | 6.2 / 7.3 | Pass |
-| Focus ring vs surface / raised / sunken | 3:1 | 5.7 / 6.0 / 5.1 | Pass |
-| Control border (inputs, checkboxes) vs surface / raised | 3:1 | 3.4 / 3.6 | Pass |
-| Primary button and chat button vs surface | 3:1 | 5.5 | Pass |
-| New-reply dot vs chat button | 3:1 | 5.2 | Pass |
-| Allergy bar and icon vs raised / vs allergy tint | 3:1 | 6.2 / 5.4 | Pass |
-| Selected border vs surface / raised | 3:1 | 5.5 / 5.8 | Pass |
-
-The tightest margins are the control borders (3.25–3.7:1). They pass, but Frontend shouldn't lighten them.
+**Reduced motion:** all durations become 0 ms, `--motion-distance` becomes 0 and `ease-pop` loses its overshoot. Things just appear, and Lumi stays still.
 
 ---
 
-## 6. Recommendation: A. Linen & Sage
+## 6. Contrast (WCAG 2.2 AA)
+Text needs 4.5:1. Control edges, focus and meaningful marks need 3:1. Computed with the WCAG relative-luminance formula and enforced by `tests/ui/design-tokens.test.ts`. **Every pair passes in both themes.**
 
-It's the calmest of the three **for a kitchen**:
-- **Warm without being sleepy.** B is restful but a little clinical, and C is cosy but busier with its big round shapes and shadows.
-- **Signals stay unmistakable.** Sage sits far from both the plum allergy colour and the brick error colour, so neither can be mistaken for an ordinary button. That matters most for the allergy flag.
-- **Readable where it counts.** The serif appears only in titles and meal names, which gives a cookbook warmth, while lists, chat and receipts use Figtree, which is very legible.
+| Pair | Min | Light | Dark |
+|---|---|---|---|
+| `text.default` on `surface.default` / `raised` / `sunken` / `soft` | 4.5 | 9.44 / 9.92 / 8.53 / 8.63 | 14.24 / 12.04 / 15.14 / 9.47 |
+| `text.muted` on `surface.default` / `raised` / `sunken` / `soft` | 4.5 | 5.84 / 6.14 / 5.28 / 5.34 | 10.08 / 8.52 / 10.72 / 6.70 |
+| `accent.text` on `surface.default` / `raised` / `sunken` | 4.5 | 5.35 / 5.62 / 4.84 | 9.67 / 8.17 / 10.28 |
+| `text.on-accent` on `accent.default` / `accent.strong` | 4.5 | 6.04 / 4.62 | 7.49 / 9.16 |
+| `text.on-error` on `error.text` (destructive button) | 4.5 | 7.31 | 8.85 |
+| `highlight.text` on `highlight.bg` | 4.5 | 6.40 | 8.14 |
+| `success.text` on `success.bg` | 4.5 | 5.50 | 7.58 |
+| `warning.text` on `warning.bg` | 4.5 | 6.40 | 8.14 |
+| `error.text` on `error.bg` / `surface.raised` | 4.5 | 6.04 / 7.31 | 7.09 / 7.48 |
+| `info.text` on `info.bg` | 4.5 | 5.79 | 8.56 |
+| `allergy.text` on `allergy.bg` / `surface.raised` | 4.5 | 9.39 / 10.85 | 10.23 / 10.22 |
+| `text.default` on `allergy.bg` | 4.5 | 8.59 | 12.05 |
+| `text.default` on `place.fridge` / `freezer` / `pantry` | 4.5 | 8.55 / 8.62 / 8.98 | 9.70 / 10.86 / 9.68 |
+| `border.strong` on `surface.raised` / `sunken` | 3 | 6.14 / 5.28 | 5.37 / 6.75 |
+| `border.outline` on `surface.raised` | 3 | 9.92 | 5.37 |
+| `focus-ring` on `surface.default` / `raised` / `sunken` | 3 | 4.53 / 4.77 / 4.10 | 9.74 / 8.23 / 10.36 |
+| `selected.border` on `selected.bg` | 3 | 4.89 | 6.43 |
+| `allergy.border` on `allergy.bg` / `surface.raised` | 3 | 5.48 / 6.33 | 5.23 / 5.22 |
 
-**The cost:** two font families instead of one (a little more to download the first time), and Fraunces mustn't be used below 18 px. If Vero prefers the cleanest, most legible look, **B** is the strong second. The directions share the same token names, so mixing them is easy (for example A's colours with C's rounder corners).
+**Watch-outs for Frontend:**
+- **Peach `accent.default` is only 1.64:1 against `surface.raised` in light.** That's fine for a labelled button (its text identifies it), but give primary buttons the ink `border.outline`, as cream does, so the shape reads.
+- **`text.faint`** (3.12:1 light) is for disabled text only. Placeholders use `text.muted`.
+- **Native checkboxes** use `accent-accent-default` (peach) today. The browser picks the tick colour, so check it in both themes, or swap to the paw-check sticker in Phase 3.
 
-**For Vero to decide (V1):** which direction: A, B or C, or a mix?
+---
+
+## 7. Lumi
+Lumi is the assistant (KOS10): the voice in chat and the mascot. "Kitchen" stays the name of the Kitchen place. Two forms:
+- **Small inline Lumi**, [`src/ui/lumi/Lumi.tsx`](../../src/ui/lumi/Lumi.tsx): ported from Kitchen OS `Cat.tsx` and recoloured with the cream art colours. Four states:
+  - `idle`: eyes open, still.
+  - `think`: eyes glance up; head tilts gently while she is writing a reply (Phase 3 decides whether she sits beside the typing dots or replaces them).
+  - `happy`: smiling eyes, one hop (`ease-pop`).
+  - `sleep`: closed eyes. For empty and quiet states.
+  Decorative by default; pass a translated `title` when she is the only thing saying something.
+- **Large cream illustrations**, `LUMI_ART` → `public/art/lumi/`: idle, thinking, listening, working, celebrating, sleeping, alert, chef, bubble. Use them for focal moments (Today greeting, empty places, a finished cook), with `spacing.sticker-lg` or larger (0038 check 3: exaggerate the scale).
+- **Where she appears** is Phase 3's layout: beside replies in the chat, on Today's greeting, and in empty states. Never as a nag: Lumi doesn't wave for attention, bounce on a timer or show a count.
+
+## 8. Art inventory (`public/art/`)
+Ported from recipe-cat `public/art/`, sanitised: each SVG lost its hard-coded English `<title>` / `aria-label` (0015: names come from translations) and is marked `aria-hidden="true"`, so it's decorative by default. A component that needs a name gives it one through next-intl (`<img alt={t(...)}>`). No scripts or external references (checked on copy).
+
+| Folder | Files | Notes |
+|---|---|---|
+| `lumi/` | 9: `idle`, `thinking`, `listening`, `working`, `celebrating`, `sleeping`, `alert`, `chef`, `bubble` | Lumi (§7). Kept recipe-cat's names (`class="lumi"`, `data-lumi-state`, eyes group `lumi-eyes`) so its styles port easily. The small Lumi's states pair with them as idle → `idle`, think → `thinking`, happy → `celebrating`, sleep → `sleeping`. |
+| `food/` | 13 dish stickers: baking, bbq, burgers, curry, dumplings, fried-rice, pasta, ramen, salads, soups, stir-fry, sushi, tacos | For meal ideas / recipes. `pho.svg` not ported (recipe-cat sample data). |
+| `icons/` | 14: back, basket, bowl, close, flame, leaf, mic, paw-check, pin, plus, sparkle, star, undo, zzz | Phosphor stays for everything else (frontend's call). |
+| `kitchen/` | *(not ported)* | The 25 equipment stickers were removed before commit (0046). Art is ported only when a feature uses it. |
+
+**Not ported:** `cuisine/` (cuisine ranking, a RecipeCat feature), `ingredients/` (pho-only), `food-pho.svg`, `app-icon.svg` (RecipeCat's icon), the timer / play / pause / star-anise / warning icons, comic panels and sounds. **Food catalog (KOS2 / KOS9):** recipe-cat's catalog gives each food an emoji, and the UI keeps the emoji. The dish stickers in `food/` are meals, not ingredients; only `pasta`, `ramen` and `dumplings` match catalog keys. recipe-cat's unported `ingredients/` set (made for pho) would cover 11 more catalog keys (see the Phase 2 report); porting them is a later call.
