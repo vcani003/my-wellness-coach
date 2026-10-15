@@ -15,4 +15,5 @@ On the first grocery test, Vero gave Kitchen her list and "it took my list and d
 - **SL1:** grouped by store, plus "Anywhere". **SL2:** Done shopping → the "Add to your kitchen?" sheet. **SL3:** Out/Low only *offers* to add to the list.
 - **SL4:** ticks work offline. They're saved on the phone, marked "Not synced yet", and sync when the signal returns. Everything else stays read-only offline (0017).
 - **SL5:** "I bought garlic" in chat adds it to the kitchen and takes it off the list in one change set, with one Undo.
+- **SL6 (2026-10-15):** tapping "Do later" twice adds to **one** To review card. An item that leaves the list another way drops off the card, and an empty card disappears. Undo brings it back.
 

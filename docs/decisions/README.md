@@ -33,3 +33,6 @@ One line per decision. Read the full record only when it's relevant to your task
 | [0027](0027-shopping-list-in-mvp.md) | Shopping list widget in MVP 1: shared, filled from chat, staples and recipes; ticked items go into the kitchen |
 | [0028](0028-deploy-authority.md) | Routine deploys go without asking; major or risky ones need Vero's go; additive migrations run on deploy |
 | [0029](0029-invites-and-passphrases.md) | Invite / setup links + own passphrase replace email sign-in; access codes are a backup |
+| [0030](0030-item-actions.md) | ⋯ menu on items (Used up, Low, Move, Change type, Edit, Remove) + swipe-to-remove; Counter as a place |
+| [0031](0031-desktop-layout-and-design-system.md) | Desktop layout epic (explore → decide → design system → build); own design system on Base UI; Figma benched |
+| [0032](0032-categories-and-search.md) | By place (default) / By type, 12 types, search |

@@ -11,109 +11,18 @@
 
 ## Outstanding
 
-### IA1. 🟡 Actions on kitchen items (you asked)
-See [plans/next-epics.md](plans/next-epics.md) Epic A.
-**Rec:**
-- A **⋯ menu** on each item: Used up · Running low · Move to… · Change type… · Edit name/amount · Remove (mistake). It opens by tap, right-click on desktop, or long-press on phone.
-- On phone, also **swipe left → Remove**. Everything has **Undo**.
-- **No standalone ✕**, because it's too easy to hit by accident.
-- This replaces "See all is view-only" (K1).
-- Also adds **Counter** as a place (the open question from defrosting).
+### GH3. ⛔ Making the code public safely (from your GH1 answer)
+You said: put in fake names and emails, then make it public. **The catch:** fake names in today's files aren't enough, because **every past version** (the git history) still holds the real ones: your names, your Gmail on every commit, Levi's allergy, your stores, and screenshots showing "Vero" and "Levi".
+**Rec: a separate public repo.**
+- I make **`kitchen-assistant`** (public) from a **fresh, single-version copy**, with fake names (Ana, Ben), a GitHub no-reply email, generic stores ("Asian market", "Supermarket"), a generic allergy example, and no screenshots or test-run folders that contain names.
+- Your current repo **stays private** and stays the one we work in. The public one gets refreshed when you ask.
+- **Nothing becomes public until you say "go" here**, after I show you a summary of what's in it.
+The alternative is rewriting the private repo's whole history and making that public. That's riskier: it breaks the other working copies and is easy to get subtly wrong.
 
 > Answer:
 
-### DL1. 🟡 Desktop layout: which ideas to mock up?
-See Epic B. UX would mock up **three options**: (1) dashboard grid, (2) three-pane app with a left nav and a collapsible chat panel, (3) a focus widget plus a side column, with chat as a drawer.
-**Rec:** mock up all three as interactive HTML pages in Clay & Honey, then you pick or mix. Tell me if you'd rather start from apps you like the look of (name a few).
-
-> Answer:
-
-### DL2. 🟡 Component library, or our own design system?
-**Rec:** keep **Base UI** (unstyled, accessible building blocks) plus **our own Clay & Honey tokens**, and formalise them into a documented design system with a component gallery page (Epic B3). Styled libraries (shadcn/ui, MUI, Mantine) would fight our look and redo accessibility work. **Figma:** only if you want it (tokens via Tokens Studio); otherwise mockups are HTML pages.
-
-> Answer:
-
-### P3. 🟡 Rank the next features (after A–C)
-See the table in [plans/next-epics.md](plans/next-epics.md): smart staples · recipe box · weekly plan with days · "use soon" nudges · budget heads-up · offline queued messages · voice input · gentle reminders.
-**Rec order:** smart staples → recipe box → budget heads-up → voice input → the rest.
-
-> Answer:
-
-### SM1. 🟡 A real-AI check before every deploy (to prevent today's outage)
-Today's chat outage happened because our tests use a simulated AI, which doesn't enforce the real AI's rules. A new test now catches that exact problem, but a real check is safer.
-**Rec:** before each deploy, I run a tiny **real-AI smoke check** using your **staging key** (S6, $5 limit): one short call per task (understanding a message, meal ideas, recipe, re-wording), about **2–5¢ per deploy**. If any call is rejected, the deploy stops.
-**What I need from you, once:** open `~/Desktop/code/kitchen-preview/.env.local` in TextEdit and add a line `ANTHROPIC_API_KEY=` followed by your **staging** key. That file is never committed or uploaded, and I never see the key's value; the check script reads it directly.
-
-> Answer (Vero, 2026-10-14): "then we need to scope what gets added to a deploy and not just deploy on every turn."
->
-> **Orchestrator's reading, to confirm:** yes to the real-AI smoke check, and deploys become **scoped releases**:
-> - **A release is a planned bundle:** one finished feature or a batch of fixes, with a short "what's in this release" note to Vero before it goes out.
-> - **About once a day at most**, and only after the localhost tester scripts and the smoke check pass.
-> - **Urgent fixes** (an outage or a security problem) can still go out alone, and Vero is told straight away.
-> - This refines decision 0028. **Still needed:** Vero adds her staging key to `~/Desktop/code/kitchen-preview/.env.local` for the smoke check.
-> Confirm or adjust:
-
-### CAT1. 🟡 Organising and searching your kitchen (you asked)
-**Rec (being built on this):**
-- The full kitchen view (**See all**) gets a toggle: **By place** (Fridge / Freezer / Pantry / Not sure where, as now) | **By type**.
-- **Types:** Produce · Meat & seafood · Dairy & eggs · Rice, noodles & grains · Sauces & condiments · Spices & seasonings · Canned & jarred · Baking · Snacks & sweets · Drinks · Leftovers · Other.
-  - *Sauces & condiments* covers fish sauce, hoisin and sriracha. *Rice, noodles & grains* covers bánh phở and jasmine rice.
-- **Kitchen sorts items automatically** when they're added, marked as its guess. You can correct it in chat ("fish sauce goes under sauces"), and it remembers that for next time.
-- Your existing items get sorted once by simple name matching. Anything unclear goes to **Other**.
-- **Search box** at the top: type "fish" or "nước mắm" to find items by the name you used *or* the English name, wherever they are. Each result shows where it is and its batches.
-- The small Kitchen widget on the main screen stays as it is, with a "See all" link.
-- Want different types, or By type as the default? Tell me.
-
-> Answer:
-
-### DF1. 🟡 Where does defrosted food go?
-*(Found by the tester agent)* "I defrosted the chicken" currently leaves it under **Freezer**.
-**Rec (being built on this):** defrosting moves it to **Fridge**, marked as *inferred* (since that's where people defrost), with "Defrosted" and the date. If you say otherwise ("defrosting on the counter"), it follows what you said.
-
-> Answer:
-
-### GH1. 🟡 Make the GitHub repo public?
-It's **private** for now: [github.com/vcani003/my-wellness-coach](https://github.com/vcani003/my-wellness-coach). There are no secrets anywhere in its history (checked). But it does contain personal details: **Levi's seafood allergy and medicine note** (used as a test case), your names, your stores, and your Gmail address on every commit.
-**Rec:** keep it private. If you want it public later (for a portfolio, say), first replace those details with made-up ones and use a GitHub "noreply" commit email. Going public can't be fully undone.
-
-> Answer:
-
-### CL1. 🟡 Chatting with me on the go
-- **(a) Remote Control:** this session, steered from the Claude phone app. Works right away and can still deploy. Your Mac must stay on with the Claude app open.
-- **(b) Move this session to the cloud:** runs on Anthropic's servers with the GitHub repo, and works with your Mac closed. To keep deploying from there, first connect Vercel to GitHub (Vercel → Project → Settings → Git → Connect → GitHub → `my-wellness-coach`). After that, every push to `main` deploys automatically, and the cloud session never needs your keys.
-
-**Rec:** (a) for today. (b) once you've connected Vercel to GitHub (about 2 minutes).
-
-> Answer:
-
-### SL6. 🟡 Shopping "Do later": two small details
-"Do later" on the Done-shopping sheet now saves the chosen items to the Kitchen's To review, as "3 items to add · Shopping list". Tapping that row reopens the sheet, with **Add** and **Skip** (ux.md §5, §10). The spec doesn't cover two details. Both are built on the Rec and easy to change:
-- **Tapping Do later twice** before adding the first batch. **Rec:** keep one card and add the second batch to it, so nothing you saved earlier is lost. The alternative is a separate card for each tap.
-- **An item leaving the list some other way** ("I bought garlic", ⋯ Remove, or adding it with Done shopping). **Rec:** it drops off the card, and the card disappears once it's empty, so To review never asks about something that's already sorted. An Undo brings it back.
-
-> Answer:
-
-## Setup tasks (S1–S3 done 2026-10-14; S4 later for email sign-in)
-These need **your** accounts. Keep every key and code private: you paste them yourself, and I'll never ask you to send them in chat.
-- **S1. Anthropic (about 5 min):** at console.anthropic.com, create a workspace (for example "wellness-coach"), set its **monthly spend limit to $10** (see C12), and create an **API key**. Keep it somewhere safe for S3.
-- **S2. Neon (about 5 min):** at neon.com, sign up (free), create a project "wellness-coach" in a US East region, and copy the **connection string** from the dashboard.
-- **S3. Vercel (about 5 min):** at vercel.com, sign up for the free (Hobby) plan. Then, in the Terminal app, in the project folder, run `npx vercel login` and follow the browser prompt. When I ask, you'll add these settings in the Vercel dashboard (Project → Settings → Environment Variables):
-  - `DATABASE_URL`: the Neon connection string (S2)
-  - `ANTHROPIC_API_KEY`: your key (S1)
-  - `AI_MODE`: `real`
-  - `SESSION_SECRET`: generate one in Terminal with `openssl rand -base64 32`
-  - `ACCESS_CODES`: `vero=` followed by a long passphrase only you know. Levi's code gets added tonight.
-- **S3b. Set up the database (about 2 min, after S2):** in Terminal, in the project folder, run these two commands, pasting your Neon connection string between the quotes. Your string stays in your Terminal and is never saved to a file.
-  - `DATABASE_URL='<neon string>' npm run db:migrate`
-  - `DATABASE_URL='<neon string>' npm run db:bootstrap`
-- **Then tell me "ready".** I'll link the Vercel project, you add the five settings above in the dashboard, and on your **"go"** I deploy and check it.
-- **For the test copy ("staging") and the two tester agents (P2 e, decision 0021):** about 10 minutes, whenever suits you. Not urgent.
-  - **S5. Neon (✅ done 2026-10-14):** in the same Neon account, create a **second project** called `wellness-coach-staging`. Copy its connection string and keep it private.
-  - **S6 (✅ done). Anthropic:** create a workspace called `wellness-coach-staging` with a **$5 monthly limit**, and create a key in it (30-day expiry, like the other).
-  - **S7 (✅ done). Vercel:** Claude gives you the exact `npx vercel env add … preview` commands, so the test copy uses the staging database and key, never your real kitchen.
-  - Until then, the tester agents run against the local copy on your Mac, using the stand-in AI.
-- **S4. Resend: no longer needed** (0029 replaced email sign-in).
-- ~~S4. Resend:~~ not needed today. It's for email sign-in later.
+## Setup tasks
+*All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
 
 ---
 
@@ -192,5 +101,14 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | D2 | Returning after deletion | [0015](decisions/0015-language-units-policies-data.md): yes, as a fresh start with a new code |
 | SU1 | Levi signs up himself | [0029](decisions/0029-invites-and-passphrases.md): invite / setup links + own passphrase; deployed 2026-10-14 |
 | ST1 | How testers use staging | [0021](decisions/0021-tester-agents.md): local-copy testers before every deploy; Vero signs in to staging before bigger changes; both locks kept |
+| IA1 | Item actions | [0030](decisions/0030-item-actions.md) |
+| DL1, DL2 | Desktop layout; design system | [0031](decisions/0031-desktop-layout-and-design-system.md): Figma benched |
+| P3 | Next features | Order: smart staples → recipe box → budget heads-up → voice input → the rest ([plan](plans/next-epics.md)) |
+| SM1 | Releases and real-AI check | [0028](decisions/0028-deploy-authority.md): scoped releases; staging key in place |
+| CAT1 | Types and search | [0032](decisions/0032-categories-and-search.md): defaults |
+| DF1 | Defrosted food | [0011](decisions/0011-visible-changes-and-kitchen-fields.md): to Fridge unless said |
+| SL6 | Do later details | [0027](decisions/0027-shopping-list-in-mvp.md) |
+| CL1 | On the go | Remote Control for now; cloud later |
+| GH1 | Public repo | Yes, with fake details; how is GH3 |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |
