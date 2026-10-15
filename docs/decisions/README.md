@@ -51,3 +51,4 @@ One line per decision. Read the full record only when it's relevant to your task
 | [0045](0045-kitchen-os-features.md) | KOS1–16: dated plan, est. use-by, editable items, levels, favorites, History, view/chips, aisles, rename/leave, week needs, dark theme, allergy colour, >5 removals asks; assistant is Lumi |
 | [0046](0046-cream-style-details.md) | Cream style: short caps labels OK; pop only for Lumi and celebrations; no looping animation; unused art not ported |
 | [0047](0047-app-name-and-place-chips.md) | App stays "Kitchen", assistant is Lumi; no fixed chips per place until KOS8 |
+| [0048](0048-bright-look.md) | Bright prototype look (white floating cards, coral gradient, emoji tiles, line-drawn Lumi); light only; cream art removed |
