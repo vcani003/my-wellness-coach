@@ -8,3 +8,5 @@
 - **Make again** copies the cooked version into a new meal, refinable as usual; the original is never changed.
 - **Chat:** naming a dish you've made asks once, "The one from 15 Oct, or a new one?", with the past one first (RB7). This changes 0013 MI1 only when a matching past meal exists.
 - **Allergies:** an old recipe that now clashes with someone's allergy is allowed, always flagged, and gets a one-tap "make it without X" (RB8, 0019).
+
+- **Details (RBX1–RBX3, 2026-10-15, Recs):** if a copy is already in the plan, Make again becomes "Open in your plan". Asking for a change on a cooked recipe offers "Make it again with …?" [Make again] [Not now]. The after-cooking note shows as one muted line. Spec: [design/recipe-box.md](../design/recipe-box.md).

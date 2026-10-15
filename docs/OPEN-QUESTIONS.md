@@ -11,12 +11,7 @@
 
 ## Outstanding
 
-### RBX1–RBX3. 🟡 Recipe box details (spec: [design/recipe-box.md](design/recipe-box.md))
-- **RBX1.** "Make again" when a copy is already in your plan? **Rec:** don't make another copy; the button becomes "Open in your plan".
-- **RBX2.** Asking for a change ("no oven") while reading a cooked recipe? **Rec:** "That one's already cooked. Make it again with no oven?" [Make again] [Not now].
-- **RBX3.** Show the after-cooking note on a cooked recipe ("Ben's note: used half the coconut milk")? **Rec:** yes, one muted line.
-
-> Answer:
+*Nothing outstanding.*
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
@@ -114,5 +109,6 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | IA2–IA6 | Item action details | [0036](decisions/0036-item-action-details.md): all Recs |
 | GH3 | Making the code public safely | [0037](decisions/0037-public-repo-as-is.md): public as is, no rewrite; secrets scan clean |
 | RB1–RB9 | Past recipes | [0040](decisions/0040-recipe-box.md): all Recs |
+| RBX1–RBX3 | Recipe box details | [0040](decisions/0040-recipe-box.md): all Recs |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |
