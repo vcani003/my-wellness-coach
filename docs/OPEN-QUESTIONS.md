@@ -16,7 +16,14 @@ Today's chat outage happened because our tests use a simulated AI, which doesn't
 **Rec:** before each deploy, I run a tiny **real-AI smoke check** using your **staging key** (S6, $5 limit): one short call per task (understanding a message, meal ideas, recipe, re-wording), about **2–5¢ per deploy**. If any call is rejected, the deploy stops.
 **What I need from you, once:** open `~/Desktop/code/kitchen-preview/.env.local` in TextEdit and add a line `ANTHROPIC_API_KEY=` followed by your **staging** key. That file is never committed or uploaded, and I never see the key's value; the check script reads it directly.
 
-> Answer:
+> Answer (Vero, 2026-10-14): "then we need to scope what gets added to a deploy and not just deploy on every turn."
+>
+> **Orchestrator's reading, to confirm:** yes to the real-AI smoke check, and deploys become **scoped releases**:
+> - **A release is a planned bundle:** one finished feature or a batch of fixes, with a short "what's in this release" note to Vero before it goes out.
+> - **About once a day at most**, and only after the localhost tester scripts and the smoke check pass.
+> - **Urgent fixes** (an outage or a security problem) can still go out alone, and Vero is told straight away.
+> - This refines decision 0028. **Still needed:** Vero adds her staging key to `~/Desktop/code/kitchen-preview/.env.local` for the smoke check.
+> Confirm or adjust:
 
 ### CAT1. 🟡 Organising and searching your kitchen (you asked)
 **Rec (being built on this):**
