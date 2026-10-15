@@ -11,6 +11,34 @@
 
 ## Outstanding
 
+### IA1. 🟡 Actions on kitchen items (you asked)
+See [plans/next-epics.md](plans/next-epics.md) Epic A.
+**Rec:**
+- A **⋯ menu** on each item: Used up · Running low · Move to… · Change type… · Edit name/amount · Remove (mistake). It opens by tap, right-click on desktop, or long-press on phone.
+- On phone, also **swipe left → Remove**. Everything has **Undo**.
+- **No standalone ✕**, because it's too easy to hit by accident.
+- This replaces "See all is view-only" (K1).
+- Also adds **Counter** as a place (the open question from defrosting).
+
+> Answer:
+
+### DL1. 🟡 Desktop layout: which ideas to mock up?
+See Epic B. UX would mock up **three options**: (1) dashboard grid, (2) three-pane app with a left nav and a collapsible chat panel, (3) a focus widget plus a side column, with chat as a drawer.
+**Rec:** mock up all three as interactive HTML pages in Clay & Honey, then you pick or mix. Tell me if you'd rather start from apps you like the look of (name a few).
+
+> Answer:
+
+### DL2. 🟡 Component library, or our own design system?
+**Rec:** keep **Base UI** (unstyled, accessible building blocks) plus **our own Clay & Honey tokens**, and formalise them into a documented design system with a component gallery page (Epic B3). Styled libraries (shadcn/ui, MUI, Mantine) would fight our look and redo accessibility work. **Figma:** only if you want it (tokens via Tokens Studio); otherwise mockups are HTML pages.
+
+> Answer:
+
+### P3. 🟡 Rank the next features (after A–C)
+See the table in [plans/next-epics.md](plans/next-epics.md): smart staples · recipe box · weekly plan with days · "use soon" nudges · budget heads-up · offline queued messages · voice input · gentle reminders.
+**Rec order:** smart staples → recipe box → budget heads-up → voice input → the rest.
+
+> Answer:
+
 ### SM1. 🟡 A real-AI check before every deploy (to prevent today's outage)
 Today's chat outage happened because our tests use a simulated AI, which doesn't enforce the real AI's rules. A new test now catches that exact problem, but a real check is safer.
 **Rec:** before each deploy, I run a tiny **real-AI smoke check** using your **staging key** (S6, $5 limit): one short call per task (understanding a message, meal ideas, recipe, re-wording), about **2–5¢ per deploy**. If any call is rejected, the deploy stops.
