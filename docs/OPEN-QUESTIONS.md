@@ -11,17 +11,7 @@
 
 ## Outstanding
 
-### GH3. ⛔ Making the code public safely (from your GH1 answer)
-You said: put in fake names and emails, then make it public. **The catch:** fake names in today's files aren't enough, because **every past version** (the git history) still holds the real ones: your names, your Gmail on every commit, Levi's allergy, your stores, and screenshots showing "Vero" and "Levi".
-**Rec: a separate public repo.**
-- I make **`kitchen-assistant`** (public) from a **fresh, single-version copy**, with fake names (Ana, Ben), a GitHub no-reply email, generic stores ("Asian market", "Supermarket"), a generic allergy example, and no screenshots or test-run folders that contain names.
-- Your current repo **stays private** and stays the one we work in. The public one gets refreshed when you ask.
-- **Nothing becomes public until you say "go" here**, after I show you a summary of what's in it.
-The alternative is rewriting the private repo's whole history and making that public. That's riskier: it breaks the other working copies and is easy to get subtly wrong.
-
-**Update 2026-10-15:** Vero asked for the history-rewrite route instead, and says the names and allergy are example data. Plan: [plans/history-rewrite.md](plans/history-rewrite.md). **Rec: option A, email only.** It's small: about 1–1.5 h of agent time and about 15–20 min of yours. We can prove no code changed. Deleting and recreating the GitHub repo needs your "go".
-
-> Answer:
+*Nothing outstanding.*
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
@@ -117,5 +107,6 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | AS1 b,c,e,f | Shared settings, household, names, focus | [0035](decisions/0035-future-assistants-and-name.md) |
 | NM1 | App name | [0035](decisions/0035-future-assistants-and-name.md): "Kitchen" for MVP 1 |
 | IA2–IA6 | Item action details | [0036](decisions/0036-item-action-details.md): all Recs |
+| GH3 | Making the code public safely | [0037](decisions/0037-public-repo-as-is.md): public as is, no rewrite; secrets scan clean |
 | C9 | First commit | Done: first local commit made (nothing pushed) |
 | — | Technical defaults | Confirmed by Vero, 2026-10-14 |

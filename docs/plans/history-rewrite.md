@@ -1,6 +1,6 @@
 # Plan: rewrite git history so the repo can go public (GH3)
 
-**Status:** Proposed · 2026-10-15 · Orchestrator. Nothing runs until Vero says "go" in OPEN-QUESTIONS GH3.
+**Status:** Not needed · 2026-10-15. Superseded by [0037](../decisions/0037-public-repo-as-is.md): the repo goes public as it is. Kept for reference.
 
 ## What's in the history today
 - **92 commits.** 84 are on GitHub (`vcani003/my-wellness-coach`: private, 0 forks, 0 pull requests).
