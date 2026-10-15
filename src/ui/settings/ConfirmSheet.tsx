@@ -34,7 +34,7 @@ export function ConfirmSheet(props: ConfirmSheetProps) {
   return (
     <Dialog.Root open={props.open} onOpenChange={(open) => props.onOpenChange(open)}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-40 bg-text-default/30" />
+        <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
         {/* Always rendered: unmounting the Popup ourselves left Base UI's backdrop stuck closing,
             blocking every tap after Cancel. A new key on each open gives a fresh, empty sheet. */}
         <SheetBody key={props.open ? "open" : "closed"} {...props} />
@@ -74,9 +74,9 @@ function SheetBody({ onOpenChange, title, children, confirmLabel, busyLabel, can
     <Dialog.Popup
       initialFocus={phrase ? fieldRef : cancelRef}
       aria-describedby={failed ? errorId : undefined}
-      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 overflow-y-auto rounded-t-lg bg-surface-raised px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-dock desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-lg"
+      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 overflow-y-auto rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
     >
-      <Dialog.Title className="text-title font-strong">{title}</Dialog.Title>
+      <Dialog.Title className="font-heading text-title font-medium">{title}</Dialog.Title>
       <div className="flex flex-col gap-2 text-body">{children}</div>
       {phrase && (
         <div className="flex flex-col gap-1">
@@ -98,12 +98,12 @@ function SheetBody({ onOpenChange, title, children, confirmLabel, busyLabel, can
             autoCorrect="off"
             spellCheck={false}
             enterKeyHint="done"
-            className="min-h-tap rounded-sm border border-border-strong bg-surface-sunken px-3 py-2 text-body"
+            className="field"
           />
         </div>
       )}
       {failed && (
-        <p id={errorId} role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-small text-error-text">
+        <p id={errorId} role="alert" className="rounded-md bg-error-bg px-3 py-2 text-small text-error-text">
           {failedText}
         </p>
       )}
@@ -112,9 +112,7 @@ function SheetBody({ onOpenChange, title, children, confirmLabel, busyLabel, can
         onClick={() => void confirm()}
         aria-disabled={!ready || busy || undefined}
         aria-busy={busy || undefined}
-        className={`min-h-tap w-full rounded-button px-5 text-body font-strong text-text-inverse aria-disabled:opacity-60 ${
-          tone === "danger" ? "bg-error-text" : "bg-accent-default"
-        }`}
+        className={`btn w-full ${tone === "danger" ? "btn-danger" : "btn-primary"}`}
       >
         {busy ? busyLabel : confirmLabel}
       </button>
@@ -123,7 +121,7 @@ function SheetBody({ onOpenChange, title, children, confirmLabel, busyLabel, can
         type="button"
         onClick={() => onOpenChange(false)}
         disabled={busy}
-        className="min-h-tap w-full rounded-button border border-border-strong bg-surface-raised px-5 text-body font-strong"
+        className="btn w-full"
       >
         {cancelLabel}
       </button>

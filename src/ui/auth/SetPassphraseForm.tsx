@@ -13,7 +13,6 @@
 import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import type { AuthFailure } from "@/lib/auth/invites";
-import { SpinnerIcon } from "@/ui/primitives/icons";
 import { useKeyboardInset } from "@/ui/shell/viewport";
 import { AuthCard, primaryButtonClass, revealOnKeyboard, SecretField, TextField } from "./fields";
 import { LinkGone } from "./LinkGone";
@@ -145,7 +144,6 @@ export function SetPassphraseForm(props: SetPassphraseFormProps) {
         </p>
 
         <button ref={submit} type="submit" disabled={pending} aria-busy={pending || undefined} className={`${primaryButtonClass} mt-5`}>
-          {pending && <SpinnerIcon aria-hidden="true" className="size-icon motion-safe:animate-spin" />}
           {pending ? t(`${props.mode}.busy`) : t(`${props.mode}.submit`)}
         </button>
 

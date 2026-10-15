@@ -43,7 +43,7 @@ export function MealIdeasWidget() {
         <div className="flex flex-col gap-2">
           <p className="text-small text-text-muted">{t("loading")}</p>
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-24 rounded-md bg-surface-sunken" />
+            <div key={i} className="h-24 rounded-lg bg-surface-sunken" />
           ))}
         </div>
       ) : (
@@ -77,9 +77,9 @@ function IdeaCardView({ idea }: { idea: IdeaCard }) {
   return (
     <li
       data-entity-id={idea.ideaId}
-      className="flex flex-col gap-2 rounded-md border border-border-default bg-surface-default p-4"
+      className="card flex flex-col gap-2 px-5 py-4"
     >
-      <h3 className="text-title font-strong">
+      <h3 className="text-title font-medium">
         {idea.name}
       </h3>
       <p className="text-small">{idea.why}</p>
@@ -99,7 +99,7 @@ function IdeaCardView({ idea }: { idea: IdeaCard }) {
           <button
             type="button"
             onClick={() => actions.openRecipe(chosen.id, { focus: true })}
-            className="min-h-tap rounded-button px-3 text-body font-medium text-accent-text underline"
+            className="btn-quiet underline"
             aria-label={t("openRecipeLabel", { name: idea.name })}
           >
             {t("openRecipe")}
@@ -112,12 +112,12 @@ function IdeaCardView({ idea }: { idea: IdeaCard }) {
             disabled={choosing === "choosing"}
             aria-label={t("chooseLabel", { name: idea.name })}
             onClick={() => void actions.choose(idea.ideaId)}
-            className="min-h-tap self-start rounded-button bg-accent-default px-5 text-body font-strong text-text-inverse disabled:opacity-60"
+            className="btn btn-primary self-start"
           >
             {choosing === "choosing" ? t("choosing") : t("choose")}
           </button>
           {choosing === "failed" && (
-            <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-small text-error-text">
+            <p role="alert" className="rounded-md bg-error-bg px-3 py-2 text-small text-error-text">
               {t("chooseFailed")}
             </p>
           )}

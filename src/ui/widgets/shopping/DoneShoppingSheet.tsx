@@ -11,6 +11,7 @@
  */
 import { useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
+import { Checkbox } from "@/ui/primitives/Checkbox";
 import { Dialog } from "@/ui/primitives/Dialog";
 
 export interface SheetItem {
@@ -39,7 +40,7 @@ export function DoneShoppingSheet(props: DoneShoppingSheetProps) {
   return (
     <Dialog.Root open={props.open} onOpenChange={(open) => !open && dismissRef.current()}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-40 bg-text-default/30" />
+        <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
         {/* A new key on each open, so the pre-selection is fresh each time. */}
         <SheetBody key={props.open ? "open" : "closed"} {...props} dismissRef={dismissRef} />
       </Dialog.Portal>
@@ -106,12 +107,10 @@ function SheetBody({
       <fieldset className="flex flex-col">
         <legend className="mb-1 text-caption font-strong tracking-wide text-text-muted uppercase">{t(key)}</legend>
         {list.map((i) => (
-          <label key={i.id} className="flex min-h-tap cursor-pointer items-center gap-3 rounded-sm px-1">
-            <input
-              type="checkbox"
+          <label key={i.id} className="flex min-h-tap cursor-pointer items-center gap-3 rounded-md px-1">
+            <Checkbox
               checked={selected.has(i.id)}
               onChange={() => toggle(i.id)}
-              className="size-6 shrink-0 cursor-pointer accent-accent-default"
             />
             <span className="text-body">{i.name}</span>
           </label>
@@ -123,11 +122,11 @@ function SheetBody({
     <Dialog.Popup
       finalFocus={finalFocus}
       aria-describedby={failed ? errorId : undefined}
-      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 rounded-t-lg bg-surface-raised px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-dock desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[28rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-lg"
+      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[28rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
     >
       <div className="flex items-start gap-2">
         <div>
-          <Dialog.Title className="text-title font-strong">{t("title")}</Dialog.Title>
+          <Dialog.Title className="font-heading text-title font-medium">{t("title")}</Dialog.Title>
           <Dialog.Description className="text-small text-text-muted">{t("from")}</Dialog.Description>
         </div>
         <button
@@ -143,7 +142,7 @@ function SheetBody({
         {section("notTicked", notTicked)}
       </div>
       {failed && (
-        <p id={errorId} role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-small text-error-text">
+        <p id={errorId} role="alert" className="rounded-md bg-error-bg px-3 py-2 text-small text-error-text">
           {tShop(failed === "add" ? "doneFailed" : failed === "later" ? "laterFailed" : "skipFailed")}
         </p>
       )}
@@ -151,15 +150,15 @@ function SheetBody({
         type="button"
         onClick={() => void add()}
         disabled={busy || selected.size === 0}
-        className="min-h-tap w-full rounded-button bg-accent-default px-5 text-body font-strong text-text-inverse disabled:opacity-60"
+        className="btn btn-primary w-full"
       >
         {busy ? t("adding") : t("add", { count: selected.size })}
       </button>
       <div className="flex items-center justify-between">
-        <button type="button" onClick={() => void later()} disabled={busy} className="min-h-tap rounded-button px-3 text-body font-medium text-accent-text">
+        <button type="button" onClick={() => void later()} disabled={busy} className="btn-quiet">
           {t("doLater")}
         </button>
-        <button type="button" onClick={() => void skip()} disabled={busy} className="min-h-tap rounded-button px-3 text-body font-medium text-accent-text">
+        <button type="button" onClick={() => void skip()} disabled={busy} className="btn-quiet">
           {t("skip")}
         </button>
       </div>

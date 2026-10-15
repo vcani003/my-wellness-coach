@@ -5,14 +5,19 @@
  * live region (Announcer) speaks once per turn instead (frontend.md §6).
  * `data-peek` marks what the phone's Peek state shows: the latest reply (or a pending message).
  *
+ * Lumi (KOS10, 0045) is the face beside each reply: thinking while she writes, one happy hop when
+ * a reply lands (the only "pop" outside celebrations, V-KOS1 Rec), then still. Decorative: the
+ * reply is labelled "Lumi:" in words for screen readers.
+ *
  * Saved chat (P2 a): a loading line or an error with "Try again" while the latest page is out;
  * "Show earlier messages" at the top loads older pages. It's a button, not infinite scroll: what
  * you're reading stays where it is, and focus stays on the button (or, once there's nothing older,
  * moves to the oldest message so reading carries on from there).
  */
 import { useTranslations } from "next-intl";
-import { useLayoutEffect, useRef, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useAnnounce } from "@/ui/a11y/Announcer";
+import { Lumi, type LumiState } from "@/ui/lumi/Lumi";
 import type { AssistantMessage, ChatState, UserMessage } from "./chat-reducer";
 import { useFormatMsg } from "./format-msg";
 import { Receipt } from "./Receipt";
@@ -30,7 +35,7 @@ export function MessageList({
   chat: ChatState;
   onRetry: (id: string) => void;
   onUndo: (changeSetId: string) => void;
-  onView: () => void;
+  onView?: () => void;
   /** Loads the next older page; resolves to how many messages it added and whether more remain. */
   onLoadOlder: () => Promise<{ added: number; more: boolean }>;
   onRetryHistory: () => void;
@@ -86,7 +91,7 @@ export function MessageList({
             type="button"
             onClick={() => void showEarlier()}
             aria-disabled={loadingOlder || undefined}
-            className="min-h-tap rounded-button border border-border-strong bg-surface-raised px-4 text-small font-strong text-accent-text aria-disabled:opacity-60"
+            className="btn btn-small text-accent-text"
           >
             {loadingOlder ? t("loadingEarlier") : t("showEarlier")}
           </button>
@@ -101,7 +106,7 @@ export function MessageList({
       {history.status === "error" && (
         <p data-peek={empty} className="flex flex-wrap items-center gap-2 rounded-md bg-error-bg px-3 py-2 text-small text-error-text">
           {t("historyError")}
-          <button type="button" onClick={onRetryHistory} className="min-h-tap rounded-button px-2 font-strong text-accent-text">
+          <button type="button" onClick={onRetryHistory} className="btn-quiet">
             {t("tryAgain")}
           </button>
         </p>
@@ -122,13 +127,10 @@ export function MessageList({
         ),
       )}
       {pendingReply && (
-        <p data-peek="true" className="flex items-center gap-1 text-small text-text-muted">
+        // Lumi tilts while she writes, in place of the typing dots; with reduced motion she's still.
+        <p data-peek="true" className="flex items-center gap-2 text-small text-text-muted">
+          <LumiFace state="think" />
           {t("writing")}
-          <span aria-hidden="true" className="flex gap-0.5">
-            <span className="typing-dot size-1 rounded-full bg-text-muted" />
-            <span className="typing-dot size-1 rounded-full bg-text-muted" />
-            <span className="typing-dot size-1 rounded-full bg-text-muted" />
-          </span>
         </p>
       )}
     </div>
@@ -139,7 +141,7 @@ function UserBubble({ message, peek, onRetry }: { message: UserMessage; peek: bo
   const t = useTranslations("chat");
   return (
     <div data-peek={peek || message.status === "failed"} data-message={message.id} tabIndex={-1} className="flex flex-col items-end gap-1">
-      <p className="max-w-[85%] rounded-lg rounded-br-sm bg-accent-soft px-4 py-2 text-body whitespace-pre-wrap">
+      <p className="max-w-[85%] rounded-lg rounded-br-xs border-2 border-border-default bg-accent-soft px-4 py-2 text-body whitespace-pre-wrap">
         <span className="sr-only">{t("you")}: </span>
         {message.text}
       </p>
@@ -149,7 +151,7 @@ function UserBubble({ message, peek, onRetry }: { message: UserMessage; peek: bo
           <button
             type="button"
             onClick={() => onRetry(message.id)}
-            className="min-h-tap rounded-button px-2 font-strong text-accent-text"
+            className="btn-quiet"
           >
             {t("tryAgain")}
           </button>
@@ -157,6 +159,26 @@ function UserBubble({ message, peek, onRetry }: { message: UserMessage; peek: bo
       )}
     </div>
   );
+}
+
+/** Lumi beside a reply: a round cream frame with the small cat. */
+export function LumiFace({ state = "idle" }: { state?: LumiState }) {
+  return (
+    <span aria-hidden="true" className="grid size-tap shrink-0 place-items-center rounded-full border-2 border-border-outline bg-surface-soft">
+      <Lumi state={state} size={30} />
+    </span>
+  );
+}
+
+/** Happy for a moment when a reply lands, then still. */
+function MoodLumi({ fresh }: { fresh: boolean }) {
+  const [mood, setMood] = useState<LumiState>(fresh ? "happy" : "idle");
+  useEffect(() => {
+    if (mood !== "happy") return;
+    const timer = setTimeout(() => setMood("idle"), 1400);
+    return () => clearTimeout(timer);
+  }, [mood]);
+  return <LumiFace state={mood} />;
 }
 
 function AssistantBubble({
@@ -170,21 +192,27 @@ function AssistantBubble({
   peek: boolean;
   onRetry: () => void;
   onUndo: (changeSetId: string) => void;
-  onView: () => void;
+  onView?: () => void;
 }) {
   const t = useTranslations("chat");
   const formatMsg = useFormatMsg();
+  // A reply that finished while you watched gets one happy hop; saved ones are just there.
+  const [watched] = useState(message.status === "pending");
   if (message.status === "pending" && !message.text && !message.receipt) return null;
+  const writing = message.status === "pending";
   return (
-    <div data-peek={peek} data-message={message.id} tabIndex={-1} className="flex flex-col items-start">
+    <div data-peek={peek} data-message={message.id} tabIndex={-1} className="flex items-start gap-2">
+      {writing ? <LumiFace state="think" /> : <MoodLumi key={message.status} fresh={watched && message.status === "done"} />}
+      <div className="flex min-w-0 flex-1 flex-col items-start">
       {message.text && (
-        <p className="max-w-[90%] rounded-lg rounded-bl-sm bg-surface-default px-4 py-2 text-body whitespace-pre-wrap">
+        <p className="max-w-full rounded-lg rounded-tl-xs border-2 border-border-default bg-surface-raised px-4 py-2 text-body whitespace-pre-wrap">
+          <span className="eyebrow block" aria-hidden="true">{t("assistant")}</span>
           <span className="sr-only">{t("assistant")}: </span>
           {message.text}
         </p>
       )}
       {message.receipt && (
-        <div className="w-full max-w-[90%]">
+        <div className="w-full">
           <Receipt receipt={message.receipt} onUndo={onUndo} onView={onView} />
         </div>
       )}
@@ -197,12 +225,13 @@ function AssistantBubble({
             ? formatMsg(message.error.reason)
             : t("errorNothingChanged")}
           {message.error?.retryable !== false && (
-            <button type="button" onClick={onRetry} className="min-h-tap rounded-button px-2 font-strong text-accent-text">
+            <button type="button" onClick={onRetry} className="btn-quiet">
               {t("tryAgain")}
             </button>
           )}
         </p>
       )}
+      </div>
     </div>
   );
 }

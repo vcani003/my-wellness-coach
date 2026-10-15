@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Kitchen",
-    "description": "Your kitchen assistant: tell it what changed, and it keeps track.",
+    "description": "Your kitchen, with Lumi: tell her what changed, and she keeps track.",
     "skipToChat": "Skip to chat",
     "skipToWorkspace": "Skip to your kitchen",
     "loading": "Opening your kitchen…",
@@ -15,7 +15,9 @@
       "body": "Your kitchen is safe. Try loading the page again.",
       "retry": "Try again"
     },
-    "openSettings": "Settings, signed in as {name}"
+    "openSettings": "Settings, signed in as {name}",
+    "offline": "Offline",
+    "online": "You're back online."
   },
   "dev": {
     "label": "Dev only",
@@ -26,13 +28,8 @@
   },
   "workspace": {
     "label": "Workspace",
-    "heading": "Your kitchen",
-    "collapse": "Collapse {title}",
-    "expand": "Expand {title}",
     "widgetError": "Couldn't load this.",
-    "retry": "Retry",
-    "updated": "Updated",
-    "close": "Close {title}"
+    "retry": "Retry"
   },
   "kitchen": {
     "title": "Kitchen",
@@ -129,10 +126,10 @@
       "viewLabel": "Group items",
       "byPlace": "By place",
       "byType": "By type",
-      "sortedHint": "Kitchen sorted these itself. To move one, tell me in chat, like “fish sauce goes under sauces”.",
+      "sortedHint": "Lumi sorted these herself. To move one, tell me in chat, like “fish sauce goes under sauces”.",
       "matches": "{count, plural, one {# match} other {# matches}}",
       "noMatches": "No matches for “{query}”",
-      "noMatchesHint": "Try another word, or ask Kitchen in chat."
+      "noMatchesHint": "Try another word, or ask Lumi in chat."
     }
   },
   "category": {
@@ -151,7 +148,7 @@
   },
   "chat": {
     "label": "Chat",
-    "heading": "Chat with Kitchen",
+    "heading": "Chat with Lumi",
     "showChat": "Show chat",
     "hideChat": "Hide chat",
     "minimize": "Minimize chat",
@@ -160,12 +157,12 @@
     "kitchenUpdated": "Kitchen updated",
     "messagesLabel": "Conversation",
     "you": "You",
-    "assistant": "Kitchen",
-    "writing": "Kitchen is writing…",
-    "composerLabel": "Message Kitchen",
+    "assistant": "Lumi",
+    "writing": "Lumi is writing…",
+    "composerLabel": "Message Lumi",
     "composerPlaceholder": "Tell me what changed…",
     "send": "Send",
-    "welcome": "Hi! Tell me what you bought, froze or used up. I save things as soon as you tell me, and you can always Undo.",
+    "welcome": "Hi, I'm Lumi! Tell me what you bought, froze or used up. I save things as soon as you tell me, and you can always Undo.",
     "suggestionsLabel": "Ideas to start with",
     "suggestions": {
       "bought": "I bought…",
@@ -184,7 +181,8 @@
     "loadingEarlier": "Loading earlier messages…",
     "earlierError": "Couldn't load earlier messages. Try again.",
     "earlierShown": "{count, plural, one {# earlier message shown.} other {# earlier messages shown.}}",
-    "startOfChat": "That's the start of your chat."
+    "startOfChat": "That's the start of your chat.",
+    "offline": "You're offline. Chat comes back when you are; ticks and buttons still work."
   },
   "receipt": {
     "title": "What changed",
@@ -451,7 +449,10 @@
       "chooseFailed": "Couldn't choose that, so nothing changed. Try again.",
       "chosen": "Chosen",
       "openRecipe": "Open recipe",
-      "openRecipeLabel": "Open recipe: {name}"
+      "openRecipeLabel": "Open recipe: {name}",
+      "emptyBody": "Ask me for ideas from what's in your kitchen.",
+      "getIdeas": "Get ideas",
+      "ask": "What can I make tonight?"
     },
     "recipe": {
       "pageTitle": "{title} · Kitchen",
@@ -515,7 +516,8 @@
       "cantUndo": "Can't undo this now. Tell me what to fix.",
       "started": "Cooking {title}.",
       "doneNothingToUpdate": "{title} is done.",
-      "failed": "Couldn't save that, so nothing changed. Try again."
+      "failed": "Couldn't save that, so nothing changed. Try again.",
+      "emptyHint": "Choose a meal in Meals, then add it to your plan."
     },
     "update": {
       "title": "Update your kitchen",
@@ -541,6 +543,28 @@
       "doneFailed": "Couldn't update your kitchen, so nothing changed. Try again.",
       "laterFailed": "Couldn't save that for later, so nothing changed. Try again.",
       "skipFailed": "Couldn't skip that. Try again."
+    },
+    "title": "Meals",
+    "cookedBefore": {
+      "title": "Cooked before",
+      "searchLabel": "Search what you've cooked",
+      "searchPlaceholder": "Search by dish or ingredient",
+      "clear": "Clear search",
+      "loading": "Loading what you've cooked…",
+      "error": "I couldn't load the meals you've cooked.",
+      "retry": "Try again",
+      "empty": "Nothing cooked yet. Meals you finish show up here.",
+      "noMatches": "No cooked meals match “{query}”",
+      "made": "Made {count, plural, one {once} other {#×}} · last {date}",
+      "madeBy": "Made {count, plural, one {once} other {#×}} · last {date} by {name}",
+      "note": "Note: {note}",
+      "makeAgain": "Make again",
+      "makeAgainLabel": "Make {title} again",
+      "making": "Making…",
+      "openInPlan": "Open in your plan",
+      "openRecipe": "Open recipe",
+      "openRecipeLabel": "Open recipe: {title}",
+      "failed": "Couldn't save that, so nothing changed. Try again."
     }
   },
   "settings": {
@@ -635,7 +659,7 @@
     },
     "remember": {
       "heading": "Allergies and preferences",
-      "intro": "Kitchen keeps every member's allergies in mind, whoever is asking.",
+      "intro": "Lumi keeps every member's allergies in mind, whoever is asking.",
       "yours": "Yours",
       "theirs": {
         "self": "Added by {owner}",
@@ -644,7 +668,7 @@
         "needs": "Added by {name}, needs {owner} to confirm",
         "confirmed": "Added by {name} · {owner} confirmed it"
       },
-      "empty": "Nothing saved yet. Tell Kitchen in chat, for example \"I'm allergic to peanuts\".",
+      "empty": "Nothing saved yet. Tell Lumi in chat, for example \"I'm allergic to peanuts\".",
       "theirEmpty": "Nothing saved for {name}.",
       "kind": {
         "allergy": "Allergy",
@@ -668,7 +692,7 @@
       "cantUndo": "I couldn't undo that just now.",
       "preferences": "Preferences",
       "preferencesEmpty": "No preferences saved yet.",
-      "preferencesHint": "To change or forget one, tell Kitchen in chat.",
+      "preferencesHint": "To change or forget one, tell Lumi in chat.",
       "own": {
         "self": "Added by you",
         "needsYou": "Added by {name}, needs you to confirm",
@@ -679,12 +703,12 @@
     "data": {
       "heading": "Your data",
       "download": "Download my data",
-      "downloadHint": "One file with your account, your chats, your kitchen's changes and what Kitchen remembers about you.",
+      "downloadHint": "One file with your account, your chats, your kitchen's changes and what Lumi remembers about you.",
       "delete": "Delete my data",
       "deleteHint": "Removes your account, chats and profile.",
       "sheet": {
         "title": "Delete your data?",
-        "removes": "This removes your account, your chats with Kitchen, and the allergies, diets and preferences saved for you.",
+        "removes": "This removes your account, your chats with Lumi, and the allergies, diets and preferences saved for you.",
         "stays": "Things you added to the shared kitchen stay, credited to \"a former member\", so the kitchen still makes sense for everyone else.",
         "kitchenStays": "The kitchen itself stays until its last member leaves.",
         "kitchenGoes": "You're the kitchen's only member, so the kitchen is deleted too.",
@@ -721,7 +745,7 @@
       "sections": [
         {
           "heading": "What Kitchen stores",
-          "body": "Your name and the details that keep you signed in. Your kitchen: what you add, use, freeze or run out of, kept as a history of changes with who made each one and when. Your chats with Kitchen. The allergies, diets and preferences saved for you. Meal ideas, recipes, meal plans and shopping lists."
+          "body": "Your name and the details that keep you signed in. Your kitchen: what you add, use, freeze or run out of, kept as a history of changes with who made each one and when. Your chats with Lumi, the app's assistant. The allergies, diets and preferences saved for you. Meal ideas, recipes, meal plans and shopping lists."
         },
         {
           "heading": "Who can see it",
@@ -733,7 +757,7 @@
         },
         {
           "heading": "Where it's kept",
-          "body": "The app runs on Vercel and the data is kept in a Neon database. Your phone also keeps a few small things for convenience, like the widget you used last and shopping ticks that haven't been sent yet. One cookie keeps you signed in. There's no advertising and no tracking."
+          "body": "The app runs on Vercel and the data is kept in a Neon database. Your phone also keeps a few small things for convenience, like the place you used last and shopping ticks that haven't been sent yet. One cookie keeps you signed in. There's no advertising and no tracking."
         },
         {
           "heading": "Taking it with you, or deleting it",
@@ -783,6 +807,49 @@
           "body": "These terms may change as the app grows. If they do, the app will say so."
         }
       ]
+    }
+  },
+  "places": {
+    "label": "Places",
+    "today": "Today",
+    "kitchen": "Kitchen",
+    "plan": "Plan",
+    "meals": "Meals",
+    "list": "List",
+    "pageTitle": {
+      "plan": "Meal plan · Kitchen",
+      "meals": "Meals · Kitchen",
+      "list": "Shopping list · Kitchen"
+    }
+  },
+  "cue": {
+    "updated": "{place} updated",
+    "ideas": "Meal ideas are ready",
+    "show": "Show",
+    "showLabel": "Show {place}"
+  },
+  "today": {
+    "title": "Today",
+    "greeting": {
+      "morning": "Good morning, {name}!",
+      "afternoon": "Good afternoon, {name}!",
+      "evening": "Good evening, {name}!"
+    },
+    "intro": "Tell me what you bought, cooked or used up, and I'll keep track.",
+    "emptyTitle": "Your kitchen is empty",
+    "emptyBody": "Tell me what you've got, like “I bought eggs, milk and rice”.",
+    "useItUp": {
+      "title": "Use it up",
+      "reason": {
+        "defrosted": "{days, plural, =0 {defrosted today} =1 {defrosted yesterday} other {defrosted # days ago}}",
+        "defrostedAdded": "{days, plural, =0 {defrosted, added today} =1 {defrosted, added yesterday} other {defrosted, added # days ago}}",
+        "leftovers": "{days, plural, =1 {leftovers from yesterday} other {leftovers from # days ago}}",
+        "fridge": "in the fridge for {days} days"
+      },
+      "getIdeas": "Ideas to use these up",
+      "ask": "What can I make to use these up?",
+      "nothing": "Nothing needs using up right now.",
+      "seeKitchen": "See your kitchen"
     }
   }
 }

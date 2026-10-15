@@ -13,6 +13,7 @@
 import { useLocale, useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import type { RecipeView } from "@/contracts/kitchen-state";
+import { Checkbox } from "@/ui/primitives/Checkbox";
 import { useAnnounce } from "@/ui/a11y/Announcer";
 import { useFormatMsg } from "@/ui/chat/format-msg";
 import { actorName, sentenceCase } from "@/ui/fallbacks";
@@ -149,21 +150,21 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
       : null;
 
   return (
-    <article aria-labelledby={RECIPE_HEADING_ID} className="flex flex-col gap-5 pb-6" data-recipe={mealId}>
+    <article aria-labelledby={RECIPE_HEADING_ID} className="place-enter mx-auto flex w-full max-w-prose flex-col gap-5 pb-6" data-recipe={mealId}>
       <div className="flex flex-col gap-2">
         <button
           type="button"
           onClick={actions.closeRecipe}
-          className="flex min-h-tap items-center gap-2 self-start rounded-button pr-3 text-body font-medium text-accent-text"
+          className="btn btn-small self-start"
         >
           <BackIcon aria-hidden="true" className="size-icon" />
           {t("back")}
         </button>
-        <h2 id={RECIPE_HEADING_ID} tabIndex={-1} className="text-heading font-strong outline-none">
+        <h2 id={RECIPE_HEADING_ID} tabIndex={-1} className="text-display font-medium outline-none">
           {title ?? tAll("fallback.unknownMeal")}
         </h2>
         <div className="flex flex-wrap items-center gap-2 text-small">
-          <span className="rounded-button bg-surface-sunken px-3 py-0.5 font-medium text-text-muted">
+          <span className="rounded-button bg-surface-soft px-3 py-0.5 font-strong text-text-default">
             {recipe?.source === "user" ? t("yourRecipe") : t("suggested")}
           </span>
           {status === "planned" && <span className="rounded-button bg-success-bg px-3 py-0.5 font-strong text-success-text">{t("inPlan")}</span>}
@@ -174,7 +175,7 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
           <button
             type="button"
             onClick={() => actions.useOwnRecipe(meal.title)}
-            className="min-h-tap self-start rounded-button text-small font-medium text-accent-text underline"
+            className="btn-quiet self-start px-0 text-small underline"
           >
             {t("useOwn")}
           </button>
@@ -194,7 +195,7 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
           <button
             type="button"
             onClick={() => void actions.retryRecipe(mealId)}
-            className="min-h-tap rounded-button px-3 font-medium text-accent-text underline"
+            className="btn-quiet underline"
           >
             {t("tryAgain")}
           </button>
@@ -207,7 +208,7 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
             <button
               type="button"
               onClick={() => void actions.retryRecipe(mealId)}
-              className="min-h-tap rounded-button px-3 font-medium text-accent-text underline"
+              className="btn-quiet underline"
             >
               {t("suggestOne")}
             </button>
@@ -216,13 +217,13 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
       )}
 
       {groups.length > 0 && (
-        <section aria-labelledby="recipe-ingredients" className="flex flex-col gap-3">
-          <h3 id="recipe-ingredients" className="text-title font-strong">
+        <section aria-labelledby="recipe-ingredients" className="card flex flex-col gap-3 px-5 py-5">
+          <h3 id="recipe-ingredients" className="text-title font-medium">
             {t("ingredients")}
           </h3>
           {groups.map((g) => (
             <fieldset key={g.key} className="flex flex-col" disabled={!saved || !meal}>
-              <legend className="mb-1 text-caption font-strong tracking-wide text-text-muted uppercase">{t(`group.${g.key}`)}</legend>
+              <legend className="section-label mb-1">{t(`group.${g.key}`)}</legend>
               {g.rows.map((row) => {
                 const tick = ticks.get(tickKey(row.name));
                 const by = tick && !("missing" in tick.updatedBy) && tick.updatedBy.id === me.id ? null : tick ? actorName(tick.updatedBy, tAll) : null;
@@ -230,13 +231,11 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
                 const name = sentenceCase(row.name, locale);
                 return (
                   <div key={`${g.key}-${row.name}`} className="flex flex-col py-1">
-                    <label className="flex min-h-tap cursor-pointer items-center gap-3 rounded-sm px-1">
-                      <input
-                        type="checkbox"
+                    <label className="flex min-h-tap cursor-pointer items-center gap-3 rounded-md px-1">
+                      <Checkbox
                         checked={isTicked(row)}
                         onChange={() => toggleTick(row)}
                         aria-label={showBy ? t("tickLabelBy", { name, person: by }) : name}
-                        className="size-6 shrink-0 cursor-pointer accent-accent-default"
                       />
                       <span className="flex flex-wrap items-baseline gap-x-2">
                         <span className={`text-body ${isTicked(row) ? "text-text-muted line-through" : ""}`}>{name}</span>
@@ -253,7 +252,7 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
                     {tickFailed === row.name && (
                       <p role="alert" className="flex items-center gap-2 pl-10 text-small text-error-text">
                         {t("tickFailed")}
-                        <button type="button" onClick={() => toggleTick(row)} className="min-h-tap rounded-button px-2 font-medium text-accent-text underline">
+                        <button type="button" onClick={() => toggleTick(row)} className="btn-quiet underline">
                           {t("retry")}
                         </button>
                       </p>
@@ -268,20 +267,20 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
               type="button"
               disabled={busy !== null}
               onClick={() => void addNeeds()}
-              className="min-h-tap self-start rounded-button border border-border-strong bg-surface-raised px-4 text-small font-strong disabled:opacity-60"
+              className="btn btn-small self-start"
             >
               {busy === "needs" ? t("adding") : t("addNeeds")}
             </button>
           )}
           {notice && (
-            <p className="flex flex-wrap items-center gap-2 rounded-sm bg-success-bg px-3 py-2 text-small text-success-text">
+            <p className="flex flex-wrap items-center gap-2 rounded-md bg-success-bg px-4 py-2 text-small text-success-text">
               <span>{notice.text}</span>
               {notice.changeSetId && (
                 <button
                   type="button"
                   aria-label={t("needsUndoLabel")}
                   onClick={() => void undoNeeds(notice.changeSetId!)}
-                  className="flex min-h-tap items-center gap-1 rounded-button px-3 font-strong text-accent-text"
+                  className="btn-quiet"
                 >
                   <UndoIcon aria-hidden="true" className="size-icon-sm" />
                   {t("undo")}
@@ -293,13 +292,19 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
       )}
 
       {recipe && recipe.steps.length > 0 && (
-        <section aria-labelledby="recipe-steps" className="flex flex-col gap-2">
-          <h3 id="recipe-steps" className="text-title font-strong">
+        <section aria-labelledby="recipe-steps" className="flex flex-col gap-3">
+          <h3 id="recipe-steps" className="text-title font-medium">
             {t("steps")}
           </h3>
-          <ol className="flex list-decimal flex-col gap-2 pl-6 text-body">
+          <ol className="flex flex-col gap-3 text-body">
             {recipe.steps.map((s, i) => (
-              <li key={i}>{s}</li>
+              <li key={i} className="flex items-start gap-3">
+                {/* The number is the list's own; this circle is how it looks (Kitchen OS steps). */}
+                <span aria-hidden="true" className="grid size-avatar shrink-0 place-items-center rounded-full border-2 border-border-outline bg-surface-soft text-small font-strong">
+                  {i + 1}
+                </span>
+                <span className="pt-1">{s}</span>
+              </li>
             ))}
           </ol>
         </section>
@@ -308,7 +313,7 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
       {meal && (
         <div className="flex flex-col gap-2">
           {failed && (
-            <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-small text-error-text">
+            <p role="alert" className="rounded-md bg-error-bg px-3 py-2 text-small text-error-text">
               {failed}
             </p>
           )}
@@ -318,7 +323,7 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
                 type="button"
                 disabled={busy !== null}
                 onClick={() => void step("plan")}
-                className="min-h-tap rounded-button border border-border-strong bg-surface-raised px-5 text-body font-strong disabled:opacity-60"
+                className="btn"
               >
                 {t("addToPlan")}
               </button>
@@ -328,7 +333,7 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
                 type="button"
                 disabled={busy !== null}
                 onClick={() => void step("start")}
-                className="min-h-tap rounded-button bg-accent-default px-5 text-body font-strong text-text-inverse disabled:opacity-60"
+                className="btn btn-primary"
               >
                 {t("startCooking")}
               </button>
@@ -338,7 +343,7 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
                 type="button"
                 disabled={busy !== null}
                 onClick={() => void step("done")}
-                className="min-h-tap rounded-button bg-accent-default px-5 text-body font-strong text-text-inverse disabled:opacity-60"
+                className="btn btn-primary"
               >
                 {t("doneCooking")}
               </button>

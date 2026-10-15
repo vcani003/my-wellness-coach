@@ -85,13 +85,13 @@ export const Composer = forwardRef<ComposerHandle, { busy: boolean; onSend: (tex
           enterKeyHint="send"
           autoComplete="off"
           placeholder={t("composerPlaceholder")}
-          className="min-h-tap flex-1 resize-none rounded-lg border border-border-strong bg-surface-sunken px-4 py-2 text-body text-text-default placeholder:text-text-muted"
+          className="min-h-tap flex-1 resize-none rounded-lg border-2 border-border-strong bg-surface-raised px-4 py-2 text-body text-text-default placeholder:text-text-muted"
         />
         <button
           type="submit"
           aria-label={t("send")}
           disabled={busy || text.trim() === ""}
-          className="flex size-tap shrink-0 items-center justify-center rounded-full bg-accent-default text-text-inverse disabled:opacity-60"
+          className="btn btn-primary size-tap shrink-0 p-0"
         >
           <SendIcon aria-hidden="true" className="size-icon" />
         </button>

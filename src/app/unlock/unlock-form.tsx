@@ -13,7 +13,6 @@
 import { useActionState, useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import { AuthCard, primaryButtonClass, quietLinkClass, revealOnKeyboard, SecretField, TextField } from "@/ui/auth/fields";
-import { SpinnerIcon } from "@/ui/primitives/icons";
 import { useKeyboardInset } from "@/ui/shell/viewport";
 import { unlock, type UnlockState } from "./actions";
 import { signInWithPassphrase } from "./passphrase-actions";
@@ -121,7 +120,6 @@ function PassphraseForm() {
       </p>
 
       <button ref={submit} type="submit" disabled={pending} aria-busy={pending || undefined} className={`${primaryButtonClass} mt-5`}>
-        {pending && <SpinnerIcon aria-hidden="true" className="size-icon motion-safe:animate-spin" />}
         {pending ? t("signingIn") : t("signIn")}
       </button>
 
@@ -176,7 +174,6 @@ function CodeForm() {
       </p>
 
       <button ref={submit} type="submit" disabled={pending} aria-busy={pending || undefined} className={`${primaryButtonClass} mt-5`}>
-        {pending && <SpinnerIcon aria-hidden="true" className="size-icon motion-safe:animate-spin" />}
         {pending ? t("checking") : t("submit")}
       </button>
 

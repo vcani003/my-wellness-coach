@@ -10,7 +10,7 @@ import { expectAccessible } from "../support/axe";
 const COOKIE = "dev_acting_as"; // DEV_ACTING_AS_COOKIE (src/lib/auth/current-user.ts)
 
 const kitchen = (page: Page) => page.getByRole("region", { name: "Kitchen" });
-const composer = (page: Page) => page.getByRole("textbox", { name: "Message Kitchen" });
+const composer = (page: Page) => page.getByRole("textbox", { name: "Message Lumi" });
 const receipts = (page: Page) => page.getByRole("region", { name: "What changed" });
 const UNDO = "Undo: Added eggs, Added spinach";
 
@@ -23,7 +23,7 @@ test("chat survives a reload: message, reply and receipt are back, and Undo stil
   const reset = await page.request.post("/api/dev/reset", { headers: { origin: baseURL! } });
   expect(reset.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: "demo-vero", url: baseURL! }]);
-  await page.goto("/");
+  await page.goto("/kitchen"); // the Kitchen place shows the undo's effect (0042)
 
   await say(page, "I bought eggs and spinach");
   await expect(receipts(page).last()).toContainText("Added spinach");

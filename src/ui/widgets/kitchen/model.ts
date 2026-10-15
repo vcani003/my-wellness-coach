@@ -3,7 +3,11 @@ import { ITEM_CATEGORIES, type ItemCategory } from "@/contracts/common";
 import type { ItemRow } from "@/contracts/kitchen-state";
 import { guessCategory } from "@/shared/item-category";
 import { searchItems } from "@/shared/item-search";
-import { foldText, singularWord } from "@/shared/text";
+// The one exception to "UI reaches a domain only through commands / queries": these signals are
+// pure (contracts only), while `queries.ts` would pull the database code into the phone's bundle.
+// eslint-disable-next-line no-restricted-imports
+import { computeUseItUpSignals } from "@/domains/kitchen/use-it-up";
+import { foldText, singularWord, standardName } from "@/shared/text";
 
 export const GROUP_ORDER = ["fridge", "freezer", "pantry", "unknown"] as const;
 export type GroupKey = (typeof GROUP_ORDER)[number];
@@ -132,4 +136,58 @@ export function highlightParts(text: string, query: string): TextPart[] {
     else parts.push({ text: c, match: marked[k] });
   });
   return parts;
+}
+
+/**
+ * Today's "Use it up" (0025, AI8): the few things worth cooking soon, from facts only (when it was
+ * defrosted, how long it's been in the fridge, leftovers). No shelf-life guess and never "safe to
+ * eat" (spec §10). The rules mirror the meal AI's defaults in `src/ai/meals/use-it-up.ts`
+ * (defrosted; leftovers 1+ day; anything else in the fridge 4+ days); that file can't be imported
+ * here (it reads the database), so the two numbers below must change together with it;
+ * tests/ui/places-model.test.ts fails if they drift.
+ */
+export const USE_IT_UP_FRIDGE_DAYS = 4;
+export const USE_IT_UP_LEFTOVER_DAYS = 1;
+
+export type UseItUpReason =
+  | { kind: "defrosted"; days: number }
+  /** Saved before "defrosted on" existed: thawed in the fridge, so the age is days since added. */
+  | { kind: "defrostedAdded"; days: number }
+  | { kind: "leftovers"; days: number }
+  | { kind: "fridge"; days: number };
+
+export interface UseItUpRow {
+  item: ItemRow;
+  reason: UseItUpReason;
+}
+
+export function useItUpRows(items: readonly ItemRow[], now: Date, limit = 3): UseItUpRow[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const rows: (UseItUpRow & { weight: number; oldest: string })[] = [];
+  for (const signal of computeUseItUpSignals({ items: items.filter(inKitchen) }, now)) {
+    const item = byId.get(signal.itemId);
+    if (!item) continue;
+    const whollyFrozen = signal.batchCount <= 1 && item.frozen?.value === true;
+    const inFridge = item.location?.value === "fridge";
+    let reason: UseItUpReason | null = null;
+    let weight = 0;
+    if (signal.defrostedDays !== undefined && !whollyFrozen) {
+      reason = { kind: "defrosted", days: signal.defrostedDays };
+      weight = 4 + Math.min(signal.defrostedDays, 4);
+    } else if (signal.defrostedDays === undefined && item.frozen?.value === false && inFridge) {
+      reason = { kind: "defrostedAdded", days: signal.oldestDays };
+      weight = 3;
+    } else if (/\bleftover\b/.test(standardName(item.name.value)) && signal.oldestDays >= USE_IT_UP_LEFTOVER_DAYS) {
+      reason = { kind: "leftovers", days: signal.oldestDays };
+      weight = 2 + Math.min(signal.oldestDays, 5);
+    } else if (inFridge && signal.oldestDays >= USE_IT_UP_FRIDGE_DAYS) {
+      reason = { kind: "fridge", days: signal.oldestDays };
+      weight = 1 + Math.min(Math.floor((signal.oldestDays - USE_IT_UP_FRIDGE_DAYS) / 2), 4);
+    }
+    if (reason) rows.push({ item, reason, weight, oldest: signal.oldestAddedAt });
+  }
+  return rows
+    .sort((a, b) => b.weight - a.weight || a.oldest.localeCompare(b.oldest))
+    .slice(0, limit)
+    .map(({ item, reason }) => ({ item, reason }));
 }

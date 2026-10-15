@@ -31,7 +31,7 @@ export function LinkSheet(props: LinkSheetProps) {
   return (
     <Dialog.Root open={props.open} onOpenChange={(open) => props.onOpenChange(open)}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-40 bg-text-default/30" />
+        <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
         {/* Always rendered (Base UI needs its Popup to finish closing, or the backdrop stays and
             blocks the page); a new key on each open gives a fresh, empty sheet. */}
         <SheetBody key={props.open ? "open" : "closed"} {...props} />
@@ -96,9 +96,9 @@ function SheetBody({ open, onOpenChange, title, body, create }: LinkSheetProps) 
   return (
     <Dialog.Popup
       initialFocus={doneRef}
-      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 overflow-y-auto rounded-t-lg bg-surface-raised px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-dock desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-lg"
+      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 overflow-y-auto rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
     >
-      <Dialog.Title className="text-title font-strong">{title}</Dialog.Title>
+      <Dialog.Title className="font-heading text-title font-medium">{title}</Dialog.Title>
       <Dialog.Description className="text-body">{body}</Dialog.Description>
 
       {state.status === "making" && (
@@ -117,7 +117,7 @@ function SheetBody({ open, onOpenChange, title, body, create }: LinkSheetProps) 
             <p
               aria-labelledby="link-sheet-label"
               data-testid="invite-link"
-              className="rounded-sm border border-border-default bg-surface-sunken px-3 py-2 text-small break-all select-all"
+              className="rounded-md border-2 border-border-default bg-surface-sunken px-3 py-2 text-small break-all select-all"
             >
               {state.url}
             </p>
@@ -133,7 +133,7 @@ function SheetBody({ open, onOpenChange, title, body, create }: LinkSheetProps) 
                 type="button"
                 onClick={() => void copyLink(state.url)}
                 aria-describedby="link-sheet-validity"
-                className="min-h-tap flex-1 rounded-button bg-accent-default px-5 text-body font-strong text-text-inverse"
+                className="btn btn-primary flex-1"
               >
                 {t("copy")}
               </button>
@@ -141,7 +141,7 @@ function SheetBody({ open, onOpenChange, title, body, create }: LinkSheetProps) 
                 <button
                   type="button"
                   onClick={() => void share(state.url)}
-                  className="min-h-tap flex-1 rounded-button border border-border-strong bg-surface-raised px-5 text-body font-strong"
+                  className="btn flex-1"
                 >
                   {t("share")}
                 </button>
@@ -156,7 +156,7 @@ function SheetBody({ open, onOpenChange, title, body, create }: LinkSheetProps) 
       )}
 
       {state.status === "failed" && (
-        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-sm bg-error-bg px-3 py-2 text-small text-error-text">
+        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-md bg-error-bg px-3 py-2 text-small text-error-text">
           <span>{t(`errors.${state.key}`)}</span>
           {state.key !== "full" && state.key !== "notAllowed" && (
             <button type="button" onClick={() => void make()} className="min-h-tap rounded-button px-3 font-medium text-accent-text underline">
@@ -170,7 +170,7 @@ function SheetBody({ open, onOpenChange, title, body, create }: LinkSheetProps) 
         ref={doneRef}
         type="button"
         onClick={() => onOpenChange(false)}
-        className="min-h-tap w-full rounded-button border border-border-strong bg-surface-raised px-5 text-body font-strong"
+        className="btn w-full"
       >
         {t("done")}
       </button>

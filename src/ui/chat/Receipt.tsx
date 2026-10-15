@@ -76,9 +76,9 @@ export function Receipt({
     <section
       aria-label={t("title")}
       data-receipt={receipt.changeSetId}
-      className="mt-2 rounded-md border border-border-default bg-surface-raised p-3 shadow-card"
+      className="mt-2 rounded-md border-2 border-border-outline bg-surface-raised px-4 py-3 shadow-sticker"
     >
-      <h3 className="text-caption font-strong text-text-muted">{t("title")}</h3>
+      <h3 className="eyebrow font-body">{t("title")}</h3>
       <ul className="mt-1 flex flex-col gap-1">
         {lines.map((line) => {
           const display = formatMsg(line.summary);
@@ -111,7 +111,7 @@ export function Receipt({
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {undone && <span className="text-small font-medium text-text-muted">{t("undone")}</span>}
           {receipt.undo === "refused" && (
-            <p className="rounded-sm bg-warning-bg px-3 py-2 text-small text-warning-text">{t("cantUndo")}</p>
+            <p className="rounded-md bg-warning-bg px-3 py-2 text-small text-warning-text">{t("cantUndo")}</p>
           )}
           {showUndo && (
             <button
@@ -120,7 +120,7 @@ export function Receipt({
               onClick={runUndo}
               aria-disabled={undoPending || undefined}
               aria-label={undoName}
-              className="flex min-h-tap items-center gap-1 rounded-button px-3 text-small font-strong text-accent-text aria-disabled:opacity-60"
+              className="btn btn-small text-accent-text"
             >
               <UndoIcon aria-hidden="true" className="size-icon-sm" />
               {undoPending ? t("undoing") : t("undo")}
@@ -131,7 +131,7 @@ export function Receipt({
               type="button"
               onClick={onView}
               aria-label={t("viewLabel")}
-              className="ml-auto min-h-tap rounded-button px-3 text-small font-strong text-accent-text desk:hidden"
+              className="btn-quiet ml-auto text-small"
             >
               {t("view")}
             </button>

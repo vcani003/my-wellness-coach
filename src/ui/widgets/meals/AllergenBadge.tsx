@@ -51,7 +51,7 @@ export function AllergenBadge({ flags, startOpen = false }: { flags: AllergenFla
         aria-controls={panelId}
         aria-label={t("badgeLabel", { details: summary })}
         onClick={() => setOpen((o) => !o)}
-        className="flex min-h-[28px] items-center gap-1 rounded-button border border-allergy-border bg-allergy-bg px-2 text-caption font-strong text-allergy-text"
+        className="flex min-h-tap items-center gap-1 rounded-button border-2 border-allergy-border bg-allergy-bg px-3 text-small font-strong text-allergy-text"
       >
         <AllergyIcon aria-hidden="true" className="size-icon-sm text-allergy-border" />
         {t("badge")}
@@ -59,7 +59,7 @@ export function AllergenBadge({ flags, startOpen = false }: { flags: AllergenFla
       <div
         id={panelId}
         hidden={!open}
-        className="rounded-sm border-l-4 border-allergy-border bg-allergy-bg px-3 py-2 text-small text-allergy-text"
+        className="rounded-md border-l-4 border-allergy-border bg-allergy-bg px-3 py-2 text-small text-allergy-text"
       >
         {lines.map((l) => (
           <p key={l.key}>

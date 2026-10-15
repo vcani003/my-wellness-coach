@@ -250,7 +250,15 @@ describe("Recipe", () => {
     expect(need).toHaveTextContent("50 g");
     expect(within(need).getByRole("button", { name: /^Allergy: Contains shrimp/ })).toBeInTheDocument();
     expect(screen.getByText("Assumes salt. Tell me if you don't have them.")).toBeInTheDocument();
-    expect(screen.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Whisk the eggs.", "Cook."]);
+    // Steps are an ordered list (the list gives the number); the drawn number circle is aria-hidden.
+    const steps = screen.getAllByRole("listitem");
+    expect(steps.every((li) => li.parentElement?.tagName === "OL")).toBe(true);
+    const spoken = (el: HTMLElement) => {
+      const copy = el.cloneNode(true) as HTMLElement;
+      copy.querySelectorAll("[aria-hidden='true']").forEach((n) => n.remove());
+      return copy.textContent;
+    };
+    expect(steps.map(spoken)).toEqual(["Whisk the eggs.", "Cook."]);
     expect(screen.getByRole("button", { name: "Add to plan" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start cooking" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Done cooking" })).not.toBeInTheDocument();

@@ -1,52 +1,38 @@
 /**
- * The meal widgets (0004, 0013): Meal ideas and Meal plan. The workspace registry imports these;
- * nothing else in the workspace knows about meals. The Recipe is its own route
- * (`/recipe/[mealId]`), not a widget.
+ * The meal places (0004, 0013; Kitchen OS dock "Plan" and "Meals"). The places registry imports
+ * these; nothing else in the shell knows about meals. The Recipe is its own route
+ * (`/recipe/[mealId]`) and belongs to Meals.
  */
-import type { KitchenState } from "@/contracts/kitchen-state";
-import type { WidgetDef, WidgetSession } from "@/ui/workspace/types";
-import { MEAL_IDEAS_WIDGET_ID, MealIdeasSummary, MealIdeasWidget } from "./MealIdeasWidget";
-import { MEAL_PLAN_WIDGET_ID, MealPlanSummary, MealPlanWidget } from "./MealPlanWidget";
-import type { IdeaSet } from "./session";
+import { MealsIcon, PlanIcon } from "@/ui/primitives/icons";
+import type { PlaceDef } from "@/ui/places/types";
+import { MEAL_IDEAS_WIDGET_ID } from "./MealIdeasWidget";
+import { MealsPlace } from "./MealsPlace";
+import { MEAL_PLAN_WIDGET_ID, PlanPlace } from "./MealPlanWidget";
 
-/** Present while this session has ideas (or is finding them). They're not saved (0013). */
-export function ideasPresent(_state: KitchenState | null, session?: WidgetSession): boolean {
-  return Boolean(session?.[MEAL_IDEAS_WIDGET_ID] as IdeaSet | null | undefined);
-}
-
-/**
- * Appears on the first planned or cooking meal and stays for the session, so emptying it shows
- * "Nothing planned yet" (ux.md §3). A new session with an empty plan hides it.
- */
-const seen = new Set<string>();
-export function planPresent(state: KitchenState | null): boolean {
-  if (!state) return false;
-  if (typeof window === "undefined") return state.plan.length > 0;
-  if (state.plan.length > 0) seen.add(state.kitchenId);
-  return seen.has(state.kitchenId);
-}
-
-export const mealIdeasWidget: WidgetDef = {
-  id: MEAL_IDEAS_WIDGET_ID,
-  domain: "kitchen",
-  lifetime: "session",
-  titleKey: "meals.ideas.title",
-  isPresent: ideasPresent,
-  // Ideas have no saved refs: the app focuses this widget when ideas start streaming.
-  wantsFocus: () => false,
-  Summary: MealIdeasSummary,
-  Component: MealIdeasWidget,
+export const planPlace: PlaceDef = {
+  id: "plan",
+  href: "/plan",
+  labelKey: "places.plan",
+  titleKey: "meals.plan.title",
+  Icon: PlanIcon,
+  owns: (path) => path === "/plan" || path.startsWith("/plan/"),
+  // Planned or cooking meals show in the plan (0013).
+  wantsFocus: (ref) => ref.kind === "meal",
+  hosts: [MEAL_PLAN_WIDGET_ID],
+  Component: PlanPlace,
 };
 
-export const mealPlanWidget: WidgetDef = {
-  id: MEAL_PLAN_WIDGET_ID,
-  domain: "kitchen",
-  lifetime: "lasting",
-  titleKey: "meals.plan.title",
-  isPresent: planPresent,
-  wantsFocus: (ref) => ref.kind === "meal",
-  Summary: MealPlanSummary,
-  Component: MealPlanWidget,
+export const mealsPlace: PlaceDef = {
+  id: "meals",
+  href: "/meals",
+  labelKey: "places.meals",
+  titleKey: "meals.title",
+  Icon: MealsIcon,
+  owns: (path) => path === "/meals" || path.startsWith("/meals/") || path.startsWith("/recipe/"),
+  // Ideas have no saved refs: the app points at Meals when ideas start streaming.
+  wantsFocus: () => false,
+  hosts: [MEAL_IDEAS_WIDGET_ID],
+  Component: MealsPlace,
 };
 
 export { MEAL_IDEAS_WIDGET_ID, MEAL_PLAN_WIDGET_ID };

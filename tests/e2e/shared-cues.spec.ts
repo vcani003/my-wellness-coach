@@ -5,23 +5,25 @@
  *   used up the eggs (still there after a reload) → Dismiss → gone, and still gone after a reload.
  * - **While you're looking:** Levi uses up the milk while Vero has the app open → one quiet line
  *   and one announcement, focus stays in the composer.
+ * The rows are on the Kitchen place (`/kitchen`, 0042); Today shows the same lines (its Kitchen card).
  */
 import { expect, request, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
+import { goTo } from "../support/places";
 
 const KITCHEN_ID = "test-kitchen-demo";
 const COOKIE = "dev_acting_as"; // DEV_ACTING_AS_COOKIE (src/lib/auth/current-user.ts)
 
 const kitchen = (page: Page) => page.getByRole("region", { name: "Kitchen" });
 const sinceLine = (page: Page) => kitchen(page).getByRole("region", { name: "Since your last visit" });
-const composer = (page: Page) => page.getByRole("textbox", { name: "Message Kitchen" });
+const composer = (page: Page) => page.getByRole("textbox", { name: "Message Lumi" });
 const lastReceipt = (page: Page) => page.getByRole("region", { name: "What changed" }).last();
 
 async function resetAndActAs(page: Page, baseURL: string, userId: "demo-vero" | "demo-levi") {
   const res = await page.request.post("/api/dev/reset", { headers: { origin: baseURL } });
   expect(res.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: userId, url: baseURL }]);
-  await page.goto("/");
+  await page.goto("/kitchen");
 }
 
 async function say(page: Page, text: string) {
@@ -53,9 +55,15 @@ test("Since your last visit: Vero sees that Levi used up the eggs, and can dismi
   await expect(kitchen(page).getByRole("listitem").filter({ hasText: "Eggs" })).toHaveCount(0);
   await expect(sinceLine(page)).toContainText("Since your last visit: Levi used up the eggs.");
   await expectAccessible(page, "since your last visit");
-  // It stays until dismissed, even across a reload.
+  // It stays until dismissed, even across a reload, and Today (where you usually land) shows it too.
   await page.reload();
   await expect(sinceLine(page)).toContainText("Levi used up the eggs.");
+  await goTo(page, "Today");
+  await expect(page.getByRole("region", { name: "Today" }).getByRole("region", { name: "Since your last visit" })).toContainText(
+    "Levi used up the eggs.",
+  );
+  await expectAccessible(page, "since your last visit on Today");
+  await goTo(page, "Kitchen");
 
   await sinceLine(page).getByRole("button", { name: "Dismiss" }).click();
   await expect(sinceLine(page)).toHaveCount(0);

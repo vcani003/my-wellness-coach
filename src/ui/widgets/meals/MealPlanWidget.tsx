@@ -5,6 +5,7 @@
  * Start cooking / Done cooking; Cancel (the kitchen is unchanged) leaves "cancelled · Undo" in its
  * place until your next message. Done cooking opens "Update your kitchen".
  */
+import { usePlaceMemory } from "@/ui/places/PlaceMemory";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { MealRow } from "@/contracts/kitchen-state";
@@ -13,6 +14,8 @@ import { actorName, byOther } from "@/ui/fallbacks";
 import { UndoIcon } from "@/ui/primitives/icons";
 import { useKitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { useKitchenData } from "@/ui/sync/KitchenDataContext";
+import { MealNoticeLine } from "@/ui/widgets/kitchen/ToReview";
+import { LUMI_ART } from "@/ui/lumi/Lumi";
 import { useMeals } from "./MealsContext";
 import { useFinishCooking } from "./useFinishCooking";
 
@@ -23,6 +26,16 @@ export function planMeals(state: { plan: string[]; meals: MealRow[] } | null): M
   const rows = state.plan.flatMap((id) => state.meals.filter((m) => m.id === id));
   // Cooking first, then planned in the order added (0013); the backend already orders `plan` that way.
   return [...rows.filter((m) => m.status === "cooking"), ...rows.filter((m) => m.status !== "cooking")];
+}
+
+/** The Plan place: the latest "Update your kitchen" result (with Undo), then the ordered plan. */
+export function PlanPlace() {
+  return (
+    <>
+      <MealNoticeLine />
+      <MealPlanWidget />
+    </>
+  );
 }
 
 export function MealPlanSummary() {
@@ -51,7 +64,8 @@ export function MealPlanWidget() {
   const { snapshot, me, turn = 0 } = useKitchenData();
   const [busy, setBusy] = useState<string | null>(null);
   const [failed, setFailed] = useState<{ id: string; text: string } | null>(null);
-  const [ghosts, setGhosts] = useState<Ghost[]>([]);
+  // "Pho cancelled · Undo" stays while you visit other places (PlaceMemory).
+  const [ghosts, setGhosts] = usePlaceMemory<Ghost[]>("meals.plan.ghosts", []);
   const rows = planMeals(snapshot.state);
   const liveGhosts = ghosts.filter((g) => g.turn === turn && !rows.some((m) => m.id === g.id));
 
@@ -105,7 +119,14 @@ export function MealPlanWidget() {
   };
 
   if (rows.length === 0 && liveGhosts.length === 0) {
-    return <p className="text-body text-text-muted">{t("empty")}</p>;
+    return (
+      <div className="card flex flex-col items-center gap-3 px-5 py-6 text-center">
+        {/* eslint-disable-next-line @next/next/no-img-element -- a small static SVG */}
+        <img src={LUMI_ART.sleeping} alt="" width={96} height={96} className="size-sticker-lg" />
+        <p className="text-body font-medium">{t("empty")}</p>
+        <p className="text-small text-text-muted">{t("emptyHint")}</p>
+      </div>
+    );
   }
 
   // Ghost rows sit where the meal was, so nothing jumps.
@@ -113,16 +134,16 @@ export function MealPlanWidget() {
   for (const g of [...liveGhosts].sort((a, b) => a.index - b.index)) items.splice(Math.min(g.index, items.length), 0, { kind: "ghost", ghost: g });
 
   return (
-    <ul className="flex flex-col divide-y divide-border-default">
+    <ul className="flex flex-col gap-3">
       {items.map((entry) =>
         entry.kind === "ghost" ? (
-          <li key={`ghost-${entry.ghost.id}`} className="flex flex-wrap min-h-tap items-center gap-2 py-2 text-small text-text-muted">
+          <li key={`ghost-${entry.ghost.id}`} className="flex min-h-tap flex-wrap items-center gap-2 rounded-md border-2 border-dashed border-border-default px-4 py-2 text-small text-text-muted">
             <span>{t("cancelled", { title: entry.ghost.title })}</span>
             <button
               type="button"
               aria-label={t("undoCancelLabel", { title: entry.ghost.title })}
               onClick={() => void undoCancel(entry.ghost)}
-              className="flex min-h-tap items-center gap-1 rounded-button px-3 font-strong text-accent-text"
+              className="btn-quiet"
             >
               <UndoIcon aria-hidden="true" className="size-icon-sm" />
               {t("undo")}
@@ -134,18 +155,22 @@ export function MealPlanWidget() {
             )}
           </li>
         ) : (
-          <li key={entry.meal.id} data-entity-id={entry.meal.id} className="flex flex-col gap-2 py-3">
+          <li
+            key={entry.meal.id}
+            data-entity-id={entry.meal.id}
+            className={`card flex flex-col gap-3 px-5 py-4 ${entry.meal.status === "cooking" ? "border-accent-text" : ""}`}
+          >
             <div className="flex flex-wrap items-baseline gap-2">
               <button
                 type="button"
                 onClick={() => actions.openRecipe(entry.meal.id, { focus: true })}
                 aria-label={t("openLabel", { title: entry.meal.title })}
-                className="min-h-tap text-left text-title font-strong text-accent-text underline-offset-4 hover:underline"
+                className="min-h-tap text-left font-heading text-title font-medium text-text-default underline decoration-border-stitch decoration-2 underline-offset-4"
               >
                 {entry.meal.title}
               </button>
               {entry.meal.status === "cooking" && (
-                <span className="rounded-button bg-highlight-bg px-2 text-caption font-strong text-highlight-text">{t("cooking")}</span>
+                <span className="rounded-button bg-highlight-bg px-3 py-0.5 text-caption font-strong text-highlight-text">{t("cooking")}</span>
               )}
               {byOther(entry.meal.createdBy, me.id) && (
                 <span className="text-caption text-text-muted">{t("addedBy", { name: actorName(entry.meal.createdBy, tAll) })}</span>
@@ -158,7 +183,7 @@ export function MealPlanWidget() {
                   disabled={busy !== null}
                   aria-label={t("doneLabel", { title: entry.meal.title })}
                   onClick={() => void run(entry.meal, "done")}
-                  className="min-h-tap rounded-button bg-accent-default px-4 text-small font-strong text-text-inverse disabled:opacity-60"
+                  className="btn btn-primary btn-small"
                 >
                   {t("done")}
                 </button>
@@ -168,7 +193,7 @@ export function MealPlanWidget() {
                   disabled={busy !== null}
                   aria-label={t("startLabel", { title: entry.meal.title })}
                   onClick={() => void run(entry.meal, "start")}
-                  className="min-h-tap rounded-button border border-border-strong bg-surface-raised px-4 text-small font-strong disabled:opacity-60"
+                  className="btn btn-small"
                 >
                   {t("start")}
                 </button>
@@ -178,13 +203,13 @@ export function MealPlanWidget() {
                 disabled={busy !== null}
                 aria-label={t("cancelLabel", { title: entry.meal.title })}
                 onClick={() => void run(entry.meal, "cancel")}
-                className="min-h-tap rounded-button px-3 text-small font-medium text-accent-text disabled:opacity-60"
+                className="btn-quiet text-small"
               >
                 {t("cancel")}
               </button>
             </div>
             {failed?.id === entry.meal.id && (
-              <p role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-small text-error-text">
+              <p role="alert" className="rounded-md bg-error-bg px-3 py-2 text-small text-error-text">
                 {failed.text}
               </p>
             )}

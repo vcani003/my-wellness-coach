@@ -13,7 +13,8 @@ import type { KitchenState, ReviewRow, ShoppingItemRow } from "@/contracts/kitch
 import { AnnouncerProvider } from "@/ui/a11y/Announcer";
 import { KitchenActionsProvider, type KitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { KitchenDataProvider } from "@/ui/sync/KitchenDataContext";
-import { KitchenSummary, KitchenWidget } from "@/ui/widgets/kitchen/KitchenWidget";
+import { KitchenToday } from "@/ui/widgets/kitchen/KitchenToday";
+import { KitchenWidget } from "@/ui/widgets/kitchen/KitchenWidget";
 import { DoneShoppingSheet } from "@/ui/widgets/shopping/DoneShoppingSheet";
 import { fakeActions, saved } from "../support/fake-actions";
 import { renderWithIntl } from "../support/intl";
@@ -76,13 +77,19 @@ describe("To review in the Kitchen widget", () => {
     expect(screen.getAllByRole("heading", { level: 3 })[0]).toHaveTextContent("To review");
   });
 
-  it("the collapsed Kitchen bar says how many wait in To review", () => {
+  it("Today shows the same To review card, with its count", () => {
     renderWithIntl(
-      <KitchenDataProvider value={{ me: VERO, snapshot: { state: QUEUED, status: "ok", syncedAt: NOW.getTime() }, marks: {}, remoteIds: new Set(), now: NOW }}>
-        <KitchenSummary />
-      </KitchenDataProvider>,
+      <AnnouncerProvider>
+        <KitchenActionsProvider value={fakeActions()}>
+          <KitchenDataProvider value={{ me: VERO, snapshot: { state: QUEUED, status: "ok", syncedAt: NOW.getTime() }, marks: {}, remoteIds: new Set(), now: NOW }}>
+            <KitchenToday />
+          </KitchenDataProvider>
+        </KitchenActionsProvider>
+      </AnnouncerProvider>,
     );
-    expect(document.body).toHaveTextContent("empty · 1 to review");
+    const review = screen.getByRole("region", { name: "To review" });
+    expect(review).toHaveTextContent("To review · 1");
+    expect(within(review).getByRole("button", { name: /Shopping list/ })).toBeInTheDocument();
   });
 
   it("no card, no section", () => {

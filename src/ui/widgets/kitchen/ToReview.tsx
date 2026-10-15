@@ -6,6 +6,7 @@
  * sheet (when the meal screens are there).
  * The result of Add (with Undo) or Skip shows here until your next message, like the list's notes.
  */
+import { usePlaceMemory } from "@/ui/places/PlaceMemory";
 import { useTranslations } from "next-intl";
 import { useState, type RefObject } from "react";
 import type { ReviewRow } from "@/contracts/kitchen-state";
@@ -28,10 +29,10 @@ export function ToReview({ reviews, finalFocus }: { reviews: ReviewRow[]; finalF
   const actions = useKitchenActions();
   const { turn = 0 } = useKitchenData();
   const meals = useMealsOptional();
-  const mealNotice = meals?.notice && meals.notice.turn === turn ? meals.notice : null;
   const [opened, setOpened] = useState<ReviewRow | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [notice, setNotice] = useState<Notice | null>(null);
+  // Kept while you visit other places (Today and the Kitchen share it), so Undo stays (PlaceMemory).
+  const [notice, setNotice] = usePlaceMemory<Notice | null>("kitchen.review.notice", null);
   const currentNotice = notice && notice.turn === turn ? notice : null;
 
   const label = (r: ReviewRow) => {
@@ -78,8 +79,87 @@ export function ToReview({ reviews, finalFocus }: { reviews: ReviewRow[]; finalF
 
   return (
     <>
-      {mealNotice && (
-        <p className="flex flex-wrap items-center gap-2 rounded-sm bg-success-bg px-3 py-2 text-small text-success-text">
+      <MealNoticeLine />
+      {currentNotice && (
+        <p className="flex flex-wrap items-center gap-2 rounded-md bg-success-bg px-4 py-2 text-small text-success-text">
+          <span>{currentNotice.text}</span>
+          {currentNotice.undo && (
+            <button
+              type="button"
+              aria-label={currentNotice.undo.label}
+              onClick={() => void undo(currentNotice.undo!.changeSetId)}
+              className="btn-quiet"
+            >
+              <UndoIcon aria-hidden="true" className="size-icon-sm" />
+              {t("shopping.undo")}
+            </button>
+          )}
+        </p>
+      )}
+      {reviews.length > 0 && (
+        <section aria-labelledby="kitchen-to-review" data-group="to-review" className="card flex flex-col gap-2 px-4 py-4">
+          <h3 id="kitchen-to-review" className="eyebrow px-1">
+            <span aria-hidden="true">{t("kitchen.review.titleCount", { count: reviews.length })}</span>
+            <span className="sr-only">{t("kitchen.review.title")}</span>
+          </h3>
+          <ul className="flex flex-col gap-2">
+            {reviews.map((r) => (
+              <li key={r.id} data-entity-id={r.id}>
+                {r.origin === "shopping-list" ? (
+                  <button
+                    type="button"
+                    aria-haspopup="dialog"
+                    onClick={() => {
+                      setOpened(r);
+                      setSheetOpen(true);
+                    }}
+                    className="flex min-h-tap w-full items-center rounded-md bg-surface-soft px-4 py-2 text-left text-body font-strong text-text-default"
+                  >
+                    {label(r)}
+                  </button>
+                ) : meals && r.kind === "after-cooking" && r.meal && !("missing" in r.meal) ? (
+                  <button
+                    type="button"
+                    aria-haspopup="dialog"
+                    onClick={() => openAfterCooking(r)}
+                    className="flex min-h-tap w-full items-center rounded-md bg-surface-soft px-4 py-2 text-left text-body font-strong text-text-default"
+                  >
+                    {label(r)}
+                  </button>
+                ) : (
+                  <p className="flex min-h-tap items-center px-4 text-body">{label(r)}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <ShoppingReviewSheet
+        review={opened}
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onAdded={(added) => say({ text: added.text, undo: { changeSetId: added.changeSetId, label: added.undoLabel }, turn })}
+        onSkipped={() => say({ text: t("kitchen.review.skipped"), turn })}
+        finalFocus={finalFocus}
+      />
+    </>
+  );
+}
+
+/**
+ * The latest "Update your kitchen" result ("Updated your kitchen after Pho: 1 running low.") with
+ * its Undo, until your next message. Shown on Today, the Kitchen and the Plan, wherever you are.
+ */
+export function MealNoticeLine() {
+  const t = useTranslations();
+  const announce = useAnnounce();
+  const actions = useKitchenActions();
+  const { turn = 0 } = useKitchenData();
+  const meals = useMealsOptional();
+  const mealNotice = meals?.notice && meals.notice.turn === turn ? meals.notice : null;
+  if (!mealNotice) return null;
+  return (
+        <p className="flex flex-wrap items-center gap-2 rounded-md bg-success-bg px-4 py-2 text-small text-success-text">
           <span>{mealNotice.text}</span>
           {mealNotice.undo && (
             <button
@@ -101,76 +181,12 @@ export function ToReview({ reviews, finalFocus }: { reviews: ReviewRow[]; finalF
                 meals?.setNotice({ text: t("shopping.cantUndo"), turn });
                 announce(t("shopping.cantUndo"));
               }}
-              className="flex min-h-tap items-center gap-1 rounded-button px-3 font-strong text-accent-text"
+              className="btn-quiet"
             >
               <UndoIcon aria-hidden="true" className="size-icon-sm" />
               {t("shopping.undo")}
             </button>
           )}
         </p>
-      )}
-      {currentNotice && (
-        <p className="flex flex-wrap items-center gap-2 rounded-sm bg-success-bg px-3 py-2 text-small text-success-text">
-          <span>{currentNotice.text}</span>
-          {currentNotice.undo && (
-            <button
-              type="button"
-              aria-label={currentNotice.undo.label}
-              onClick={() => void undo(currentNotice.undo!.changeSetId)}
-              className="flex min-h-tap items-center gap-1 rounded-button px-3 font-strong text-accent-text"
-            >
-              <UndoIcon aria-hidden="true" className="size-icon-sm" />
-              {t("shopping.undo")}
-            </button>
-          )}
-        </p>
-      )}
-      {reviews.length > 0 && (
-        <section aria-labelledby="kitchen-to-review" data-group="to-review">
-          <h3 id="kitchen-to-review" className="mb-1 text-caption font-strong tracking-wide text-text-muted">
-            <span aria-hidden="true">{t("kitchen.review.titleCount", { count: reviews.length })}</span>
-            <span className="sr-only">{t("kitchen.review.title")}</span>
-          </h3>
-          <ul className="flex flex-col">
-            {reviews.map((r) => (
-              <li key={r.id} data-entity-id={r.id}>
-                {r.origin === "shopping-list" ? (
-                  <button
-                    type="button"
-                    aria-haspopup="dialog"
-                    onClick={() => {
-                      setOpened(r);
-                      setSheetOpen(true);
-                    }}
-                    className="flex min-h-tap w-full items-center rounded-sm px-3 text-left text-body font-medium text-accent-text"
-                  >
-                    {label(r)}
-                  </button>
-                ) : meals && r.kind === "after-cooking" && r.meal && !("missing" in r.meal) ? (
-                  <button
-                    type="button"
-                    aria-haspopup="dialog"
-                    onClick={() => openAfterCooking(r)}
-                    className="flex min-h-tap w-full items-center rounded-sm px-3 text-left text-body font-medium text-accent-text"
-                  >
-                    {label(r)}
-                  </button>
-                ) : (
-                  <p className="flex min-h-tap items-center px-3 text-body">{label(r)}</p>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      <ShoppingReviewSheet
-        review={opened}
-        open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        onAdded={(added) => say({ text: added.text, undo: { changeSetId: added.changeSetId, label: added.undoLabel }, turn })}
-        onSkipped={() => say({ text: t("kitchen.review.skipped"), turn })}
-        finalFocus={finalFocus}
-      />
-    </>
   );
 }

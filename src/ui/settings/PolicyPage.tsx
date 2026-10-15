@@ -19,18 +19,18 @@ export function PolicyPage({ which }: { which: "privacy" | "terms" }) {
   const sections = Array.isArray(raw) ? (raw as Section[]).filter((s) => s && typeof s.heading === "string" && typeof s.body === "string") : [];
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-prose flex-col gap-4 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-      <Link href="/settings" className="flex min-h-tap items-center gap-2 self-start rounded-button pr-3 text-body font-medium text-accent-text">
+      <Link href="/settings" className="btn btn-small self-start">
         <BackIcon aria-hidden="true" className="size-icon" />
         {t("back")}
       </Link>
-      <h1 className="text-heading font-strong">{t(`${which}.title`)}</h1>
-      <p role="note" className="rounded-md bg-warning-bg px-4 py-3 text-small text-warning-text">
+      <h1 className="text-display font-medium">{t(`${which}.title`)}</h1>
+      <p role="note" className="rounded-md border-2 border-border-default bg-warning-bg px-4 py-3 text-small text-warning-text">
         {t("placeholder")}
       </p>
       <p className="text-body">{t(`${which}.intro`)}</p>
       {sections.map((s) => (
-        <section key={s.heading} className="flex flex-col gap-1">
-          <h2 className="text-title font-strong">{s.heading}</h2>
+        <section key={s.heading} className="card flex flex-col gap-1 px-5 py-4">
+          <h2 className="text-title font-medium">{s.heading}</h2>
           <p className="text-body">{s.body}</p>
         </section>
       ))}

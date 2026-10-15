@@ -1,13 +1,15 @@
 /**
- * Kitchen See all (K1, CAT1) on the FAKE interpreter, at phone and desktop size, with axe at each
- * checkpoint: buy a few things → See all → By type shows the category groups (remembered after a
- * reload) → search narrows ("nuoc mam" finds "nước mắm") → no matches → Clear → the groups again;
- * the compact widget's search icon opens See all with the field focused.
+ * The Kitchen place (K1, CAT1; Kitchen OS dock, 0042: the old "See all" page is now the Kitchen
+ * itself) on the FAKE interpreter, at phone and desktop size, with axe at each checkpoint: buy a
+ * few things → the dock's Kitchen → By type shows the category groups (remembered after a reload)
+ * → search narrows ("nuoc mam" finds "nước mắm") → the view toggle still works while searching →
+ * no matches → Clear → the groups again.
  * Set SEE_ALL_SCREENSHOTS=1 to save docs/design/screenshots/kitchen-by-type-phone.png and
  * kitchen-search-phone.png.
  */
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
+import { goTo } from "../support/places";
 
 const COOKIE = "dev_acting_as";
 
@@ -18,12 +20,11 @@ async function resetAndActAs(page: Page, baseURL: string) {
   await page.goto("/");
 }
 
-const kitchen = (page: Page) => page.getByRole("region", { name: "Kitchen" }).first();
-const composer = (page: Page) => page.getByRole("textbox", { name: "Message Kitchen" });
+const kitchen = (page: Page) => page.getByRole("region", { name: "Kitchen" });
+const composer = (page: Page) => page.getByRole("textbox", { name: "Message Lumi" });
 const lastReceipt = (page: Page) => page.getByRole("region", { name: "What changed" }).last();
-const seeAll = (page: Page) => page.getByRole("article", { name: "Your kitchen" });
 const search = (page: Page) => page.getByRole("searchbox", { name: "Search your kitchen" });
-const groupTitles = (page: Page) => seeAll(page).getByRole("heading", { level: 3 });
+const groupTitles = (page: Page) => kitchen(page).getByRole("heading", { level: 3 });
 
 async function say(page: Page, text: string) {
   await expect(async () => {
@@ -42,30 +43,30 @@ async function screenshot(page: Page, name: string) {
   await page.getByRole("button", { name: /^Open chat/ }).click();
 }
 
-test("See all: By type groups, search narrows (accents ignored), clear; the widget's search icon", async ({ page, baseURL }, testInfo) => {
+test("Kitchen: By type groups, search narrows (accents ignored), the toggle while searching, clear", async ({ page, baseURL }, testInfo) => {
   const phone = testInfo.project.name === "phone";
   await resetAndActAs(page, baseURL!);
   await page.evaluate(() => window.localStorage.removeItem("kitchen.seeAll.view"));
 
   await say(page, "I bought fish sauce, nước mắm, jasmine rice and milk");
   await expect(lastReceipt(page)).toContainText("Added fish sauce");
-  await expect(kitchen(page).getByText("Nước mắm")).toBeVisible();
 
-  // See all: By place first.
-  await kitchen(page).getByRole("link", { name: /^See all \(\d+\)$/ }).click();
+  // The dock's Kitchen: By place first; focus on the place's title.
+  await goTo(page, "Kitchen");
   await expect(page).toHaveURL(/\/kitchen$/);
-  await expect(seeAll(page).getByRole("heading", { name: "Your kitchen", level: 2 })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "Kitchen", level: 1 })).toBeFocused();
+  await expect(kitchen(page).getByText("Nước mắm")).toBeVisible();
   await expect(page.getByRole("button", { name: "By place" })).toHaveAttribute("aria-pressed", "true");
-  await expectAccessible(page, "See all, by place");
+  await expectAccessible(page, "Kitchen, by place");
 
   // By type: the category groups, each row saying where it is.
   await page.getByRole("button", { name: "By type" }).click();
   await expect(page.getByRole("button", { name: "By type" })).toHaveAttribute("aria-pressed", "true");
   await expect(groupTitles(page)).toContainText(["Dairy & eggs", "Rice, noodles & grains", "Sauces & condiments"]);
-  const sauces = seeAll(page).getByRole("region", { name: "Sauces & condiments" });
+  const sauces = kitchen(page).getByRole("region", { name: "Sauces & condiments" });
   await expect(sauces.getByRole("listitem")).toHaveCount(2);
   await expect(sauces.getByRole("listitem").filter({ hasText: "Fish sauce" })).toContainText(/Fish sauce · (Pantry|Fridge|Not sure where)/);
-  await expectAccessible(page, "See all, by type");
+  await expectAccessible(page, "Kitchen, by type");
   if (process.env.SEE_ALL_SCREENSHOTS && phone) await screenshot(page, "kitchen-by-type-phone.png");
 
   // Remembered on this device.
@@ -75,25 +76,31 @@ test("See all: By type groups, search narrows (accents ignored), clear; the widg
 
   // Search narrows to a flat list, accents ignored, matches marked.
   await search(page).fill("nuoc mam");
-  const results = seeAll(page).getByRole("region", { name: "1 match" });
+  const results = kitchen(page).getByRole("region", { name: "1 match" });
   await expect(results.getByRole("listitem")).toHaveCount(1);
   await expect(results.getByRole("listitem")).toContainText("Nước mắm ·");
   await expect(results.locator("mark")).toHaveText(["Nước", "mắm"]);
-  await expect(seeAll(page).getByRole("region", { name: "Sauces & condiments" })).toHaveCount(0);
+  await expect(kitchen(page).getByRole("region", { name: "Sauces & condiments" })).toHaveCount(0);
   await expect(page.getByTestId("announcer")).toHaveText("1 match");
-  await expectAccessible(page, "See all, searching");
+  await expectAccessible(page, "Kitchen, searching");
+
+  // The toggle stays while searching: results are one flat list either way, and the choice sticks.
+  await page.getByRole("button", { name: "By place" }).click();
+  await expect(page.getByRole("button", { name: "By place" })).toHaveAttribute("aria-pressed", "true");
+  await expect(kitchen(page).getByRole("region", { name: "1 match" }).getByRole("listitem")).toHaveCount(1);
+  await page.getByRole("button", { name: "By type" }).click();
 
   await search(page).fill("fish");
-  await expect(seeAll(page).getByRole("region", { name: "2 matches" }).getByRole("listitem")).toHaveCount(2);
+  await expect(kitchen(page).getByRole("region", { name: "2 matches" }).getByRole("listitem")).toHaveCount(2);
   if (process.env.SEE_ALL_SCREENSHOTS && phone) {
     await search(page).blur();
     await screenshot(page, "kitchen-search-phone.png");
   }
 
   await search(page).fill("tofu");
-  await expect(seeAll(page).getByText("No matches for “tofu”")).toBeVisible();
-  await expect(seeAll(page).getByText("Try another word, or ask Kitchen in chat.")).toBeVisible();
-  await expectAccessible(page, "See all, no matches");
+  await expect(kitchen(page).getByText("No matches for “tofu”")).toBeVisible();
+  await expect(kitchen(page).getByText("Try another word, or ask Lumi in chat.")).toBeVisible();
+  await expectAccessible(page, "Kitchen, no matches");
 
   // Clear: back to the groups, focus stays in the field.
   await page.getByRole("button", { name: "Clear search" }).click();
@@ -101,13 +108,12 @@ test("See all: By type groups, search narrows (accents ignored), clear; the widg
   await expect(search(page)).toBeFocused();
   await expect(groupTitles(page).first()).toHaveText("Dairy & eggs");
 
-  // Back home, then the widget's search icon opens See all with the field focused.
-  await page.getByRole("button", { name: "Back" }).click();
-  await expect(page).toHaveURL(/\/$/);
-  await expect(kitchen(page).getByRole("link", { name: /^See all/ })).toBeFocused();
-  await kitchen(page).getByRole("link", { name: "Search your kitchen" }).click();
-  await expect(search(page)).toBeFocused();
+  // Leaving and coming back: the view is kept, the search starts empty.
+  await goTo(page, "Today");
+  await goTo(page, "Kitchen");
+  await expect(search(page)).toHaveValue("");
+  await expect(page.getByRole("button", { name: "By type" })).toHaveAttribute("aria-pressed", "true");
   await search(page).fill("milk");
-  await expect(seeAll(page).getByRole("region", { name: "1 match" })).toContainText("Milk");
-  await expectAccessible(page, "See all from the search icon");
+  await expect(kitchen(page).getByRole("region", { name: "1 match" })).toContainText("Milk");
+  await expectAccessible(page, "Kitchen, search after coming back");
 });

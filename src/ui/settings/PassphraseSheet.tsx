@@ -30,7 +30,7 @@ export function PassphraseSheet(props: PassphraseSheetProps) {
   return (
     <Dialog.Root open={props.open} onOpenChange={(open) => props.onOpenChange(open)}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-40 bg-text-default/30" />
+        <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
         {/* Always rendered (Base UI needs its Popup to finish closing, or the backdrop stays and
             blocks the page); a new key on each open gives a fresh, empty sheet. */}
         <SheetBody key={props.open ? "open" : "closed"} {...props} />
@@ -92,9 +92,9 @@ function SheetBody({ onOpenChange, hasPassphrase, userName, change, onSaved }: P
   return (
     <Dialog.Popup
       initialFocus={currentRef}
-      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col overflow-y-auto rounded-t-lg bg-surface-raised px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-dock desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-lg"
+      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col overflow-y-auto rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
     >
-      <Dialog.Title className="text-title font-strong">{hasPassphrase ? t("changeTitle") : t("setTitle")}</Dialog.Title>
+      <Dialog.Title className="font-heading text-title font-medium">{hasPassphrase ? t("changeTitle") : t("setTitle")}</Dialog.Title>
       <form onSubmit={(e) => void submit(e)} noValidate className="mt-3 flex flex-col">
         <input type="text" name="username" autoComplete="username" value={userName} readOnly hidden />
         <SecretField
@@ -145,7 +145,7 @@ function SheetBody({ onOpenChange, hasPassphrase, userName, change, onSaved }: P
           type="submit"
           aria-disabled={busy || undefined}
           aria-busy={busy || undefined}
-          className="mt-4 min-h-tap w-full rounded-button bg-accent-default px-5 text-body font-strong text-text-inverse aria-disabled:opacity-60"
+          className="btn btn-primary mt-4 w-full"
         >
           {busy ? t("saving") : t("save")}
         </button>
@@ -153,7 +153,7 @@ function SheetBody({ onOpenChange, hasPassphrase, userName, change, onSaved }: P
           type="button"
           onClick={() => onOpenChange(false)}
           disabled={busy}
-          className="mt-3 min-h-tap w-full rounded-button border border-border-strong bg-surface-raised px-5 text-body font-strong"
+          className="btn mt-3 w-full"
         >
           {t("cancel")}
         </button>

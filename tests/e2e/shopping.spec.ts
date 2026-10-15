@@ -4,10 +4,13 @@
  * it", saved for everyone) → ⋯ Remove with Undo → offline tick queued and synced (SL4 Rec) →
  * Done shopping → "Add to your kitchen?" → the ticked item moves into the Kitchen; Do later → To
  * review in the Kitchen → Add from there.
+ * Kitchen OS places (0042): the list is the List place (`/list`); the Kitchen is a dock tap away,
+ * and the List's Undo lines are still there when you come back.
  * Set SHOPPING_SCREENSHOTS=1 to save docs/design/screenshots/shopping-phone.png.
  */
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
+import { goTo } from "../support/places";
 
 const COOKIE = "dev_acting_as";
 
@@ -15,13 +18,14 @@ async function resetAndActAs(page: Page, baseURL: string) {
   const res = await page.request.post("/api/dev/reset", { headers: { origin: baseURL } });
   expect(res.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: "demo-vero", url: baseURL }]);
-  await page.goto("/");
+  await page.goto("/list");
 }
 
 const list = (page: Page) => page.getByRole("region", { name: "Shopping list" });
 const kitchen = (page: Page) => page.getByRole("region", { name: "Kitchen" });
-const composer = (page: Page) => page.getByRole("textbox", { name: "Message Kitchen" });
+const composer = (page: Page) => page.getByRole("textbox", { name: "Message Lumi" });
 const lastReceipt = (page: Page) => page.getByRole("region", { name: "What changed" }).last();
+const EMPTY = "Your list is clear. Tell me what you need.";
 const box = (page: Page, name: string) => list(page).getByRole("checkbox", { name: new RegExp(`^${name}, got it`) });
 
 /** Types and sends; retries the typing until the page has hydrated (Send turns on). */
@@ -33,14 +37,10 @@ async function say(page: Page, text: string) {
   await composer(page).press("Enter");
 }
 
-async function expandIfCollapsed(page: Page, region: ReturnType<typeof kitchen>) {
-  const bar = region.getByRole("heading", { level: 2 }).getByRole("button");
-  if ((await bar.getAttribute("aria-expanded")) === "false") await bar.click();
-}
-
 test("shopping list: add in chat → tick → remove → Done shopping moves it to the kitchen", async ({ page, baseURL }, testInfo) => {
   await resetAndActAs(page, baseURL!);
-  await expect(list(page)).toHaveCount(0); // appears on its first item
+  await expect(list(page).getByRole("checkbox")).toHaveCount(0);
+  await expect(list(page)).toContainText(EMPTY);
 
   // Chat puts items on the list, under the store said; the receipt groups them by store.
   await say(page, "Add garlic, ginger, green onion and lemongrass to the list for MD Oriental Market");
@@ -64,7 +64,7 @@ test("shopping list: add in chat → tick → remove → Done shopping moves it 
   await box(page, "Garlic").click();
   await box(page, "Ginger").click();
   await expect(box(page, "Garlic")).toBeChecked();
-  await expect(list(page).getByRole("button", { name: /Shopping list/ })).toContainText("6 · 2 got");
+  await expect(list(page)).toContainText("6 · 2 got");
   await expect(list(page).getByText("Not synced yet")).toHaveCount(0);
   await page.reload();
   await expect(box(page, "Garlic")).toBeChecked();
@@ -118,19 +118,23 @@ test("shopping list: add in chat → tick → remove → Done shopping moves it 
   await expect(box(page, "Lemongrass")).toHaveCount(0);
   await expect(box(page, "Green onion")).toBeVisible();
 
-  await expandIfCollapsed(page, kitchen(page));
+  await goTo(page, "Kitchen");
   for (const name of ["Garlic", "Ginger", "Lemongrass"]) {
     await expect(kitchen(page).getByRole("listitem").filter({ hasText: name })).toContainText("New");
   }
   await expectAccessible(page, "after done shopping");
 
-  // One Undo puts them back on the list and out of the kitchen.
+  // Back on the List, the result and its Undo are still there; one Undo puts them back on the
+  // list and out of the kitchen.
+  await goTo(page, "List");
+  await expect(list(page)).toContainText("Added 3 to your kitchen. 2 things are still on your list.");
   await list(page).getByRole("button", { name: /^Undo: added garlic, ginger(,)? and lemongrass to your kitchen$/ }).click();
   await expect(box(page, "Garlic")).toBeChecked();
+  await goTo(page, "Kitchen");
   await expect(kitchen(page).getByRole("listitem").filter({ hasText: "Lemongrass" })).toHaveCount(0);
 });
 
-test("Do later: Done shopping → Do later → To review in the Kitchen → Add puts them in the kitchen and off the list", async ({ page, baseURL, isMobile }) => {
+test("Do later: Done shopping → Do later → To review in the Kitchen → Add puts them in the kitchen and off the list", async ({ page, baseURL }) => {
   await resetAndActAs(page, baseURL!);
   await say(page, "Add garlic, ginger and shallot to the list for MD Oriental Market");
   await expect(box(page, "Shallot")).toBeVisible();
@@ -151,19 +155,9 @@ test("Do later: Done shopping → Do later → To review in the Kitchen → Add 
   await expect(box(page, "Shallot")).not.toBeChecked();
   await expectAccessible(page, "after do later");
 
-  // To review in the Kitchen shows them, and it's saved (survives a reload). On a phone the
-  // collapsed Kitchen bar says so. Until it hydrates the page shows the default order, Kitchen
-  // first and open; then the phone puts the list you last used back on top and the Kitchen
-  // collapses (ux.md §10). Wait for that before expanding it, once, so nothing undoes the tap.
+  // To review in the Kitchen shows them, and it's saved (survives a reload).
   await page.reload();
-  await expect(kitchen(page).getByRole("heading", { level: 2 })).toContainText("1 to review");
-  const kitchenBar = kitchen(page).getByRole("heading", { level: 2 }).getByRole("button");
-  if (isMobile) {
-    await expect(list(page).getByRole("heading", { level: 2 }).getByRole("button")).toHaveAttribute("aria-expanded", "true");
-    await expect(kitchenBar).toHaveAttribute("aria-expanded", "false");
-    await kitchenBar.click();
-  }
-  await expect(kitchenBar).toHaveAttribute("aria-expanded", "true");
+  await goTo(page, "Kitchen");
   const review = kitchen(page).getByRole("region", { name: "To review" });
   const card = review.getByRole("button", { name: "2 items to add · Shopping list" });
   await expect(card).toBeVisible();
@@ -183,16 +177,20 @@ test("Do later: Done shopping → Do later → To review in the Kitchen → Add 
   await expect(review).toHaveCount(0);
   for (const name of ["Garlic", "Ginger"]) {
     await expect(kitchen(page).getByRole("listitem").filter({ hasText: name })).toContainText("New");
-    await expect(box(page, name)).toHaveCount(0);
   }
-  await expect(box(page, "Shallot")).toBeVisible();
   await expectAccessible(page, "after add from to review");
+  await goTo(page, "List");
+  for (const name of ["Garlic", "Ginger"]) await expect(box(page, name)).toHaveCount(0);
+  await expect(box(page, "Shallot")).toBeVisible();
 
-  // One Undo: back on the list (ticked), out of the kitchen, and the card is back in To review.
+  // One Undo (still beside the change on the Kitchen): back on the list (ticked), out of the
+  // kitchen, and the card is back in To review.
+  await goTo(page, "Kitchen");
   await kitchen(page).getByRole("button", { name: "Undo: added garlic and ginger to your kitchen" }).click();
-  await expect(box(page, "Garlic")).toBeChecked();
   await expect(kitchen(page).getByRole("listitem").filter({ hasText: "Ginger" })).toHaveCount(0);
   await expect(card).toBeVisible();
+  await goTo(page, "List");
+  await expect(box(page, "Garlic")).toBeChecked();
 });
 
 test("SL4: a tick made with no signal is kept on the phone, marked 'Not synced yet', and syncs when back online", async ({ page, baseURL, context }) => {
@@ -213,15 +211,21 @@ test("SL4: a tick made with no signal is kept on the phone, marked 'Not synced y
   await expect(box(page, "Oatmilk")).toBeChecked();
 });
 
-test("a phone reopens with the shopping list on top when it was used last", async ({ page, baseURL }) => {
+test("a phone opened fresh goes back to the List when it was used last (ux.md §10)", async ({ page, baseURL, context }) => {
   test.skip((page.viewportSize()?.width ?? 0) >= 900, "phone only");
   await resetAndActAs(page, baseURL!);
-  await say(page, "I bought eggs");
   await say(page, "Add limes to the list");
   await expect(box(page, "Limes")).toBeVisible();
+  // A reload is the same visit: it stays where it is.
   await page.reload();
-  await expect
-    .poll(() => page.locator("[data-widget]").evaluateAll((els) => els.map((e) => e.getAttribute("data-widget"))))
-    .toEqual(["shopping.list", "kitchen.items"]);
-  await expect(box(page, "Limes")).toBeVisible(); // expanded, ready to tick
+  await expect(page).toHaveURL(/\/list$/);
+  // Opening the app again (a new tab: a fresh session, the same phone) on Today goes back to the List.
+  const again = await context.newPage();
+  await again.goto("/");
+  await expect(again).toHaveURL(/\/list$/);
+  await expect(again.getByRole("region", { name: "Shopping list" }).getByRole("checkbox", { name: /^Limes, got it/ })).toBeVisible();
+  // Going to Today on purpose afterwards stays on Today.
+  await goTo(again, "Today");
+  await again.reload();
+  await expect(again).toHaveURL(/\/$/);
 });

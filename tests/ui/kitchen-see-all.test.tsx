@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
 /**
- * Kitchen See all (K1, CAT1): By place | By type (remembered per device), search (accents
- * ignored, matches marked, no-matches hint), the compact widget's way in, and the category receipts.
+ * The Kitchen place (K1, CAT1; Kitchen OS dock): By place | By type (remembered per device),
+ * search (accents ignored, matches marked, no-matches hint), and the category receipts.
  */
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ItemCategory } from "@/contracts/common";
 import type { ItemRow, KitchenState } from "@/contracts/kitchen-state";
@@ -16,10 +15,8 @@ import type { Receipt as ReceiptModel } from "@/ui/chat/chat-reducer";
 import type { SyncSnapshot } from "@/ui/sync/kitchen-sync";
 import { KitchenActionsProvider } from "@/ui/sync/KitchenActionsContext";
 import { KitchenDataProvider } from "@/ui/sync/KitchenDataContext";
-import { KitchenSeeAll } from "@/ui/widgets/kitchen/KitchenSeeAll";
 import { KitchenWidget } from "@/ui/widgets/kitchen/KitchenWidget";
 import { groupByCategory, highlightParts } from "@/ui/widgets/kitchen/model";
-import { requestSeeAllFocus } from "@/ui/widgets/kitchen/see-all-focus";
 import { KITCHEN_VIEW_KEY, resetKitchenViewMemory } from "@/ui/widgets/kitchen/view-pref";
 import { fakeActions } from "../support/fake-actions";
 import { renderWithIntl } from "../support/intl";
@@ -27,6 +24,7 @@ import { item, kitchen, said, VERO } from "../support/kitchen-rows";
 
 const router = { push: vi.fn(), back: vi.fn(), refresh: vi.fn(), replace: vi.fn(), prefetch: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => "/kitchen" }));
+void router;
 
 const NOW = new Date("2026-10-17T12:00:00.000Z");
 const guess = (value: ItemCategory) => ({ value, basis: "inferred" as const, confidence: "medium" as const });
@@ -39,7 +37,7 @@ const ITEMS: ItemRow[] = [
   item("5", "eggs", { category: guess("dairy_eggs"), stock: said("out" as const) }),
 ];
 
-function show(state: KitchenState | null = kitchen(ITEMS), ui = <KitchenSeeAll />) {
+function show(state: KitchenState | null = kitchen(ITEMS), ui = <KitchenWidget onRetry={() => {}} />) {
   const snapshot: SyncSnapshot = { state, status: state ? "ok" : "loading", syncedAt: NOW.getTime() };
   return renderWithIntl(
     <AnnouncerProvider>
@@ -64,12 +62,11 @@ afterEach(() => {
 });
 
 describe("See all: By place | By type", () => {
-  it("opens By place, grouped like the Kitchen widget, with the heading focused", () => {
+  it("opens By place: Fridge / Pantry / Not sure where", () => {
     show();
     expect(screen.getByRole("button", { name: "By place" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "By type" })).toHaveAttribute("aria-pressed", "false");
     expect(groupTitles()).toEqual(["Fridge", "Pantry", "Not sure where"]);
-    expect(screen.getByRole("heading", { name: "Your kitchen" })).toHaveFocus();
     // By place doesn't repeat the place on each row.
     expect(screen.queryByText(/· Pantry/)).not.toBeInTheDocument();
   });
@@ -155,13 +152,13 @@ describe("See all: search", () => {
     expect(results.querySelector("mark")).toHaveTextContent("Fish");
   });
 
-  it("no matches says so, with a hint to ask Kitchen, and is spoken once typing pauses", async () => {
+  it("no matches says so, with a hint to ask Lumi, and is spoken once typing pauses", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     show();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await user.type(search(), "tofu");
     expect(screen.getByText("No matches for “tofu”")).toBeInTheDocument();
-    expect(screen.getByText("Try another word, or ask Kitchen in chat.")).toBeInTheDocument();
+    expect(screen.getByText("Try another word, or ask Lumi in chat.")).toBeInTheDocument();
     await act(async () => {
       vi.advanceTimersByTime(800);
     });
@@ -198,44 +195,12 @@ describe("See all: search", () => {
   });
 });
 
-describe("The compact Kitchen widget's way in", () => {
-  it("has See all (N) and a search icon; the icon opens See all with the search field focused", () => {
-    show(kitchen(ITEMS), <KitchenWidget onRetry={() => {}} />);
-    expect(screen.getByRole("link", { name: "See all (4)" })).toHaveAttribute("href", "/kitchen");
-    expect(screen.getByRole("link", { name: "Search your kitchen" })).toHaveAttribute("href", "/kitchen");
-    cleanup();
-    requestSeeAllFocus("search");
-    show();
-    expect(search()).toHaveFocus();
-  });
-
-  // Regression (e2e, 2026-10-14): in development React runs mount effects twice (and again when
-  // Next reveals a kept route); the second run used up the request and focused the heading.
-  it("the search field still gets focus when the mount effect runs again for the same tap", () => {
-    requestSeeAllFocus("search");
-    show(kitchen(ITEMS), <StrictMode><KitchenSeeAll /></StrictMode>);
-    cleanup();
-    show();
-    expect(search()).toHaveFocus();
-  });
-
-  it("a later visit without the icon starts at the heading again", () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    requestSeeAllFocus("search");
-    vi.advanceTimersByTime(5000);
-    show();
-    expect(screen.getByRole("heading", { name: "Your kitchen" })).toHaveFocus();
-  });
-
-  it("an empty kitchen has neither", () => {
-    show(kitchen([]), <KitchenWidget onRetry={() => {}} />);
-    expect(screen.queryByRole("link", { name: /See all/ })).not.toBeInTheDocument();
-  });
-
-  it("Back goes home", async () => {
-    show();
-    await userEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(router.push).toHaveBeenCalledWith("/");
+describe("Search and grouping only when there's something to find", () => {
+  it("an empty kitchen shows the welcome, without search or the By place | By type choice", () => {
+    show(kitchen([]));
+    expect(screen.getByText("Your kitchen is empty. Tell me what you've got.")).toBeInTheDocument();
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Group items" })).not.toBeInTheDocument();
   });
 });
 

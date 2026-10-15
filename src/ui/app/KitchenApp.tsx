@@ -1,19 +1,25 @@
 "use client";
 /**
- * The main screen (ux.md §1): the workspace and the chat.
- * - Phone: the workspace fills the screen and the chat is docked at the bottom, in three states:
- *   Peek (latest reply + receipt + composer), Full (whole conversation) and Minimized (a round
- *   chat button bottom-right, with a dot for a new reply; not draggable, UX4).
- * - Desktop (≥ 900 px): chat on the left (1/3), workspace on the right (2/3).
- * Your own change updates the widgets from the ApplyResult before the reply arrives; the other
- * person's changes arrive through `useKitchenSync`.
+ * The main screen: the Kitchen OS shell (0042) on this app's own core.
+ * - **Header:** the place's title, the household's avatars (→ Settings) and the sync status.
+ * - **Stage:** the route's place (Today `/`, Kitchen, Plan, Meals + the Recipe, List, Settings).
+ * - **Chat:** Lumi's latest reply with its "What changed" receipt (Undo, refusals, batch offers)
+ *   and the message box. Phone: Peek (latest exchange), Full (whole conversation) or Minimized (a
+ *   round chat button with a new-reply dot, UX4). Desktop: the right-hand column (0034), which
+ *   you can minimize too.
+ * - **Dock:** the five places (phone: at the bottom; desktop: the slim left nav).
+ * It's a layout, so the chat stays mounted while you move between places. Your own change shows
+ * at once from the ApplyResult; if it concerns a place you aren't looking at, the page stays put
+ * and a cue says "Kitchen updated · Show" (0035 f). The other person's changes arrive through
+ * `useKitchenSync`, with a soft highlight and one announcement, never moving focus or the page.
  */
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useLocale, useNow, useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   finishShopping,
+  makeAgain,
   queueShoppingForLater,
   removeShoppingListItem,
   resolveToReview,
@@ -22,20 +28,26 @@ import {
   untickShoppingListItem,
 } from "@/app/actions";
 import { closeBatch, keepOlderBatch } from "@/app/batches/actions";
-import type { ApplyResult } from "@/contracts/apply-result";
+import type { ChangeRef } from "@/contracts/apply-result";
 import type { ChatHistoryPage } from "@/contracts/chat-history";
 import type { KitchenState } from "@/contracts/kitchen-state";
 import { AnnouncerProvider, useAnnounce } from "@/ui/a11y/Announcer";
+import { marksFrom } from "@/ui/app/marks";
+import { AskLumiProvider } from "@/ui/chat/AskLumi";
 import { Composer, type ComposerHandle } from "@/ui/chat/Composer";
 import { offersOf, openOlder, useBatchOfferWords } from "@/ui/chat/BatchOffers";
 import { useFormatMsg } from "@/ui/chat/format-msg";
-import { MessageList } from "@/ui/chat/MessageList";
+import { LumiFace, MessageList } from "@/ui/chat/MessageList";
 import { useChat } from "@/ui/chat/useChat";
-import { sentenceCase } from "@/ui/fallbacks";
-import { CaretDownIcon, CaretUpIcon, ChatIcon, MinusIcon } from "@/ui/primitives/icons";
-import { ConfirmBanner, ConfirmPromptProvider } from "@/ui/settings/ConfirmPrompt";
+import { cueTarget, parseLastPlace, placeForHost, placeForPath, resumePlace } from "@/ui/places/model";
+import { PlaceRetryProvider } from "@/ui/places/Place";
+import { PlaceMemoryProvider } from "@/ui/places/PlaceMemory";
+import { places, TODAY_PLACE_ID } from "@/ui/places/registry";
+import { CaretDownIcon, CaretUpIcon, ChatIcon, GoIcon, MinusIcon } from "@/ui/primitives/icons";
+import { ConfirmPromptProvider } from "@/ui/settings/ConfirmPrompt";
 import type { PendingConfirm } from "@/ui/settings/model";
-import { DevBar } from "@/ui/shell/DevBar";
+import { Dock } from "@/ui/shell/Dock";
+import { Header, PLACE_TITLE_ID } from "@/ui/shell/Header";
 import { DESKTOP_QUERY, useMediaQuery } from "@/ui/shell/useMediaQuery";
 import { useKeyboardInset } from "@/ui/shell/viewport";
 import { KitchenActionsProvider, type KitchenActions } from "@/ui/sync/KitchenActionsContext";
@@ -43,13 +55,12 @@ import { KitchenDataProvider, type ChangeMark } from "@/ui/sync/KitchenDataConte
 import { useKitchenSync } from "@/ui/sync/useKitchenSync";
 import { useSharedCues } from "@/ui/sync/useSharedCues";
 import { useCueWords } from "@/ui/widgets/kitchen/cue-words";
-import { focusFor, initialWorkspace, workspaceReducer } from "@/ui/workspace/layout";
-import { registry } from "@/ui/workspace/registry";
-import { Workspace } from "@/ui/workspace/Workspace";
-import { MealsProvider } from "@/ui/widgets/meals/MealsContext";
 import { MEAL_IDEAS_WIDGET_ID } from "@/ui/widgets/meals";
+import { MealsProvider } from "@/ui/widgets/meals/MealsContext";
+import { fetchPastMeals, RecipeBoxProvider, type RecipeBoxActions } from "@/ui/widgets/meals/RecipeBoxContext";
 import { UpdateKitchenSheet } from "@/ui/widgets/meals/UpdateKitchenSheet";
 import { useMealsController } from "@/ui/widgets/meals/useMealsController";
+import { useTickQueue } from "@/ui/widgets/shopping/useTickQueue";
 
 export interface KitchenAppProps {
   kitchenId: string;
@@ -59,41 +70,58 @@ export interface KitchenAppProps {
   initialState: KitchenState | null;
   /** Your latest saved chat (P2 a), read on the server; null if that failed (the chat retries). */
   initialHistory?: ChatHistoryPage | null;
-  /** Your allergies or diets someone else added that you haven't confirmed (AI7): the home banner. */
+  /** Your allergies or diets someone else added that you haven't confirmed (AI7): the Today banner. */
   initialPendingConfirm?: PendingConfirm[];
-  /** The route's page: null on `/`, the Recipe, Settings or Kitchen See all on their routes (shown in the workspace). */
+  /** The route's page: a place, the Recipe or Settings. */
   children?: ReactNode;
 }
 
 export type DockState = "peek" | "full" | "minimized";
 
-/** "New" for rows your change added, "Updated" for rows it changed (until your next message). */
-export function marksFrom(result: ApplyResult): Record<string, ChangeMark> {
-  const marks: Record<string, ChangeMark> = {};
-  for (const op of result.applied) {
-    for (const ref of op.refs) {
-      if ((ref.kind !== "item" && ref.kind !== "shopping" && ref.kind !== "meal") || ref.change === "removed") continue;
-      if (marks[ref.id] !== "new") marks[ref.id] = ref.change === "added" ? "new" : "updated";
-    }
-  }
-  return marks;
-}
-
-/** The widget you last used, so a phone reopens with it on top (ux.md §10). Per phone, best effort. */
-const LAST_FOCUSED_KEY = "workspace.lastFocused";
-function rememberFocus(id: string) {
+/**
+ * "Reopen where you left off" (ux.md §10: the list is waiting at the store). This phone keeps the
+ * last place you used; a fresh open of `/` within a few hours goes back there. Best effort.
+ */
+const LAST_PLACE_KEY = "places.last";
+const STARTED_KEY = "places.started";
+function rememberPlace(id: string) {
   try {
-    window.localStorage.setItem(LAST_FOCUSED_KEY, id);
+    window.localStorage.setItem(LAST_PLACE_KEY, JSON.stringify({ id, at: Date.now() }));
   } catch {
-    // Private mode or blocked storage: the app just opens in the default order.
+    // Private mode or blocked storage: the app just opens on Today.
   }
 }
-function lastFocused(): string | null {
+/** Once per browser session (a cold start), the place to reopen instead of Today. */
+function placeToResume(): string | null {
   try {
-    return window.localStorage.getItem(LAST_FOCUSED_KEY);
+    if (window.sessionStorage.getItem(STARTED_KEY)) return null;
+    window.sessionStorage.setItem(STARTED_KEY, "1");
+    return resumePlace(parseLastPlace(window.localStorage.getItem(LAST_PLACE_KEY)), Date.now(), places.map((p) => p.id), TODAY_PLACE_ID);
   } catch {
     return null;
   }
+}
+
+/** Chat is online only (0044): Send is off while the phone has no connection. */
+function useOnline(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      window.addEventListener("online", onChange);
+      window.addEventListener("offline", onChange);
+      return () => {
+        window.removeEventListener("online", onChange);
+        window.removeEventListener("offline", onChange);
+      };
+    },
+    () => navigator.onLine,
+    () => true,
+  );
+}
+
+/** Unsent shopping ticks are sent on app open and when you're back online, wherever you are (SL4). */
+function TickQueueFlusher() {
+  useTickQueue();
+  return null;
 }
 
 export function KitchenApp(props: KitchenAppProps) {
@@ -105,6 +133,11 @@ export function KitchenApp(props: KitchenAppProps) {
 }
 
 const NO_PENDING: PendingConfirm[] = [];
+
+interface Cue {
+  placeId: string;
+  kind: "updated" | "ideas";
+}
 
 function KitchenScreen({
   kitchenId,
@@ -122,7 +155,10 @@ function KitchenScreen({
   const formatMsg = useFormatMsg();
   const batchWords = useBatchOfferWords();
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
+  const online = useOnline();
   const now = useNow({ updateInterval: 60_000 });
+  const router = useRouter();
+  const pathname = usePathname();
   useKeyboardInset();
 
   const { sync, snapshot } = useKitchenSync({ kitchenId, meId: me.id, initial: initialState });
@@ -133,40 +169,55 @@ function KitchenScreen({
     version: snapshot.state?.version ?? null,
   });
   const cueWords = useCueWords();
-  const [workspace, dispatchWorkspace] = useReducer(workspaceReducer, initialWorkspace);
   const [marks, setMarks] = useState<Record<string, ChangeMark>>({});
   const [remoteIds, setRemoteIds] = useState<ReadonlySet<string>>(() => new Set());
   const [dock, setDock] = useState<DockState>("peek");
   const [newReply, setNewReply] = useState(false);
-  const [updatedWhileFull, setUpdatedWhileFull] = useState(false);
   const [turn, setTurn] = useState(0);
+  const [cue, setCue] = useState<Cue | null>(null);
+
+  const current = placeForPath(places, pathname);
+  const settingsOpen = pathname === "/settings" || Boolean(pathname?.startsWith("/settings/"));
+  const title = current ? t(current.titleKey) : settingsOpen ? t("settings.heading") : t("app.name");
 
   const headerRef = useRef<HTMLElement>(null);
-  const dockRef = useRef<HTMLElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const fabRef = useRef<HTMLButtonElement>(null);
   const composerRef = useRef<ComposerHandle>(null);
   const focusAfterDock = useRef<"fab" | "composer" | null>(null);
+  const focusTitleOnArrival = useRef(false);
   const dockNow = useRef(dock);
+  const currentNow = useRef(current?.id ?? null);
   useEffect(() => {
     dockNow.current = dock;
   }, [dock]);
+  useEffect(() => {
+    currentNow.current = current?.id ?? null;
+  }, [current?.id]);
 
-  const showWidget = useCallback((id: string) => {
-    const el = document.querySelector(`[data-widget="${CSS.escape(id)}"]`);
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    el?.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+  /**
+   * Point at a place your change (or the ideas you asked for) concerns. The page never moves
+   * (0035 f): if you're looking at it already, there's nothing to say, unless Full chat covers it.
+   */
+  const pointAt = useCallback((placeId: string, kind: Cue["kind"]) => {
+    if (placeId === currentNow.current && dockNow.current !== "full") return;
+    setCue({ placeId, kind });
   }, []);
+  const pointAtRefs = useCallback(
+    (refs: readonly ChangeRef[]) => {
+      const target = cueTarget(places, refs, dockNow.current === "full" ? null : currentNow.current);
+      if (target) setCue({ placeId: target.id, kind: "updated" });
+    },
+    [],
+  );
 
-  /** Bring a widget forward as after your own message, and show it (unless you're reading Full chat). */
   const focusWidget = useCallback(
     (id: string) => {
-      dispatchWorkspace({ type: "turnApplied", focus: [id] });
-      rememberFocus(id);
-      if (dockNow.current !== "full") requestAnimationFrame(() => showWidget(id));
-      else setUpdatedWhileFull(true);
+      const place = placeForHost(places, id);
+      if (place) pointAt(place.id, id === MEAL_IDEAS_WIDGET_ID ? "ideas" : "updated");
     },
-    [showWidget],
+    [pointAt],
   );
 
   const meals = useMealsController({
@@ -177,19 +228,17 @@ function KitchenScreen({
       sync.applyOwn(result.state);
       if (opts?.focus) {
         setMarks(marksFrom(result));
-        const focus = typeof opts.focus === "string" ? [opts.focus] : focusFor(registry, result.applied.flatMap((a) => a.refs));
-        if (focus[0]) focusWidget(focus[0]);
+        if (typeof opts.focus === "string") focusWidget(opts.focus);
+        else pointAtRefs(result.applied.flatMap((a) => a.refs));
       }
     },
     focusWidget,
     fillComposer: (text) => fillComposer(text),
     ownRecipeText: (title) => t("meals.recipe.ownRecipePrefix", { title }),
+    // The Recipe belongs to the place that hosts meal ideas (Meals), so a fresh-loaded Recipe's
+    // Back goes there, not to Today.
+    recipeHome: placeForHost(places, MEAL_IDEAS_WIDGET_ID)?.href,
   });
-  const pathname = usePathname();
-  const settingsOpen = pathname === "/settings" || Boolean(pathname?.startsWith("/settings/"));
-  const seeAllOpen = pathname === "/kitchen";
-  // A route page (the Recipe, Settings, Kitchen See all) replaces the widgets; they stay mounted underneath.
-  const routeOpen = meals.openMealId !== null || settingsOpen || seeAllOpen;
 
   const chat = useChat({
     kitchenId,
@@ -199,15 +248,7 @@ function KitchenScreen({
       onApplied(result) {
         sync.applyOwn(result.state);
         setMarks(marksFrom(result));
-        const focus = focusFor(
-          registry,
-          result.applied.flatMap((a) => a.refs),
-        );
-        dispatchWorkspace({ type: "turnApplied", focus });
-        if (focus[0]) rememberFocus(focus[0]);
-        // On a phone the affected widget scrolls into view, unless you're reading Full chat.
-        if (focus[0] && dockNow.current !== "full") requestAnimationFrame(() => showWidget(focus[0]));
-        if (dockNow.current === "full" && focus.length) setUpdatedWhileFull(true);
+        pointAtRefs(result.applied.flatMap((a) => a.refs));
       },
       onEvent(event, id) {
         meals.onEvent(event, id, "chat");
@@ -239,27 +280,47 @@ function KitchenScreen({
   });
 
   const send = (text: string) => {
+    if (!online) return false;
     const sent = chat.send(text);
     if (sent) {
-      // "New" / "Updated" labels last until your next message (ux.md §1).
+      // "New" / "Updated" labels and cues last until your next message (ux.md §1).
       setMarks({});
       setRemoteIds(new Set());
+      setCue(null);
       clearLive();
       setTurn((n) => n + 1);
-      dispatchWorkspace({ type: "messageSent" });
     }
     return sent;
   };
 
-  // A phone reopens with the widget you last used on top (ux.md §10: the list is waiting at the store).
+  // Arriving at a place: remember it, clear a cue that pointed here, and (after a dock tap) put
+  // focus on its title so reading starts there. Chat-driven moves (the Recipe) never take focus.
+  // The very first arrival checks "reopen where you left off" FIRST (ux.md §10): a phone opened
+  // fresh on Today goes back to the place used within a few hours. (It must read the last place
+  // before this effect remembers Today over it.)
+  const resumeChecked = useRef(false);
   useEffect(() => {
-    const id = lastFocused();
-    if (id && !window.matchMedia(DESKTOP_QUERY).matches && registry.some((w) => w.id === id)) {
-      dispatchWorkspace({ type: "restoreFocus", id });
+    if (!resumeChecked.current) {
+      resumeChecked.current = true;
+      if (window.location.pathname === "/" && !window.matchMedia(DESKTOP_QUERY).matches) {
+        const id = placeToResume();
+        const place = id ? places.find((p) => p.id === id) : null;
+        if (place) {
+          router.replace(place.href);
+          return;
+        }
+      }
     }
-  }, []);
+    if (current) rememberPlace(current.id);
+    setCue((c) => (c && c.placeId === current?.id && dockNow.current !== "full" ? null : c));
+    if (focusTitleOnArrival.current) {
+      focusTitleOnArrival.current = false;
+      document.getElementById(PLACE_TITLE_ID)?.focus({ preventScroll: true });
+      window.scrollTo({ top: 0 });
+    }
+  }, [current, router]);
 
-  // Buttons that change the kitchen without chat (the shopping list's tick, Remove, Done shopping, To review).
+  // Buttons that change the kitchen without chat (the list's tick, Remove, Done shopping, To review).
   const actions = useMemo<KitchenActions>(() => {
     const tap = () => ({
       kitchenId,
@@ -282,19 +343,30 @@ function KitchenScreen({
         sync.applyOwn(result.state);
         if (opts?.highlight) setMarks(marksFrom(result));
       },
-      touched: rememberFocus,
+      touched(id) {
+        const place = placeForHost(places, id);
+        if (place) rememberPlace(place.id);
+      },
     };
   }, [kitchenId, sync]);
 
+  const recipeBox = useMemo<RecipeBoxActions>(
+    () => ({
+      listPastMeals: (q) => fetchPastMeals(kitchenId, q),
+      makeAgain: (fromMealId) =>
+        makeAgain({ kitchenId, tapId: crypto.randomUUID(), basedOnVersion: sync.getSnapshot().state?.version ?? 0, fromMealId }),
+    }),
+    [kitchenId, sync],
+  );
+
   // The other person's changes: soft highlight + one announcement per sync; never move focus,
-  // reorder widgets or change the dock (ux.md §6). Items they used up or removed are gone from
-  // the state, so `/changes` says who ("Levi used up the eggs."), announced instead.
+  // the page or the dock (ux.md §6). Items they used up or removed are gone from the state, so
+  // `/changes` says who ("Levi used up the eggs."), announced instead.
   useEffect(
     () =>
       sync.onRemoteChange((change) => {
         const { ids, actorNames } = change;
         setRemoteIds((prev) => new Set([...prev, ...ids]));
-        dispatchWorkspace({ type: "remoteChange" });
         const who = actorNames.length
           ? new Intl.ListFormat(locale, { type: "conjunction" }).format(actorNames)
           : t("fallback.someone");
@@ -306,14 +378,21 @@ function KitchenScreen({
         void liveRemovals(change)
           .catch(() => null)
           .then((removed) => {
-            // "Levi used up the eggs." (+ "Levi updated the kitchen." for rows still there); if
-            // `/changes` couldn't say who, the plain "… updated the kitchen." still goes out.
             if (!removed?.length) return announce(updated);
             announce([cueWords.summarize(removed).text, ids.length ? updated : ""].filter(Boolean).join(" "));
           });
       }),
     [sync, announce, t, locale, liveRemovals, cueWords],
   );
+
+  // Going offline (or coming back) is said once, through the one Announcer; the header pill shows it.
+  const offlineNow = !online || snapshot.status === "stale" || snapshot.status === "error";
+  const wasOffline = useRef(offlineNow);
+  useEffect(() => {
+    if (wasOffline.current === offlineNow) return;
+    wasOffline.current = offlineNow;
+    announce(offlineNow ? t("chat.offline") : t("app.online"));
+  }, [offlineNow, announce, t]);
 
   // Keep the newest message in view. Keyed on the LAST message, so loading older messages at the
   // top doesn't jump you to the bottom (MessageList keeps your place instead).
@@ -324,21 +403,20 @@ function KitchenScreen({
     if (log) log.scrollTop = log.scrollHeight;
   }, [lastMessage?.id, lastLength, chat.state.busy, dock]);
 
-  // Publish the header and dock heights so content is never hidden behind them (WCAG 2.4.11).
+  // Publish the header and bottom (chat + dock) heights so content is never hidden behind them (WCAG 2.4.11).
   useEffect(() => {
     const root = document.documentElement;
     const header = headerRef.current;
-    const dockEl = dockRef.current;
-    if (!header || !dockEl) return;
+    const bottom = bottomRef.current;
+    if (!header || !bottom) return;
     const update = () => {
       root.style.setProperty("--topbar-height", `${header.offsetHeight}px`);
-      const dockHeight = isDesktop ? 0 : dock === "minimized" ? 88 : dockEl.offsetHeight;
-      root.style.setProperty("--dock-height", `${dockHeight}px`);
+      root.style.setProperty("--dock-height", `${isDesktop ? 0 : bottom.offsetHeight}px`);
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(header);
-    ro.observe(dockEl);
+    ro.observe(bottom);
     return () => ro.disconnect();
   }, [dock, isDesktop]);
 
@@ -359,26 +437,32 @@ function KitchenScreen({
   const changeDock = (next: DockState, focus: "fab" | "composer" | null = null) => {
     focusAfterDock.current = focus;
     if (next !== "minimized") setNewReply(false);
-    if (next !== "full") setUpdatedWhileFull(false);
     setDock(next);
   };
 
   const phoneFull = !isDesktop && dock === "full";
-  const kitchenUpdatedHint = updatedWhileFull && dock === "full";
+  const cuePlace = cue ? places.find((p) => p.id === cue.placeId) : null;
+  const cueText = cue && cuePlace ? (cue.kind === "ideas" ? t("cue.ideas") : t("cue.updated", { place: t(cuePlace.titleKey) })) : null;
 
   const welcome = (
     <div className="flex flex-col items-start gap-2">
-      <p className="max-w-[90%] rounded-lg rounded-bl-sm bg-surface-default px-4 py-2 text-body">
-        <span className="sr-only">{t("chat.assistant")}: </span>
-        {t("chat.welcome")}
-      </p>
-      <div role="group" aria-label={t("chat.suggestionsLabel")} className="flex flex-wrap gap-2">
+      <div className="flex items-start gap-2">
+        <LumiFace state="idle" />
+        <p className="rounded-lg rounded-tl-xs border-2 border-border-default bg-surface-raised px-4 py-2 text-body">
+          <span className="eyebrow block" aria-hidden="true">
+            {t("chat.assistant")}
+          </span>
+          <span className="sr-only">{t("chat.assistant")}: </span>
+          {t("chat.welcome")}
+        </p>
+      </div>
+      <div role="group" aria-label={t("chat.suggestionsLabel")} className="flex flex-wrap gap-2 pl-7">
         {(["bought", "froze", "low"] as const).map((key) => (
           <button
             key={key}
             type="button"
             onClick={() => composerRef.current?.fill(t(`chat.suggestions.${key}`).replace(/…$/, " "))}
-            className="min-h-tap rounded-button border border-border-strong bg-surface-raised px-4 text-small font-medium"
+            className="btn btn-small text-accent-text"
           >
             {t(`chat.suggestions.${key}`)}
           </button>
@@ -391,120 +475,109 @@ function KitchenScreen({
     <KitchenActionsProvider value={actions}>
     <KitchenDataProvider value={{ me, snapshot, marks, remoteIds, now, turn, cues }}>
     <MealsProvider value={meals.value}>
+    <RecipeBoxProvider value={recipeBox}>
+    <AskLumiProvider value={{ ask: send, canAsk: online && !chat.state.busy }}>
+    <PlaceRetryProvider value={() => void sync.refresh()}>
+    <PlaceMemoryProvider>
     <ConfirmPromptProvider initial={initialPendingConfirm} fillComposer={fillComposer}>
-      <div className="app-shell min-h-dvh desk:grid desk:h-dvh desk:grid-cols-[1fr_2fr] desk:grid-rows-[auto_minmax(0,1fr)] desk:overflow-hidden">
-        <a href="#workspace" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-sm focus:bg-surface-raised focus:p-2">
-            {t("app.skipToWorkspace")}
-          </a>
-        <a href="#chat" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-sm focus:bg-surface-raised focus:p-2">
-            {t("app.skipToChat")}
-          </a>
+      <TickQueueFlusher />
+      <div className="app-shell min-h-dvh" data-chat={dock === "minimized" ? "minimized" : "open"}>
+        <a href="#workspace" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-surface-raised focus:p-2">
+          {t("app.skipToWorkspace")}
+        </a>
+        <a href="#chat" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-surface-raised focus:p-2">
+          {t("app.skipToChat")}
+        </a>
 
-        <header ref={headerRef} className="sticky top-0 z-30 bg-surface-default desk:col-span-2 desk:static">
-          {devActingAs && <DevBar meId={me.id} members={members} />}
-          <div className="flex min-h-tap items-center gap-3 px-4 py-2 desk:px-6">
-            <h1 className="text-heading font-strong">{t("app.name")}</h1>
-            <Link
-              href="/settings"
-              data-settings-link=""
-              aria-label={t("app.openSettings", { name: me.name })}
-              aria-current={settingsOpen ? "page" : undefined}
-              className="-my-[calc((var(--spacing-avatar)-var(--spacing-tap))/-2)] -mr-[calc((var(--spacing-avatar)-var(--spacing-tap))/-2)] ml-auto flex size-tap items-center justify-center rounded-full"
-            >
-              <span
-                aria-hidden="true"
-                className="flex size-avatar items-center justify-center rounded-full bg-accent-soft text-small font-strong text-accent-text"
-              >
-                {sentenceCase(me.name, locale).charAt(0)}
-              </span>
-            </Link>
-          </div>
-        </header>
+        <Header
+          ref={headerRef}
+          title={title}
+          me={me}
+          members={members}
+          devActingAs={devActingAs}
+          sync={snapshot.status}
+          online={online}
+          settingsOpen={settingsOpen}
+        />
 
-        <main
-          id="workspace"
-          tabIndex={-1}
-          aria-label={t("workspace.label")}
-          inert={phoneFull}
-          className="workspace px-4 pt-2 desk:col-start-2 desk:row-start-2 desk:overflow-y-auto desk:px-6 desk:pt-4"
-        >
-          {/* Kept mounted under the Recipe and Settings, so Back returns to the same place. */}
-          <div hidden={routeOpen}>
-            <ConfirmBanner />
-            <Workspace
-              registry={registry}
-              state={workspace}
-              dispatch={dispatchWorkspace}
-              data={snapshot.state}
-              session={{ [MEAL_IDEAS_WIDGET_ID]: meals.session.ideas }}
-              layout={isDesktop ? "desktop" : "phone"}
-              onRetry={() => void sync.refresh()}
-            />
-          </div>
-          {/* Always rendered (null on "/"), so Next can check every route segment for instant navigation. */}
+        <main id="workspace" tabIndex={-1} aria-label={t("workspace.label")} inert={phoneFull} className="stage px-4 pt-4 outline-none desk:px-7 desk:pt-6">
           {children}
         </main>
         <UpdateKitchenSheet />
 
-        <section
-          id="chat"
-          ref={dockRef}
-          tabIndex={-1}
-          aria-label={t("chat.label")}
-          data-dock={dock}
-          className="chat-dock flex flex-col rounded-t-lg bg-surface-raised shadow-dock desk:col-start-1 desk:row-start-2 desk:min-h-0 desk:rounded-none desk:border-r desk:border-border-default desk:shadow-none"
-        >
-          <h2 className="sr-only">{t("chat.heading")}</h2>
-          <div className="flex items-center gap-1 px-2 pt-1 desk:hidden">
-            <button
-              type="button"
-              aria-expanded={dock === "full"}
-              aria-controls="chat-log"
-              onClick={() => changeDock(dock === "full" ? "peek" : "full")}
-              className="flex min-h-tap items-center gap-2 rounded-button px-3 text-small font-strong text-accent-text"
-            >
-              {dock === "full" ? (
-                <CaretDownIcon aria-hidden="true" className="size-icon" />
-              ) : (
-                <CaretUpIcon aria-hidden="true" className="size-icon" />
-              )}
-              {dock === "full" ? t("chat.hideChat") : t("chat.showChat")}
-            </button>
-            {kitchenUpdatedHint && (
-              <span className="rounded-button bg-highlight-bg px-2 text-caption font-strong text-highlight-text">
-                {t("chat.kitchenUpdated")}
-              </span>
+        <div ref={bottomRef} className="bottom-area" data-dock={dock}>
+          <section
+            id="chat"
+            tabIndex={-1}
+            aria-label={t("chat.label")}
+            data-dock={dock}
+            className="chat-dock flex flex-col rounded-t-sheet border-2 border-b-0 border-border-outline bg-surface-raised shadow-dock desk:rounded-none desk:border-0 desk:border-l-2 desk:border-border-default desk:shadow-none"
+          >
+            <h2 className="sr-only">{t("chat.heading")}</h2>
+            <div className="flex items-center gap-1 px-2 pt-1 desk:px-4 desk:pt-3">
+              <button
+                type="button"
+                aria-expanded={dock === "full"}
+                aria-controls="chat-log"
+                onClick={() => changeDock(dock === "full" ? "peek" : "full")}
+                className="btn-quiet text-small desk:hidden"
+              >
+                {dock === "full" ? (
+                  <CaretDownIcon aria-hidden="true" className="size-icon" />
+                ) : (
+                  <CaretUpIcon aria-hidden="true" className="size-icon" />
+                )}
+                {dock === "full" ? t("chat.hideChat") : t("chat.showChat")}
+              </button>
+              <p aria-hidden="true" className="hidden font-heading text-title font-medium desk:block">
+                {t("chat.heading")}
+              </p>
+              <button type="button" aria-label={t("chat.minimize")} onClick={() => changeDock("minimized", "fab")} className="btn-icon ml-auto">
+                <MinusIcon aria-hidden="true" className="size-icon" />
+              </button>
+            </div>
+
+            {cueText && cuePlace && (
+              <p data-cue={cuePlace.id} className="mx-4 mb-1 flex items-center gap-2 rounded-md bg-highlight-bg py-1 pl-3 text-small font-strong text-highlight-text">
+                <span className="flex-1">{cueText}</span>
+                <Link
+                  href={cuePlace.href}
+                  aria-label={t("cue.showLabel", { place: t(cuePlace.titleKey) })}
+                  onClick={() => {
+                    if (dockNow.current === "full") changeDock("peek");
+                    setCue(null);
+                  }}
+                  className="btn-quiet text-highlight-text underline"
+                >
+                  {t("cue.show")}
+                  <GoIcon aria-hidden="true" className="size-icon-sm" />
+                </Link>
+              </p>
             )}
-            <button
-              type="button"
-              aria-label={t("chat.minimize")}
-              onClick={() => changeDock("minimized", "fab")}
-              className="ml-auto flex size-tap items-center justify-center rounded-full text-text-muted"
-            >
-              <MinusIcon aria-hidden="true" className="size-icon" />
-            </button>
-          </div>
 
-          <div id="chat-log" ref={logRef} className="chat-log min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-2 desk:pt-4">
-            <MessageList
-              chat={chat.state}
-              onRetry={chat.retry}
-              onUndo={(id) => void chat.undo(id)}
-              onView={() => {
-                changeDock("peek");
-                requestAnimationFrame(() => showWidget(registry[0].id));
-              }}
-              onLoadOlder={chat.loadOlder}
-              onRetryHistory={() => void chat.loadLatest()}
-              scrollRef={logRef}
-              welcome={welcome}
-            />
-          </div>
+            <div id="chat-log" ref={logRef} className="chat-log min-h-0 flex-1 overflow-y-auto px-4 pt-1 pb-2 desk:pt-3">
+              <MessageList
+                chat={chat.state}
+                onRetry={chat.retry}
+                onUndo={(id) => void chat.undo(id)}
+                onLoadOlder={chat.loadOlder}
+                onRetryHistory={() => void chat.loadLatest()}
+                scrollRef={logRef}
+                welcome={welcome}
+              />
+            </div>
 
-          <div className="composer-area border-t border-border-default px-4 pt-2">
-            <Composer ref={composerRef} busy={chat.state.busy} onSend={send} />
-          </div>
-        </section>
+            <div className="composer-area px-4 pt-2">
+              {!online && <p className="mb-2 text-small text-text-muted">{t("chat.offline")}</p>}
+              <Composer ref={composerRef} busy={chat.state.busy || !online} onSend={send} />
+            </div>
+          </section>
+
+          <Dock places={places} currentId={current?.id ?? null} onNavigate={(id) => {
+            focusTitleOnArrival.current = id !== current?.id;
+            if (dockNow.current === "full") changeDock("peek");
+          }} />
+        </div>
 
         {dock === "minimized" && (
           <button
@@ -512,19 +585,20 @@ function KitchenScreen({
             type="button"
             onClick={() => changeDock("peek", "composer")}
             aria-label={newReply ? t("chat.openChatNewReply") : t("chat.openChat")}
-            className="chat-fab fixed right-4 z-30 flex size-fab items-center justify-center rounded-full bg-accent-default text-text-inverse shadow-fab desk:hidden"
+            className="chat-fab btn btn-primary fixed right-4 z-30 size-fab p-0 shadow-fab"
           >
-            <ChatIcon aria-hidden="true" className="size-5" />
+            <ChatIcon aria-hidden="true" className="size-icon-lg" />
             {newReply && (
-              <span
-                aria-hidden="true"
-                className="absolute top-1 right-1 size-dot rounded-full border-2 border-accent-default bg-highlight-bg"
-              />
+              <span aria-hidden="true" className="absolute top-1 right-1 size-dot rounded-full border-2 border-border-outline bg-highlight-bg" />
             )}
           </button>
         )}
       </div>
     </ConfirmPromptProvider>
+    </PlaceMemoryProvider>
+    </PlaceRetryProvider>
+    </AskLumiProvider>
+    </RecipeBoxProvider>
     </MealsProvider>
     </KitchenDataProvider>
     </KitchenActionsProvider>

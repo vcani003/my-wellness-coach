@@ -3,6 +3,7 @@
  * each checkpoint: "I bought eggs" twice → one Kitchen row "2 batches" and the receipt's choice →
  * "Those are gone" → one batch, with Undo → Undo → two batches and the choice again; the batch
  * list behind the row; "I defrosted the chicken" → Defrosted.
+ * Starts on the Kitchen place (`/kitchen`, 0042), where the rows are.
  * Set BATCHES_SCREENSHOT=1 to save docs/design/screenshots/batches-phone.png.
  */
 import { expect, test, type Page } from "@playwright/test";
@@ -14,11 +15,11 @@ async function resetAndActAs(page: Page, baseURL: string) {
   const res = await page.request.post("/api/dev/reset", { headers: { origin: baseURL } });
   expect(res.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: "demo-vero", url: baseURL }]);
-  await page.goto("/");
+  await page.goto("/kitchen");
 }
 
-const kitchen = (page: Page) => page.getByRole("region", { name: "Kitchen" }).first();
-const composer = (page: Page) => page.getByRole("textbox", { name: "Message Kitchen" });
+const kitchen = (page: Page) => page.getByRole("region", { name: "Kitchen" });
+const composer = (page: Page) => page.getByRole("textbox", { name: "Message Lumi" });
 const lastReceipt = (page: Page) => page.getByRole("region", { name: "What changed" }).last();
 const eggsRow = (page: Page) => kitchen(page).getByRole("listitem").filter({ hasText: /^Eggs/ }).first();
 const choice = (page: Page) => lastReceipt(page).getByRole("group", { name: /^You also had eggs from / });

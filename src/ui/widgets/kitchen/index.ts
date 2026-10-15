@@ -1,22 +1,24 @@
 /**
- * The Kitchen domain's widgets (0004). The workspace registry imports this list; nothing else in
- * the workspace knows about food.
+ * The Kitchen domain's place (0004, Kitchen OS dock): what's in the kitchen, By place / By type,
+ * search, batches, Not sure where. The places registry imports this; nothing else in the shell
+ * knows about food. It also adds a card to Today (shared cues, To review, Use it up).
  */
-import type { WidgetDef } from "@/ui/workspace/types";
-import { KitchenSummary, KitchenWidget } from "./KitchenWidget";
+import { KitchenIcon } from "@/ui/primitives/icons";
+import type { PlaceDef } from "@/ui/places/types";
+import { KitchenToday } from "./KitchenToday";
+import { KitchenWidget } from "./KitchenWidget";
 
 export const KITCHEN_WIDGET_ID = "kitchen.items";
 
-export const kitchenItemsWidget: WidgetDef = {
-  id: KITCHEN_WIDGET_ID,
-  domain: "kitchen",
-  lifetime: "lasting",
+export const kitchenPlace: PlaceDef = {
+  id: "kitchen",
+  href: "/kitchen",
+  labelKey: "places.kitchen",
   titleKey: "kitchen.title",
-  // Always shown, so a new user sees the empty state ("Tell me what you've got").
-  isPresent: () => true,
+  Icon: KitchenIcon,
+  owns: (path) => path === "/kitchen" || path.startsWith("/kitchen/"),
   wantsFocus: (ref) => ref.kind === "item",
-  Summary: KitchenSummary,
+  hosts: [KITCHEN_WIDGET_ID],
   Component: KitchenWidget,
+  TodayCard: KitchenToday,
 };
-
-export const kitchenWidgets: WidgetDef[] = [kitchenItemsWidget];

@@ -1,13 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { Nunito } from "next/font/google";
+import { Fredoka, Nunito } from "next/font/google";
 import type { ReactNode } from "react";
 import { DEFAULT_LOCALE, getMessages } from "@/lib/i18n";
 import { Providers } from "@/ui/app/Providers";
 import { META_COLORS } from "@/ui/theme/meta-colors";
 import "./globals.css";
 
-/** Nunito (SIL OFL), downloaded at build time and self-hosted: no request to Google from the phone. */
-const nunito = Nunito({ subsets: ["latin"], weight: ["400", "600", "700"], variable: "--font-nunito", display: "swap" });
+/**
+ * Fredoka (headings) + Nunito (body), both SIL OFL (cream, 0042). Variable fonts, downloaded at
+ * build time and self-hosted: no request to Google from the phone. Exposed as `--font-heading` /
+ * `--font-body` in globals.css.
+ */
+const fredoka = Fredoka({ subsets: ["latin"], variable: "--font-fredoka", display: "swap" });
+const nunito = Nunito({ subsets: ["latin"], variable: "--font-nunito", display: "swap" });
 
 const t = getMessages();
 
@@ -27,12 +32,16 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   interactiveWidget: "resizes-content",
-  themeColor: META_COLORS.surfaceDefault,
+  // Follows the phone's light / dark setting (the automatic theme in globals.css).
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: META_COLORS.surfaceDefault },
+    { media: "(prefers-color-scheme: dark)", color: META_COLORS.dark.surfaceDefault },
+  ],
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang={DEFAULT_LOCALE} className={nunito.variable}>
+    <html lang={DEFAULT_LOCALE} className={`${fredoka.variable} ${nunito.variable}`}>
       <body className="bg-surface-default font-body text-body text-text-default antialiased">
         <Providers locale={DEFAULT_LOCALE} messages={getMessages()}>
           {children}

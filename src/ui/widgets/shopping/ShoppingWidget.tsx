@@ -7,16 +7,19 @@
  * kitchen?", whose Do later waits in the Kitchen's To review. Empty, loading, error and stale
  * states stay inside the widget (0018).
  */
+import { usePlaceMemory } from "@/ui/places/PlaceMemory";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import type { ShoppingItemRow } from "@/contracts/kitchen-state";
+import { Checkbox } from "@/ui/primitives/Checkbox";
 import { useAnnounce } from "@/ui/a11y/Announcer";
 import { actorName, itemName, sentenceCase } from "@/ui/fallbacks";
+import { LUMI_ART } from "@/ui/lumi/Lumi";
 import { MoreIcon, NotSyncedIcon, UndoIcon } from "@/ui/primitives/icons";
 import { Menu } from "@/ui/primitives/Menu";
 import { useKitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { useKitchenData, type ChangeMark } from "@/ui/sync/KitchenDataContext";
-import type { WidgetProps } from "@/ui/workspace/types";
+import type { PlaceProps } from "@/ui/places/types";
 import { DoneShoppingSheet } from "./DoneShoppingSheet";
 import { ANYWHERE, groupShopping, shownTicked, withGhosts } from "./model";
 import type { PendingTick } from "./tick-queue";
@@ -24,6 +27,21 @@ import { useAddFromList } from "./useAddFromList";
 import { useTickQueue } from "./useTickQueue";
 
 export const SHOPPING_WIDGET_ID = "shopping.list";
+
+/** The List place: "6 · 2 got", then the list. */
+export function ListPlace({ onRetry }: PlaceProps) {
+  const { snapshot } = useKitchenData();
+  return (
+    <>
+      {Boolean(snapshot.state?.shoppingList.length) && (
+        <p className="section-label">
+          <ShoppingSummary />
+        </p>
+      )}
+      <ShoppingWidget onRetry={onRetry} />
+    </>
+  );
+}
 
 export function ShoppingSummary() {
   const t = useTranslations("shopping");
@@ -53,7 +71,7 @@ interface Notice {
 
 type Row = { kind: "item"; item: ShoppingItemRow } | { kind: "ghost"; ghost: Ghost; item: Pick<ShoppingItemRow, "id" | "store"> };
 
-export function ShoppingWidget({ onRetry }: WidgetProps) {
+export function ShoppingWidget({ onRetry }: PlaceProps) {
   const t = useTranslations();
   const format = useFormatter();
   const locale = useLocale();
@@ -64,8 +82,9 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
   const addFromList = useAddFromList();
   const { state, status, syncedAt } = snapshot;
   const rootRef = useRef<HTMLDivElement>(null);
-  const [ghosts, setGhosts] = useState<Ghost[]>([]);
-  const [notice, setNotice] = useState<Notice | null>(null);
+  // Kept while you visit other places, so Undo stays beside the change (PlaceMemory).
+  const [ghosts, setGhosts] = usePlaceMemory<Ghost[]>("shopping.ghosts", []);
+  const [notice, setNotice] = usePlaceMemory<Notice | null>("shopping.notice", null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(() => new Set());
   // Rows already ticked when the app opened sit at the bottom; ticks made now never move a row.
@@ -76,7 +95,7 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
       return (
         <p className="flex flex-wrap items-center gap-2 rounded-md bg-error-bg px-4 py-3 text-small text-error-text">
           {t("shopping.error")}
-          <button type="button" onClick={onRetry} className="min-h-tap rounded-button px-3 font-medium text-accent-text underline">
+          <button type="button" onClick={onRetry} className="btn-quiet underline">
             {t("shopping.retry")}
           </button>
         </p>
@@ -86,7 +105,7 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
       <div aria-busy="true" className="flex flex-col gap-2">
         <p className="text-small text-text-muted">{t("shopping.loading")}</p>
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-tap rounded-sm bg-surface-sunken" />
+          <div key={i} className="h-tap rounded-md bg-surface-sunken" />
         ))}
       </div>
     );
@@ -182,7 +201,7 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
   return (
     <div ref={rootRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
       {status === "stale" && syncedAt !== null && (
-        <p className="rounded-sm bg-surface-sunken px-3 py-2 text-small text-text-muted">
+        <p className="rounded-md bg-surface-sunken px-3 py-2 text-small text-text-muted">
           {t("shopping.stale", { time: format.dateTime(new Date(syncedAt), { hour: "numeric", minute: "2-digit" }) })}
         </p>
       )}
@@ -193,7 +212,7 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
         </p>
       )}
       {currentNotice && (
-        <p className="flex flex-wrap items-center gap-2 rounded-sm bg-success-bg px-3 py-2 text-small text-success-text">
+        <p className="flex flex-wrap items-center gap-2 rounded-md bg-success-bg px-4 py-2 text-small text-success-text">
           <span>{currentNotice.text}</span>
           {currentNotice.undo && (
             <button
@@ -203,7 +222,7 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
                 const u = currentNotice.undo!;
                 void undo(u.changeSetId, () => setNotice({ text: t("shopping.undone"), turn }));
               }}
-              className="flex min-h-tap items-center gap-1 rounded-button px-3 font-strong text-accent-text"
+              className="btn-quiet"
             >
               <UndoIcon aria-hidden="true" className="size-icon-sm" />
               {t("shopping.undo")}
@@ -213,7 +232,7 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
       )}
 
       {list.length === 0 && liveGhosts.length === 0 ? (
-        !currentNotice?.listClear && <p className="text-body text-text-muted">{t("shopping.empty")}</p>
+        !currentNotice?.listClear && <EmptyList />
       ) : (
         groups.map((group, gi) => {
           const store = group.key === ANYWHERE ? t("shopping.anywhere") : group.key;
@@ -221,22 +240,22 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
           const headingId = `shopping-group-${gi}`;
           return (
             <section key={group.key} aria-labelledby={headingId} data-group={store}>
-              <h3 id={headingId} className="mb-1 text-caption font-strong tracking-wide text-text-muted uppercase">
+              <h3 id={headingId} className="section-label mb-2 px-1">
                 <span aria-hidden="true">
                   {store} · {count}
                 </span>
                 <span className="sr-only">{store}</span>
               </h3>
-              <ul className="flex flex-col">
+              <ul className="flex flex-col gap-2">
                 {group.rows.map((row) =>
                   row.kind === "ghost" ? (
-                    <li key={`ghost-${row.ghost.id}`} className="flex min-h-tap items-center gap-2 px-3 text-small text-text-muted">
+                    <li key={`ghost-${row.ghost.id}`} className="flex min-h-tap items-center gap-2 rounded-md border-2 border-dashed border-border-default px-4 text-small text-text-muted">
                       <span>{t("shopping.removed", { name: row.ghost.name })}</span>
                       <button
                         type="button"
                         aria-label={t("shopping.undoRemoveLabel", { name: row.ghost.name.toLocaleLowerCase(locale) })}
                         onClick={() => void undo(row.ghost.changeSetId, () => setGhosts((g) => g.filter((x) => x.id !== row.ghost.id)))}
-                        className="flex min-h-tap items-center gap-1 rounded-button px-3 font-strong text-accent-text"
+                        className="btn-quiet"
                       >
                         <UndoIcon aria-hidden="true" className="size-icon-sm" />
                         {t("shopping.undo")}
@@ -267,7 +286,7 @@ export function ShoppingWidget({ onRetry }: WidgetProps) {
         <button
           type="button"
           onClick={() => setSheetOpen(true)}
-          className="min-h-tap self-start rounded-button bg-accent-default px-5 text-body font-strong text-text-inverse"
+          className="btn btn-primary self-start"
         >
           {t("shopping.doneShopping")}
         </button>
@@ -316,16 +335,14 @@ function ShoppingRowView({
     <li
       data-entity-id={item.id}
       data-change={mark ?? (remote ? "remote" : undefined)}
-      className={`flex flex-col rounded-sm ${highlighted ? "change-highlight" : ""}`}
+      className={`row-card flex flex-col ${highlighted ? "change-highlight" : ""}`}
     >
       <div className="flex min-h-tap items-center">
-        <label className="flex min-h-tap flex-1 cursor-pointer items-center gap-3 py-2 pl-3">
-          <input
-            type="checkbox"
+        <label className="flex min-h-tap flex-1 cursor-pointer items-center gap-3 py-2 pl-4">
+          <Checkbox
             checked={ticked}
             onChange={onToggle}
             aria-label={tickedBy ? t("shopping.tickLabelBy", { name: label, person: tickedBy }) : t("shopping.tickLabel", { name: label })}
-            className="size-6 shrink-0 cursor-pointer accent-accent-default"
           />
           <span className="flex flex-wrap items-baseline gap-x-2">
             <span className={`text-body font-medium ${ticked ? "text-text-muted line-through" : ""}`}>{label}</span>
@@ -346,16 +363,16 @@ function ShoppingRowView({
           <Menu.Trigger
             aria-label={t("shopping.more", { name: label.toLocaleLowerCase(locale) })}
             disabled={busy}
-            className="flex size-tap shrink-0 items-center justify-center rounded-full text-text-muted disabled:opacity-60"
+            className="btn-icon mr-1 disabled:opacity-60"
           >
             <MoreIcon aria-hidden="true" className="size-icon" />
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Positioner side="bottom" align="end" sideOffset={4} className="z-40">
-              <Menu.Popup className="min-w-40 rounded-md border border-border-default bg-surface-raised p-1 shadow-card">
+              <Menu.Popup className="min-w-40 rounded-md border-2 border-border-outline bg-surface-raised p-1 shadow-pop">
                 <Menu.Item
                   onClick={onRemove}
-                  className="flex min-h-tap cursor-pointer items-center rounded-sm px-3 text-body data-highlighted:bg-surface-sunken"
+                  className="flex min-h-tap cursor-pointer items-center rounded-md px-3 text-body data-highlighted:bg-surface-sunken"
                 >
                   {t("shopping.remove")}
                 </Menu.Item>
@@ -373,7 +390,7 @@ function ShoppingRowView({
       {pending?.status === "failed" && (
         <p className="flex flex-wrap items-center gap-2 pb-2 pl-12 text-caption text-error-text">
           {t("shopping.tickFailed")}
-          <button type="button" onClick={onRetry} className="min-h-tap rounded-button px-2 font-strong text-accent-text underline">
+          <button type="button" onClick={onRetry} className="btn-quiet underline">
             {t("shopping.retry")}
           </button>
         </p>
@@ -382,3 +399,14 @@ function ShoppingRowView({
   );
 }
 
+
+function EmptyList() {
+  const t = useTranslations("shopping");
+  return (
+    <div className="card flex flex-col items-center gap-3 px-5 py-6 text-center">
+      {/* eslint-disable-next-line @next/next/no-img-element -- a small static SVG */}
+      <img src={LUMI_ART.celebrating} alt="" width={96} height={96} className="size-sticker-lg" />
+      <p className="text-body font-medium">{t("empty")}</p>
+    </div>
+  );
+}

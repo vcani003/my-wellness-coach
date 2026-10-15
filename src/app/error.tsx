@@ -10,12 +10,12 @@ export default function RouteError({ error, reset }: { error: Error & { digest?:
   }, [error]);
   return (
     <main className="mx-auto flex min-h-dvh max-w-prose flex-col justify-center gap-3 p-6">
-      <h1 className="text-heading font-strong">{t("title")}</h1>
+      <h1 className="text-display font-medium">{t("title")}</h1>
       <p className="text-body text-text-muted">{t("body")}</p>
       <button
         type="button"
         onClick={reset}
-        className="min-h-tap self-start rounded-button bg-accent-default px-5 font-strong text-text-inverse"
+        className="btn btn-primary self-start"
       >
         {t("retry")}
       </button>

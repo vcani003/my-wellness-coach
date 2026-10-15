@@ -69,6 +69,8 @@ export function useMealsController(deps: {
   /** Open the chat with text in the composer. */
   fillComposer: (text: string) => void;
   ownRecipeText: (title: string) => string;
+  /** Where the Recipe's Back goes when it wasn't opened in the app (a fresh load or a reload). */
+  recipeHome?: string;
 }) {
   const { kitchenId, sync } = deps;
   const router = useRouter();
@@ -110,7 +112,7 @@ export function useMealsController(deps: {
     cameFromApp.current = false;
     openRef.current = null;
     if (back) router.back();
-    else router.push("/");
+    else router.push(depsRef.current.recipeHome ?? "/");
     // Focus goes back to what opened the Recipe (or the workspace), never lost on <body>.
     const target = focusOnReturn.current ? opener.current : null;
     const from = document.activeElement instanceof HTMLElement ? document.activeElement : null;

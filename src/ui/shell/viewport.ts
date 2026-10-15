@@ -27,7 +27,11 @@ export function useKeyboardInset(): void {
     const update = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        root.style.setProperty("--keyboard-inset", `${keyboardInset(window.innerHeight, vv)}px`);
+        const inset = keyboardInset(window.innerHeight, vv);
+        root.style.setProperty("--keyboard-inset", `${inset}px`);
+        // The Kitchen OS dock steps aside while the keyboard is up (globals.css).
+        if (inset > 0) root.dataset.keyboard = "open";
+        else delete root.dataset.keyboard;
       });
     };
     update();
@@ -38,6 +42,7 @@ export function useKeyboardInset(): void {
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
       root.style.setProperty("--keyboard-inset", "0px");
+      delete root.dataset.keyboard;
     };
   }, []);
 }

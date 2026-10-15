@@ -191,7 +191,7 @@ function BatchOfferChoice({ offer, saved, onUndoStep }: { offer: BatchOffer; sav
           {lines.join(" · ")}
         </p>
         {phase.undo === "refused" && (
-          <p className="rounded-sm bg-warning-bg px-3 py-2 text-small text-warning-text">{t("cantUndo")}</p>
+          <p className="rounded-md bg-warning-bg px-3 py-2 text-small text-warning-text">{t("cantUndo")}</p>
         )}
       </div>
     );
@@ -224,7 +224,7 @@ function BatchOfferChoice({ offer, saved, onUndoStep }: { offer: BatchOffer; sav
     announce(outcome.result.applied.map((a) => formatMsg(a.summary, "plain")).join(", "));
   }
 
-  const button = "min-h-tap rounded-button border border-border-strong bg-surface-raised px-4 text-small font-medium aria-disabled:opacity-60";
+  const button = "btn btn-small";
   return (
     <div
       role="group"
@@ -257,7 +257,7 @@ function BatchOfferChoice({ offer, saved, onUndoStep }: { offer: BatchOffer; sav
         </button>
       </div>
       {phase.kind === "idle" && phase.failed && (
-        <p className="rounded-sm bg-error-bg px-3 py-2 text-small text-error-text">{t("batch.failed")}</p>
+        <p className="rounded-md bg-error-bg px-3 py-2 text-small text-error-text">{t("batch.failed")}</p>
       )}
     </div>
   );

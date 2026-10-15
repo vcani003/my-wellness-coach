@@ -35,9 +35,9 @@ import { clearDeviceData, pendingConfirms, REMEMBER_HEADING_ID, type MemberRestr
 
 export const SETTINGS_HEADING_ID = "settings-heading";
 
-const card = "flex flex-col gap-3 rounded-md bg-surface-raised px-4 py-4 shadow-card";
-const secondaryButton = "min-h-tap rounded-button border border-border-strong bg-surface-raised px-4 text-small font-strong disabled:opacity-60";
-const linkButton = "min-h-tap rounded-button px-3 text-small font-medium text-accent-text underline underline-offset-2 disabled:opacity-60";
+const card = "card flex flex-col gap-3 px-5 py-5";
+const secondaryButton = "btn btn-small";
+const linkButton = "btn-quiet text-small underline underline-offset-2";
 
 interface Notice {
   text: string;
@@ -88,13 +88,13 @@ export function SettingsScreen({ initial, others, actions }: { initial: Settings
   };
 
   return (
-    <article aria-labelledby={SETTINGS_HEADING_ID} className="mx-auto flex w-full max-w-prose flex-col gap-4 pb-6">
+    <article aria-labelledby={SETTINGS_HEADING_ID} className="place-enter mx-auto flex w-full max-w-prose flex-col gap-5 pb-6">
       <div className="flex flex-col gap-2">
-        <button type="button" onClick={back} className="flex min-h-tap items-center gap-2 self-start rounded-button pr-3 text-body font-medium text-accent-text">
+        <button type="button" onClick={back} className="btn btn-small self-start">
           <BackIcon aria-hidden="true" className="size-icon" />
           {t("back")}
         </button>
-        <h2 id={SETTINGS_HEADING_ID} ref={headingRef} tabIndex={-1} className="text-heading font-strong outline-none">
+        <h2 id={SETTINGS_HEADING_ID} ref={headingRef} tabIndex={-1} className="text-display font-medium outline-none">
           {t("heading")}
         </h2>
       </div>
@@ -159,7 +159,7 @@ function AccountSection({ view, actions, onView }: { view: SettingsView; actions
 
   return (
     <section aria-labelledby="settings-account" className={card}>
-      <h3 id="settings-account" className="text-title font-strong">
+      <h3 id="settings-account" className="text-title font-medium">
         {t("heading")}
       </h3>
       <dl className="flex flex-col">
@@ -256,7 +256,7 @@ function KitchenSection({ view, actions }: { view: SettingsView; actions: Settin
 
   return (
     <section aria-labelledby="settings-kitchen" className={card}>
-      <h3 id="settings-kitchen" className="text-title font-strong">
+      <h3 id="settings-kitchen" className="text-title font-medium">
         {t("heading")}
       </h3>
       {view.kitchen ? (
@@ -379,14 +379,14 @@ function RememberSection({
   return (
     <section aria-labelledby={REMEMBER_HEADING_ID} className={card}>
       <div className="flex flex-col gap-1">
-        <h3 id={REMEMBER_HEADING_ID} tabIndex={-1} className="scroll-mt-(--topbar-height) text-title font-strong outline-none">
+        <h3 id={REMEMBER_HEADING_ID} tabIndex={-1} className="scroll-mt-(--topbar-height) text-title font-medium outline-none">
           {t("heading")}
         </h3>
         <p className="text-small text-text-muted">{t("intro")}</p>
       </div>
 
       {notice && (
-        <div ref={noticeRef} tabIndex={-1} className="flex flex-wrap items-center gap-2 rounded-sm bg-success-bg px-3 py-2 text-small text-success-text outline-none focus-visible:outline-2">
+        <div ref={noticeRef} tabIndex={-1} className="flex flex-wrap items-center gap-2 rounded-md bg-success-bg px-3 py-2 text-small text-success-text outline-none focus-visible:outline-2">
           <span>{notice.text}</span>
           {notice.changeSetId && (
             <button
@@ -424,7 +424,7 @@ function RememberSection({
                         onClick={() => void tap(r, "verify")}
                         disabled={busy !== null}
                         aria-label={t("confirmLabel", label)}
-                        className="min-h-tap rounded-button bg-accent-default px-4 text-small font-strong text-text-inverse disabled:opacity-60"
+                        className="btn btn-primary btn-small"
                       >
                         {rowBusy && busy?.action === "verify" ? t("saving") : t("confirm")}
                       </button>
@@ -554,7 +554,7 @@ function DataSection({ view }: { view: SettingsView }) {
 
   return (
     <section aria-labelledby="settings-data" className={card}>
-      <h3 id="settings-data" className="text-title font-strong">
+      <h3 id="settings-data" className="text-title font-medium">
         {t("heading")}
       </h3>
       <div className="flex flex-col gap-1">
@@ -598,7 +598,7 @@ function PoliciesSection() {
   const t = useTranslations("settings.policies");
   return (
     <section aria-labelledby="settings-policies" className={card}>
-      <h3 id="settings-policies" className="text-title font-strong">
+      <h3 id="settings-policies" className="text-title font-medium">
         {t("heading")}
       </h3>
       <ul className="flex flex-col">

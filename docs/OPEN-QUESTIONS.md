@@ -11,7 +11,11 @@
 
 ## Outstanding
 
-*Nothing outstanding.*
+### KOS17–KOS18. 🟡 After the shell swap
+- **KOS17. App name vs assistant name.** Lumi is now the assistant. "Kitchen" is still the app's name on the home screen, in page titles ("Settings · Kitchen"), on the sign-in card and in the privacy text. **Rec:** keep the app named "Kitchen" and the assistant named Lumi. KOS10 only renamed the assistant.
+- **KOS18. ⚪ Suggestion chips per place** ("We're out of milk", "Plan the rest of the week"). **Rec:** don't add fixed chips now. Wait for KOS8, where Lumi suggests them herself.
+
+> Answer:
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*

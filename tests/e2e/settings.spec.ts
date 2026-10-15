@@ -37,7 +37,7 @@ test("Levi: the home banner → Settings → Confirm (with Undo) → Remove; the
   await expect(page).toHaveURL(/\/settings#settings-remember$/);
   // Straight to the allergy that needs confirming.
   await expect(page.getByRole("heading", { level: 3, name: "Allergies and preferences" })).toBeFocused();
-  await expect(page.getByRole("textbox", { name: "Message Kitchen" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Message Lumi" })).toBeVisible();
 
   await expect(page.getByRole("region", { name: "Kitchen" })).toContainText("Shared with Vero");
   const seafood = remember(page).getByRole("listitem").filter({ hasText: "Seafood" });
@@ -69,7 +69,8 @@ test("Levi: the home banner → Settings → Confirm (with Undo) → Remove; the
   await expect(remember(page).getByRole("listitem").filter({ hasText: "Seafood" })).toHaveCount(0);
   await page.getByRole("button", { name: "Back to your kitchen" }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("region", { name: "Kitchen" }).first()).toBeVisible();
+  // Home is Today (0042), where the banner was.
+  await expect(page.getByRole("region", { name: "Today" })).toBeVisible();
   await expect(banner(page)).toHaveCount(0);
 });
 
@@ -78,7 +79,7 @@ test("Levi: Not now hides the banner for the session", async ({ page, baseURL })
   await banner(page).getByRole("button", { name: "Not now" }).click();
   await expect(banner(page)).toHaveCount(0);
   await page.reload();
-  await expect(page.getByRole("textbox", { name: "Message Kitchen" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Message Lumi" })).toBeVisible();
   await expect(banner(page)).toHaveCount(0);
 });
 

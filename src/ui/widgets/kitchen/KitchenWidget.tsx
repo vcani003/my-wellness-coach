@@ -1,53 +1,73 @@
 "use client";
 /**
- * The Kitchen widget (ux.md §3, decisions 0011 and 0017): To review at the top, then items grouped Fridge / Freezer /
- * Pantry / Not sure where, "added X days ago", Running low, "New" / "Updated" after your own
- * message, and "Levi · just now" for the other person's changes, plus "Since your last visit" and
- * "Levi used up the eggs" for what left the list (SharedCues, ux.md §6). Empty, loading, error and
- * stale states stay inside the widget (0018).
+ * The Kitchen place (Kitchen OS dock, 0042; ux.md §3, decisions 0011, 0017, CAT1, K1): the whole
+ * kitchen, view-only except To review. At the top, the shared-kitchen lines ("Since your last
+ * visit", "Levi used up the eggs", ux.md §6) and To review; then **search** ("Search your
+ * kitchen", instant, accents ignored, matched words marked) and **By place | By type**
+ * (remembered on this device). By place groups Fridge / Freezer / Pantry / Not sure where; By type
+ * groups under the 12 categories, each row saying where it is. Rows show "added X days ago",
+ * batches, Running low, "New" / "Updated" after your own message, and "Levi · just now" for the
+ * other person's changes. Empty, loading, error and stale states stay inside the place (0018).
  */
-import Link from "next/link";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
-import { useRef } from "react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import type { ItemRow } from "@/contracts/kitchen-state";
+import { useAnnounce } from "@/ui/a11y/Announcer";
+import { LUMI_ART } from "@/ui/lumi/Lumi";
 import { actorName, byOther as byOtherActor, itemName, sentenceCase } from "@/ui/fallbacks";
 import { Collapsible } from "@/ui/primitives/Collapsible";
-import { CaretDownIcon, SearchIcon } from "@/ui/primitives/icons";
+import { CaretDownIcon, CloseIcon, FreezerIcon, FridgeIcon, PantryIcon, SearchIcon, UnknownPlaceIcon } from "@/ui/primitives/icons";
 import { useKitchenData, type ChangeMark } from "@/ui/sync/KitchenDataContext";
-import type { WidgetProps } from "@/ui/workspace/types";
-import { batchesOf, calendarDaysSince, groupItems, highlightParts, isDefrosted } from "./model";
-import { requestSeeAllFocus } from "./see-all-focus";
+import type { PlaceProps } from "@/ui/places/types";
+import { batchesOf, calendarDaysSince, groupByCategory, groupItems, highlightParts, isDefrosted, searchKitchen, type GroupKey } from "./model";
 import { LiveRemovals, SinceLastVisit } from "./SharedCues";
 import { ToReview } from "./ToReview";
+import { useKitchenView, type KitchenView } from "./view-pref";
 
-export function KitchenSummary() {
-  const t = useTranslations("kitchen");
-  const { snapshot } = useKitchenData();
-  if (!snapshot.state) return null;
-  const toReview = snapshot.state.toReview.length;
-  // Collapsed on a phone, the bar is the only hint that something waits in To review.
+/** How long typing must pause before the result count is spoken. */
+const ANNOUNCE_DELAY_MS = 700;
+
+const PLACE_ICON = { fridge: FridgeIcon, freezer: FreezerIcon, pantry: PantryIcon, unknown: UnknownPlaceIcon } as const;
+
+/** A place's tile (Kitchen OS): the place colour and its icon. Decorative; the words say where. */
+export function PlaceTile({ place, small = false }: { place: GroupKey; small?: boolean }) {
+  const Icon = PLACE_ICON[place];
   return (
-    <>
-      {t("count", { count: snapshot.state.items.length })}
-      {toReview > 0 && ` · ${t("review.summary", { count: toReview })}`}
-    </>
+    <span aria-hidden="true" data-place={place} className={`place-tile ${small ? "size-avatar" : ""}`}>
+      <Icon className={small ? "size-icon-sm" : "size-icon"} />
+    </span>
   );
 }
 
-export function KitchenWidget({ onRetry }: WidgetProps) {
+export function KitchenWidget({ onRetry }: PlaceProps) {
   const t = useTranslations("kitchen");
   const format = useFormatter();
+  const announce = useAnnounce();
   const { snapshot, marks, remoteIds, me, now, cues } = useKitchenData();
   const { state, status, syncedAt } = snapshot;
+  const [view, setView] = useKitchenView();
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   // Where focus goes when a To review sheet closes (the card it came from may be gone).
   const rootRef = useRef<HTMLDivElement>(null);
+
+  const searching = query.trim().length > 0;
+  const results = state && searching ? searchKitchen(state.items, query) : [];
+
+  // "2 matches" / "No matches for 'x'", once typing pauses (never per keystroke).
+  const spoken = searching ? (results.length ? t("seeAll.matches", { count: results.length }) : t("seeAll.noMatches", { query: query.trim() })) : "";
+  useEffect(() => {
+    if (!spoken) return;
+    const timer = setTimeout(() => announce(spoken), ANNOUNCE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [spoken, announce]);
 
   if (!state) {
     if (status === "error") {
       return (
         <p className="flex flex-wrap items-center gap-2 rounded-md bg-error-bg px-4 py-3 text-small text-error-text">
           {t("error")}
-          <button type="button" onClick={onRetry} className="min-h-tap rounded-button px-3 font-medium text-accent-text underline">
+          <button type="button" onClick={onRetry} className="btn-quiet underline">
             {t("retry")}
           </button>
         </p>
@@ -57,72 +77,206 @@ export function KitchenWidget({ onRetry }: WidgetProps) {
       <div aria-busy="true" className="flex flex-col gap-2">
         <p className="text-small text-text-muted">{t("loading")}</p>
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-tap rounded-sm bg-surface-sunken" />
+          <div key={i} className="h-tap rounded-md bg-surface-sunken" />
         ))}
       </div>
     );
   }
 
-  const groups = groupItems(state.items);
+  const clear = () => {
+    setQuery("");
+    searchRef.current?.focus();
+  };
+  const hasItems = groupItems(state.items).length > 0;
+
   return (
     <div ref={rootRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
       {status === "stale" && syncedAt !== null && (
-        <p className="rounded-sm bg-surface-sunken px-3 py-2 text-small text-text-muted">
+        <p className="rounded-md bg-surface-sunken px-3 py-2 text-small text-text-muted">
           {t("stale", { time: format.dateTime(new Date(syncedAt), { hour: "numeric", minute: "2-digit" }) })}
         </p>
       )}
       {cues && <SinceLastVisit cues={cues} onDismissed={() => rootRef.current?.focus()} />}
       {cues && <LiveRemovals cues={cues} />}
-      <ToReview reviews={state.toReview} finalFocus={rootRef} />
-      {groups.length > 0 && (
-        // CAT1: the full view (sorting, search) is one tap away; this compact list stays as it is.
-        <div className="-my-2 flex items-center justify-end gap-1">
-          <Link
-            href="/kitchen"
-            data-kitchen-opener="search"
-            aria-label={t("seeAll.searchLink")}
-            onClick={() => requestSeeAllFocus("search")}
-            className="flex size-tap items-center justify-center rounded-full text-accent-text"
-          >
-            <SearchIcon aria-hidden="true" className="size-icon" />
-          </Link>
-          <Link
-            href="/kitchen"
-            data-kitchen-opener="all"
-            onClick={() => requestSeeAllFocus("heading")}
-            className="flex min-h-tap items-center rounded-button px-3 text-small font-medium text-accent-text underline underline-offset-2"
-          >
-            {t("seeAll.link", { count: state.items.filter((i) => i.stock?.value !== "out").length })}
-          </Link>
-        </div>
-      )}
-      {groups.length === 0 ? (
-        <p className="text-body text-text-muted">{t("empty")}</p>
+      {!searching && <ToReview reviews={state.toReview} finalFocus={rootRef} />}
+
+      {!hasItems ? (
+        <EmptyKitchen />
       ) : (
-        groups.map((group) => (
-          <section key={group.key} aria-labelledby={`kitchen-group-${group.key}`} data-group={group.key}>
-            <h3
-              id={`kitchen-group-${group.key}`}
-              className="mb-1 text-caption font-strong tracking-wide text-text-muted"
-            >
-              {t(`groups.${group.key}`)}
-            </h3>
-            <ul className="flex flex-col">
-              {group.items.map((item) => (
-                <ItemRowView
-                  key={item.id}
-                  item={item}
-                  mark={marks[item.id]}
-                  remote={remoteIds.has(item.id)}
-                  meId={me.id}
-                  now={now}
-                />
-              ))}
-            </ul>
-          </section>
-        ))
+        <>
+          <div className="sticky top-[var(--topbar-height)] z-10 -mx-4 flex flex-col gap-3 bg-surface-default px-4 py-2 desk:static desk:mx-0 desk:px-0">
+            <SearchField inputRef={searchRef} query={query} onChange={setQuery} onClear={clear} />
+            {/* Stays while searching: results are one flat list either way, and the choice is kept (CAT1). */}
+            <ViewToggle view={view} onChange={setView} />
+          </div>
+          {searching ? (
+            <SearchResults items={results} query={query} meId={me.id} now={now} marks={marks} remoteIds={remoteIds} />
+          ) : (
+            <ItemGroups items={state.items} view={view} meId={me.id} now={now} marks={marks} remoteIds={remoteIds} />
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+function EmptyKitchen() {
+  const t = useTranslations("kitchen");
+  return (
+    <div className="card flex flex-col items-center gap-3 px-5 py-6 text-center">
+      {/* eslint-disable-next-line @next/next/no-img-element -- a small static SVG; next/image adds nothing here */}
+      <img src={LUMI_ART.sleeping} alt="" width={96} height={96} className="size-sticker-lg" />
+      <p className="text-body font-medium">{t("empty")}</p>
+    </div>
+  );
+}
+
+function SearchField({
+  inputRef,
+  query,
+  onChange,
+  onClear,
+}: {
+  inputRef: RefObject<HTMLInputElement | null>;
+  query: string;
+  onChange: (query: string) => void;
+  onClear: () => void;
+}) {
+  const t = useTranslations("kitchen.seeAll");
+  return (
+    <div role="search" className="relative">
+      <SearchIcon aria-hidden="true" className="pointer-events-none absolute top-1/2 left-4 size-icon -translate-y-1/2 text-text-muted" />
+      <input
+        ref={inputRef}
+        type="search"
+        value={query}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && query) {
+            e.preventDefault();
+            e.stopPropagation();
+            onClear();
+          }
+        }}
+        aria-label={t("searchLabel")}
+        placeholder={t("searchPlaceholder")}
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
+        enterKeyHint="search"
+        data-kitchen-search=""
+        className="min-h-tap w-full rounded-button border-2 border-border-strong bg-surface-raised py-2 pr-7 pl-7 text-body placeholder:text-text-muted"
+      />
+      {query && (
+        <button
+          type="button"
+          onClick={onClear}
+          aria-label={t("clear")}
+          className="btn-icon absolute top-1/2 right-0 -translate-y-1/2"
+        >
+          <CloseIcon aria-hidden="true" className="size-icon" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ViewToggle({ view, onChange }: { view: KitchenView; onChange: (view: KitchenView) => void }) {
+  const t = useTranslations("kitchen.seeAll");
+  return (
+    <div role="group" aria-label={t("viewLabel")} className="flex self-start rounded-button border-2 border-border-outline bg-surface-raised p-1">
+      {(["place", "type"] as const).map((v) => (
+        <button
+          key={v}
+          type="button"
+          aria-pressed={view === v}
+          onClick={() => onChange(v)}
+          data-kitchen-view={v}
+          className={`min-h-tap rounded-button px-4 text-small font-strong ${
+            view === v ? "bg-accent-default text-text-on-accent" : "text-text-muted"
+          }`}
+        >
+          {t(v === "place" ? "byPlace" : "byType")}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface RowContext {
+  meId: string;
+  now: Date;
+  marks: ReturnType<typeof useKitchenData>["marks"];
+  remoteIds: ReadonlySet<string>;
+}
+
+function ItemGroups({ items, view, ...row }: RowContext & { items: readonly ItemRow[]; view: KitchenView }) {
+  const t = useTranslations();
+  const groups =
+    view === "type"
+      ? groupByCategory(items).map((g) => ({ key: g.key, place: null, title: t(`category.${g.key}`), items: g.items }))
+      : groupItems(items).map((g) => ({ key: g.key, place: g.key, title: t(`kitchen.groups.${g.key}`), items: g.items }));
+  return (
+    <div className="flex flex-col gap-5" data-kitchen-grouping={view}>
+      {view === "type" && <p className="text-caption text-text-muted">{t("kitchen.seeAll.sortedHint")}</p>}
+      {groups.map((group) => (
+        <section key={group.key} aria-labelledby={`kitchen-${view}-${group.key}`} data-group={group.key}>
+          <div className="mb-2 flex items-center gap-2">
+            {group.place && <PlaceTile place={group.place} small />}
+            <h3 id={`kitchen-${view}-${group.key}`} className="text-title font-medium">
+              {group.title}
+            </h3>
+          </div>
+          <ul className="flex flex-col gap-2">
+            {group.items.map((item) => (
+              <ItemRowView
+                key={item.id}
+                item={item}
+                mark={row.marks[item.id]}
+                remote={row.remoteIds.has(item.id)}
+                meId={row.meId}
+                now={row.now}
+                showPlace={view === "type"}
+              />
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function SearchResults({ items, query, ...row }: RowContext & { items: ItemRow[]; query: string }) {
+  const t = useTranslations("kitchen.seeAll");
+  const headingId = useId();
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col gap-1" data-kitchen-results="none">
+        <p className="text-body font-medium">{t("noMatches", { query: query.trim() })}</p>
+        <p className="text-small text-text-muted">{t("noMatchesHint")}</p>
+      </div>
+    );
+  }
+  return (
+    <section aria-labelledby={headingId} data-kitchen-results="">
+      <h3 id={headingId} className="section-label mb-2">
+        {t("matches", { count: items.length })}
+      </h3>
+      <ul className="flex flex-col gap-2">
+        {items.map((item) => (
+          <ItemRowView
+            key={item.id}
+            item={item}
+            mark={row.marks[item.id]}
+            remote={row.remoteIds.has(item.id)}
+            meId={row.meId}
+            now={row.now}
+            showPlace
+            query={query}
+          />
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -178,7 +332,7 @@ export function ItemRowView({
   const content = (
     <>
       <span className="flex flex-wrap items-baseline gap-x-2">
-        <span className="text-body font-medium">
+        <span className="text-body font-strong">
           <HighlightedName text={name} query={query} />
           {showPlace && (
             <span className="text-small font-regular text-text-muted">
@@ -210,13 +364,13 @@ export function ItemRowView({
     </>
   );
 
-  const rowClass = `rounded-sm ${highlighted ? "change-highlight" : ""}`;
+  const rowClass = `row-card ${highlighted ? "change-highlight" : ""}`;
   if (!several) {
     return (
       <li
         data-entity-id={item.id}
         data-change={mark ?? (remote ? "remote" : undefined)}
-        className={`flex min-h-tap flex-col justify-center gap-0.5 px-3 py-3 ${rowClass}`}
+        className={`flex min-h-tap flex-col justify-center gap-0.5 px-4 py-3 ${rowClass}`}
       >
         {content}
       </li>
@@ -229,7 +383,7 @@ export function ItemRowView({
       <Collapsible.Root>
         <Collapsible.Trigger
           data-batches-toggle=""
-          className="group flex min-h-tap w-full items-center gap-2 rounded-sm px-3 py-3 text-left"
+          className="group flex min-h-tap w-full items-center gap-2 rounded-md px-4 py-3 text-left"
         >
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">{content}</span>
           <CaretDownIcon
@@ -237,7 +391,7 @@ export function ItemRowView({
             className="size-icon-sm shrink-0 text-text-muted transition-transform group-data-[panel-open]:rotate-180 motion-reduce:transition-none"
           />
         </Collapsible.Trigger>
-        <Collapsible.Panel className="px-3 pb-3">
+        <Collapsible.Panel className="px-4 pb-3">
           <BatchList item={item} meId={meId} name={name} />
         </Collapsible.Panel>
       </Collapsible.Root>
@@ -253,7 +407,7 @@ function BatchList({ item, meId, name }: { item: ItemRow; meId: string; name: st
   const date = (iso: string) => format.dateTime(new Date(iso), { month: "short", day: "numeric" });
   return (
     <>
-      <ul aria-label={t("kitchen.batches.listLabel", { name })} className="flex flex-col gap-1 border-l-2 border-border-default pl-3">
+      <ul aria-label={t("kitchen.batches.listLabel", { name })} className="flex flex-col gap-1 border-l-2 border-border-stitch pl-3">
         {batchesOf(item).map((b) => {
           const defrosted = b.defrostedOn && !b.frozen?.value;
           const who = byOtherActor(b.createdBy, meId)

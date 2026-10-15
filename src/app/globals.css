@@ -1,14 +1,20 @@
 /*
- * Clay & Honey design tokens (decision 0024; docs/design/visual-direction.md §4, direction C).
+ * Cream design tokens (decision 0042; docs/design/visual-direction.md). Values are translated from
+ * recipe-cat's RecipeCat cream system (design/build_tokens.py → src/styles/tokens.css), with the
+ * Kitchen OS phone layout's type scale. Supersedes Clay & Honey (0024).
  *
  * Every value is a SEMANTIC token, named for its role, never its look (0017, frontend.md §4).
  * Tailwind's default palette, type scale, radii, shadows and spacing are reset to `initial`,
  * so raw classes like `bg-white` or `p-5`-as-20px simply don't exist: components can only use
- * these tokens. A dark theme later is one more block of values under `[data-theme="dark"]`
- * (see the bottom of this file) with no component changes.
+ * these tokens. Utility names follow the token names 1:1: `color.text.muted` →
+ * `--color-text-muted` → `text-text-muted`.
  *
- * Utility names follow the token names 1:1: `color.text.muted` → `--color-text-muted` →
- * `text-text-muted`. Plum (`color.allergy.*`) is reserved for allergy flags only (V2).
+ * Themes: light is the default. Dark ("night kitchen") applies automatically when the phone is in
+ * dark mode, or when <html data-theme="dark">; <html data-theme="light"> forces light. The two dark
+ * blocks below must stay identical (tests/ui/design-tokens.test.ts checks this and AA contrast).
+ *
+ * `color.allergy.*` is reserved for allergy flags only (0024 V2, kept by KOS15, 0045). Nothing else
+ * may be plum or purple, including the Kitchen OS lavender "est." pill.
  */
 @import "tailwindcss";
 
@@ -18,53 +24,71 @@
   --color-transparent: transparent;
   --color-current: currentColor;
 
-  --color-surface-default: #faf4ec; /* page and workspace */
-  --color-surface-raised: #fffbf6; /* cards, chat dock, sheets */
-  --color-surface-sunken: #f1e8dc; /* message box, tags, group headers */
-  --color-text-default: #33281f;
-  --color-text-muted: #685a4d;
-  --color-text-inverse: #fffbf6; /* text on the accent */
-  --color-border-default: #e8dccc; /* decorative only: card edges, dividers */
-  --color-border-strong: #94826f; /* edges of inputs and checkboxes (3.4:1; don't lighten) */
-  --color-accent-default: #9a4e2f; /* primary buttons, chat button */
-  --color-accent-text: #8e4729; /* links, Undo */
-  --color-accent-soft: #f6e3d8; /* your own chat bubble */
-  --color-focus-ring: #2f6a6a;
-  --color-highlight-bg: #faefc9; /* "New" / "Updated" wash, new-reply dot */
-  --color-highlight-text: #654a0e;
-  --color-success-bg: #e6efe0;
-  --color-success-text: #3a6135;
-  --color-allergy-bg: #f3e9f2; /* reserved: allergy flags only */
+  --color-surface-default: #fff6ec; /* page and stage (cream) */
+  --color-surface-raised: #fffdf8; /* cards, chat, dock, sheets */
+  --color-surface-sunken: #f7eadc; /* message box, tags, group headers */
+  --color-surface-soft: #ffe9de; /* quiet peach fill: ingredient chips, pills */
+  --color-text-default: #5b3a29; /* ink */
+  --color-text-muted: #7e5843;
+  --color-text-faint: #a88b78; /* disabled only (fails 4.5:1 on purpose; never for reading text or placeholders) */
+  --color-text-on-accent: #5b3a29; /* text on accent fills (peach, butter, matcha): dark in both themes */
+  --color-text-inverse: #5b3a29; /* legacy alias of text-on-accent; existing buttons use it */
+  --color-text-on-error: #fffdf8; /* text on an error-text fill (destructive button) */
+  --color-border-default: #ecdccb; /* decorative only: dividers, soft edges */
+  --color-border-strong: #7e5843; /* edges of inputs and checkboxes (≥ 3:1) */
+  --color-border-outline: #5b3a29; /* the sticker outline on cards, buttons, chips */
+  --color-border-stitch: #ffb89a; /* dashed inner stitch on cards (decorative) */
+  --color-accent-default: #ffb89a; /* primary buttons, chat button (peach fill, ink text) */
+  --color-accent-strong: #f59873; /* pressed / hover on the accent */
+  --color-accent-text: #a84a26; /* links, Undo, eyebrows */
+  --color-accent-soft: #ffe9de; /* your own chat bubble */
+  --color-focus-ring: #2b7a97; /* deep sky: never brown, so it shows against ink outlines */
+  --color-highlight-bg: #fff1cc; /* "New" / "Updated" butter wash, new-reply dot */
+  --color-highlight-text: #7a4e0e;
+  --color-success-bg: #e4f0dc;
+  --color-success-text: #3e6834;
+  --color-warning-bg: #fff1cc;
+  --color-warning-text: #7a4e0e;
+  --color-error-bg: #ffe1dc;
+  --color-error-text: #9e2b25;
+  --color-info-bg: #e0f0f5;
+  --color-info-text: #2c6273;
+  --color-allergy-bg: #f6e9f4; /* reserved: allergy flags only */
   --color-allergy-text: #5a2a57; /* reserved: allergy flags only */
   --color-allergy-border: #87487f; /* reserved: allergy flags only */
-  --color-warning-bg: #f8edd6;
-  --color-warning-text: #6b4a0f;
-  --color-error-bg: #f9e6e3;
-  --color-error-text: #9b2d2a;
-  --color-selected-bg: #f6e3d8;
-  --color-selected-border: #9a4e2f;
+  --color-selected-bg: #ffe9de;
+  --color-selected-border: #a84a26;
+  --color-place-fridge: #e4f0dc; /* place tiles (Kitchen OS): matcha */
+  --color-place-freezer: #e0f0f5; /* sky */
+  --color-place-pantry: #fff1cc; /* butter */
+  --color-scrim: rgb(91 58 41 / 0.35); /* behind sheets */
 
-  /* ── Type ─────────────────────────────────────────────────────────── */
+  /* ── Type: Fredoka (headings) + Nunito (body), both SIL OFL, self-hosted by next/font ── */
   --font-*: initial;
-  --font-body: var(--font-nunito), system-ui, sans-serif;
-  --font-heading: var(--font-nunito), system-ui, sans-serif;
+  --font-body: var(--font-nunito), ui-rounded, system-ui, sans-serif;
+  --font-heading: var(--font-fredoka), var(--font-nunito), ui-rounded, system-ui, sans-serif;
 
   --font-weight-*: initial;
-  --font-weight-regular: 400;
-  --font-weight-medium: 600;
-  --font-weight-strong: 700;
+  --font-weight-regular: 500;
+  --font-weight-medium: 600; /* Fredoka headings use this */
+  --font-weight-strong: 800;
 
+  /* Kitchen OS phone scale (cream's 18 px body is for its full-screen cooking canvas). */
   --text-*: initial;
   --text-caption: 13px;
   --text-caption--line-height: 18px;
-  --text-small: 15px;
-  --text-small--line-height: 22px;
+  --text-small: 14px;
+  --text-small--line-height: 20px;
   --text-body: 16px;
-  --text-body--line-height: 24px;
-  --text-title: 18px;
+  --text-body--line-height: 22px;
+  --text-title: 20px;
   --text-title--line-height: 24px;
-  --text-heading: 22px;
+  --text-heading: 22px; /* header title */
   --text-heading--line-height: 28px;
+  --text-display: 30px; /* hero titles (Today) */
+  --text-display--line-height: 34px;
+  --text-step: clamp(24px, 6vw, 28px); /* one cook step at a time */
+  --text-step--line-height: 1.25;
 
   /* ── Space: 4 px base, space.1–7 = 4 · 8 · 12 · 16 · 24 · 32 · 48 px ─ */
   --spacing-*: initial;
@@ -78,40 +102,78 @@
   --spacing-5: 24px;
   --spacing-6: 32px;
   --spacing-7: 48px;
-  --spacing-tap: 44px; /* minimum tap target (frontend.md §6) */
+  --spacing-tap: 44px; /* minimum tap target (frontend.md §6); Kitchen OS 36 px controls must grow */
   --spacing-dot: 10px; /* new-reply dot */
   --spacing-icon: 20px;
   --spacing-icon-sm: 16px;
+  --spacing-icon-lg: 28px;
   --spacing-avatar: 32px;
   --spacing-fab: 56px; /* floating chat button */
+  --spacing-tile: 46px; /* place / food tile in a row */
+  --spacing-sticker-sm: 56px;
+  --spacing-sticker-md: 72px;
+  --spacing-sticker-lg: 96px;
+  --spacing-lumi: 64px; /* Lumi beside a greeting */
 
   /* ── Shape and depth ──────────────────────────────────────────────── */
   --radius-*: initial;
+  --radius-xs: 8px;
   --radius-sm: 12px;
-  --radius-md: 18px;
-  --radius-lg: 26px;
+  --radius-md: 20px; /* rows, tiles */
+  --radius-lg: 28px; /* cards */
+  --radius-sheet: 32px;
   --radius-button: 999px; /* pill */
   --radius-full: 9999px;
 
+  /* Shadow colours are variables (set per theme in :root below) because Tailwind inlines shadows. */
   --shadow-*: initial;
-  --shadow-card: 0 2px 10px rgb(51 40 31 / 0.07);
-  --shadow-dock: 0 -6px 24px rgb(51 40 31 / 0.1);
-  --shadow-fab: 0 4px 16px rgb(51 40 31 / 0.18);
+  --shadow-card: 0 6px 0 var(--shadow-ink-soft); /* cream "sticker" offset shadow */
+  --shadow-sticker: 0 3px 0 var(--shadow-ink);
+  --shadow-pop: 0 4px 0 var(--shadow-ink-faint), 0 12px 28px var(--shadow-ink-deep); /* sheets, menus */
+  --shadow-dock: 0 -6px 24px var(--shadow-ink-soft);
+  --shadow-fab: 0 4px 0 var(--shadow-ink), 0 8px 20px var(--shadow-ink-soft);
+  --shadow-glow: 0 0 0 4px var(--glow-ring), 0 0 22px 6px var(--glow-halo); /* optional "this changed" */
 
-  /* ── Motion: soft settle, never bounce ────────────────────────────── */
+  /* ── Motion: soft settle by default ───────────────────────────────── */
   --ease-*: initial;
-  --ease-gentle: cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-gentle: cubic-bezier(0.2, 0.8, 0.2, 1); /* cream "standard" */
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1); /* small overshoot: cat and celebrations only (see visual-direction §5) */
 
   /* ── Layout ───────────────────────────────────────────────────────── */
   --breakpoint-*: initial;
-  --breakpoint-desk: 56.25rem; /* 900 px: chat left 1/3, workspace right 2/3 */
+  --breakpoint-desk: 56.25rem; /* 900 px */
 }
 
 :root {
-  --motion-duration-quick: 140ms;
-  --motion-duration-gentle: 320ms;
+  --motion-duration-quick: 150ms;
+  --motion-duration-gentle: 300ms;
   --motion-duration-slow: 560ms;
+  --motion-distance: 10px; /* how far things rise when they enter */
   --icon-stroke: 2px;
+
+  /* Outline widths for the sticker look (use as border-[length:var(--border-card)] or in CSS). */
+  --border-hair: 2px;
+  --border-thin: 2.5px; /* chips, inputs, the dashed stitch */
+  --border-card: 3px;
+  --border-stitch-inset: 9px;
+
+  /* Shadow and glow colours (light). */
+  --shadow-ink-faint: rgb(91 58 41 / 0.08);
+  --shadow-ink-soft: rgb(91 58 41 / 0.1);
+  --shadow-ink: rgb(91 58 41 / 0.14);
+  --shadow-ink-deep: rgb(91 58 41 / 0.16);
+  --glow-ring: rgb(255 217 142 / 0.9);
+  --glow-halo: rgb(255 217 142 / 0.65);
+
+  /* Fixed art colours: the SVGs in public/art use these hexes in both themes. Art only, never UI. */
+  --art-ink: #5b3a29;
+  --art-cream: #fffdf8;
+  --art-peach: #ffb89a;
+  --art-blush: #ff9aa2;
+  --art-matcha: #a8c99b;
+  --art-butter: #ffd98e;
+  --art-sky: #a7d3e0;
 
   /* Set by src/ui/shell/viewport.ts (iOS keyboard; frontend.md §5). */
   --keyboard-inset: 0px;
@@ -122,12 +184,117 @@
   color-scheme: light;
 }
 
-/* Reduced motion: every duration becomes 0 ms; highlights just appear (visual-direction §2). */
+/* ── Dark theme: "night kitchen" (KOS14, 0045). Automatic, unless <html data-theme="light">. ── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    /* dark-theme:start */
+    --color-surface-default: #2b1e17;
+    --color-surface-raised: #3b2a21;
+    --color-surface-sunken: #241913;
+    --color-surface-soft: #523829;
+    --color-text-default: #ffeedd;
+    --color-text-muted: #e5c7ae;
+    --color-text-faint: #a88a74;
+    --color-text-on-accent: #3a2418;
+    --color-text-inverse: #3a2418;
+    --color-text-on-error: #2b1e17;
+    --color-border-default: #54402f;
+    --color-border-strong: #c49a7c;
+    --color-border-outline: #c49a7c;
+    --color-border-stitch: #b27459;
+    --color-accent-default: #f7a786;
+    --color-accent-strong: #ffbfa4;
+    --color-accent-text: #ffb89a;
+    --color-accent-soft: #523829;
+    --color-focus-ring: #8fd3ea;
+    --color-highlight-bg: #4a3a1c;
+    --color-highlight-text: #ffd98e;
+    --color-success-bg: #33402c;
+    --color-success-text: #bee0b1;
+    --color-warning-bg: #4a3a1c;
+    --color-warning-text: #ffd98e;
+    --color-error-bg: #4e2622;
+    --color-error-text: #ffaaa1;
+    --color-info-bg: #22383f;
+    --color-info-text: #b5deea;
+    --color-allergy-bg: #3f2440;
+    --color-allergy-text: #f4d6f0;
+    --color-allergy-border: #c88dc1;
+    --color-selected-bg: #523829;
+    --color-selected-border: #ffb89a;
+    --color-place-fridge: #33402c;
+    --color-place-freezer: #22383f;
+    --color-place-pantry: #4a3a1c;
+    --color-scrim: rgb(16 9 6 / 0.6);
+    --shadow-ink-faint: rgb(0 0 0 / 0.3);
+    --shadow-ink-soft: rgb(0 0 0 / 0.35);
+    --shadow-ink: rgb(0 0 0 / 0.4);
+    --shadow-ink-deep: rgb(0 0 0 / 0.45);
+    --glow-ring: rgb(242 198 110 / 0.85);
+    --glow-halo: rgb(242 198 110 / 0.45);
+    color-scheme: dark;
+    /* dark-theme:end */
+  }
+}
+
+:root[data-theme="dark"] {
+  /* dark-theme:start */
+  --color-surface-default: #2b1e17;
+  --color-surface-raised: #3b2a21;
+  --color-surface-sunken: #241913;
+  --color-surface-soft: #523829;
+  --color-text-default: #ffeedd;
+  --color-text-muted: #e5c7ae;
+  --color-text-faint: #a88a74;
+  --color-text-on-accent: #3a2418;
+  --color-text-inverse: #3a2418;
+  --color-text-on-error: #2b1e17;
+  --color-border-default: #54402f;
+  --color-border-strong: #c49a7c;
+  --color-border-outline: #c49a7c;
+  --color-border-stitch: #b27459;
+  --color-accent-default: #f7a786;
+  --color-accent-strong: #ffbfa4;
+  --color-accent-text: #ffb89a;
+  --color-accent-soft: #523829;
+  --color-focus-ring: #8fd3ea;
+  --color-highlight-bg: #4a3a1c;
+  --color-highlight-text: #ffd98e;
+  --color-success-bg: #33402c;
+  --color-success-text: #bee0b1;
+  --color-warning-bg: #4a3a1c;
+  --color-warning-text: #ffd98e;
+  --color-error-bg: #4e2622;
+  --color-error-text: #ffaaa1;
+  --color-info-bg: #22383f;
+  --color-info-text: #b5deea;
+  --color-allergy-bg: #3f2440;
+  --color-allergy-text: #f4d6f0;
+  --color-allergy-border: #c88dc1;
+  --color-selected-bg: #523829;
+  --color-selected-border: #ffb89a;
+  --color-place-fridge: #33402c;
+  --color-place-freezer: #22383f;
+  --color-place-pantry: #4a3a1c;
+  --color-scrim: rgb(16 9 6 / 0.6);
+  --shadow-ink-faint: rgb(0 0 0 / 0.3);
+  --shadow-ink-soft: rgb(0 0 0 / 0.35);
+  --shadow-ink: rgb(0 0 0 / 0.4);
+  --shadow-ink-deep: rgb(0 0 0 / 0.45);
+  --glow-ring: rgb(242 198 110 / 0.85);
+  --glow-halo: rgb(242 198 110 / 0.45);
+  color-scheme: dark;
+  /* dark-theme:end */
+}
+
+/* Reduced motion: every duration becomes 0 ms, nothing rises or overshoots; changes just appear. */
 @media (prefers-reduced-motion: reduce) {
   :root {
     --motion-duration-quick: 0ms;
     --motion-duration-gentle: 0ms;
     --motion-duration-slow: 0ms;
+    --motion-distance: 0px;
+    --ease-pop: cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 }
 
@@ -137,14 +304,22 @@
     background: var(--color-surface-default);
     color: var(--color-text-default);
     font-family: var(--font-body);
+    font-weight: var(--font-weight-regular);
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
     -webkit-text-size-adjust: 100%;
   }
 
-  /* 2 px ring in focus-ring with a 2 px gap, visible on every surface (visual-direction §2). */
+  /* Headings use the rounded display face (Fredoka); utilities can still override. */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-heading);
+  }
+
+  /* 3 px sky ring with a 2 px gap: visible on every surface and against ink outlines (cream). */
   :focus-visible {
-    outline: 2px solid var(--color-focus-ring);
+    outline: 3px solid var(--color-focus-ring);
     outline-offset: 2px;
   }
 
@@ -159,6 +334,119 @@
 }
 
 @layer components {
+  /*
+   * Cream card recipe (recipe-cat Card): raised surface, ink outline, offset shadow and a dashed
+   * peach stitch inset. Decorative only: the stitch never carries meaning.
+   */
+  .card-stitched {
+    position: relative;
+    background: var(--color-surface-raised);
+    border: var(--border-card) solid var(--color-border-outline);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+  .card-stitched::after {
+    content: "";
+    position: absolute;
+    inset: var(--border-stitch-inset);
+    border: var(--border-thin) dashed var(--color-border-stitch);
+    border-radius: calc(var(--radius-lg) - var(--border-stitch-inset));
+    pointer-events: none;
+  }
+
+  /*
+   * Lumi's states (src/ui/lumi/Lumi.tsx). Calm (0022, 0046: nothing loops): she is still when idle (no blink),
+   * tilts only while she's writing, hops once when happy, and closes her eyes asleep.
+   * Reduced motion: no movement at all; the eyes alone show the state.
+   */
+  .lumi-cat {
+    display: block;
+    overflow: visible;
+  }
+  .lumi-cat .lumi-head {
+    transform-box: view-box;
+    transform-origin: 32px 52px;
+  }
+  .lumi-cat .lumi-happy-eyes {
+    display: none;
+  }
+  .lumi-cat[data-state="happy"] .lumi-eyes,
+  .lumi-cat[data-state="sleep"] .lumi-eyes {
+    display: none;
+  }
+  .lumi-cat[data-state="happy"] .lumi-happy-eyes,
+  .lumi-cat[data-state="sleep"] .lumi-happy-eyes {
+    display: inline;
+  }
+  .lumi-cat[data-state="sleep"] .lumi-happy-eyes {
+    transform: scaleY(-1);
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .lumi-cat[data-state="think"] .lumi-eyes {
+    transform: translate(1.5px, -2px);
+  }
+  .lumi-cat[data-state="happy"] .lumi-head {
+    animation: lumi-hop var(--motion-duration-slow) var(--ease-pop);
+  }
+  .lumi-cat[data-state="think"] .lumi-head {
+    animation: lumi-tilt var(--motion-duration-gentle) var(--ease-gentle) 1 both;
+  }
+  @keyframes lumi-hop {
+    40% {
+      transform: translateY(-5px) rotate(-4deg);
+    }
+  }
+  /* One tilt that holds while she writes (0046: nothing loops). */
+  @keyframes lumi-tilt {
+    to {
+      transform: rotate(-7deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lumi-cat .lumi-head {
+      animation: none;
+    }
+  }
+
+  /*
+   * Washi tape strip across the top of a hero card. Put it on an aria-hidden element inside a
+   * positioned card. Tone classes pick the art colour; matcha is the default.
+   */
+  .washi-tape {
+    --tape: var(--art-matcha);
+    position: absolute;
+    z-index: 2;
+    top: -15px;
+    left: 50%;
+    width: 112px;
+    height: 30px;
+    transform: translateX(-50%) rotate(-3deg);
+    opacity: 0.92;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      60deg,
+      var(--tape) 0 11px,
+      color-mix(in srgb, var(--tape) 50%, var(--art-cream)) 11px 19px
+    );
+    clip-path: polygon(
+      0 0, 100% 0, 96% 17%, 100% 33%, 96% 50%, 100% 67%, 96% 83%, 100% 100%,
+      0 100%, 4% 83%, 0 67%, 4% 50%, 0 33%, 4% 17%
+    );
+  }
+  .washi-tape[data-tone="peach"] {
+    --tape: var(--art-peach);
+  }
+  .washi-tape[data-tone="sky"] {
+    --tape: var(--art-sky);
+  }
+  .washi-tape[data-tone="blush"] {
+    --tape: var(--art-blush);
+  }
+  .washi-tape[data-tone="butter"] {
+    --tape: var(--art-butter);
+  }
+
   /* "New" / "Updated" wash: fades in once, then stays until your next message (ux §1). */
   .change-highlight {
     background: var(--color-highlight-bg);
@@ -170,39 +458,222 @@
     }
   }
 
-  /* "Kitchen is writing…": three soft dots; static words with reduced motion. */
-  .typing-dot {
-    animation: typing var(--motion-duration-slow) var(--ease-gentle) infinite alternate;
+}
+
+/*
+ * Shared controls (Kitchen OS layout in cream, 0042). Built only from tokens. Primary buttons are a
+ * peach fill with the ink outline: peach alone is 1.64:1 against a card, so the outline gives the
+ * shape (visual-direction §6). Every control is at least 44 px tall (`spacing.tap`).
+ */
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-2);
+    min-height: var(--spacing-tap);
+    padding: 0 var(--spacing-5);
+    border-radius: var(--radius-button);
+    border: var(--border-hair) solid var(--color-border-outline);
+    background: var(--color-surface-raised);
+    color: var(--color-text-default);
+    font-weight: var(--font-weight-strong);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    box-shadow: var(--shadow-sticker);
+    transition:
+      transform var(--motion-duration-quick) var(--ease-gentle),
+      box-shadow var(--motion-duration-quick) var(--ease-gentle),
+      background-color var(--motion-duration-quick) var(--ease-gentle);
   }
-  .typing-dot:nth-child(2) {
-    animation-delay: 160ms;
+  .btn:active:not(:disabled, [aria-disabled="true"]) {
+    transform: translateY(2px);
+    box-shadow: none;
   }
-  .typing-dot:nth-child(3) {
-    animation-delay: 320ms;
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
+    opacity: 0.6;
+    cursor: default;
   }
-  @keyframes typing {
-    to {
-      opacity: 0.25;
+  .btn-primary {
+    background: var(--color-accent-default);
+    color: var(--color-text-on-accent);
+  }
+  .btn-primary:hover:not(:disabled, [aria-disabled="true"]) {
+    background: var(--color-accent-strong);
+  }
+  .btn-danger {
+    background: var(--color-error-text);
+    color: var(--color-text-on-error);
+  }
+  .btn-small {
+    padding: 0 var(--spacing-4);
+    font-size: var(--text-small);
+    line-height: var(--text-small--line-height);
+  }
+  /* A quiet text button (Undo, Retry, Cancel): no outline, accent text, still 44 px. */
+  .btn-quiet {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    min-height: var(--spacing-tap);
+    padding: 0 var(--spacing-3);
+    border-radius: var(--radius-button);
+    color: var(--color-accent-text);
+    font-weight: var(--font-weight-strong);
+  }
+  .btn-quiet:disabled,
+  .btn-quiet[aria-disabled="true"] {
+    opacity: 0.6;
+    cursor: default;
+  }
+  /* Round icon button (header, close): 44 px, ink outline. */
+  .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--spacing-tap);
+    height: var(--spacing-tap);
+    flex: none;
+    border-radius: var(--radius-full);
+    color: var(--color-text-muted);
+  }
+
+  /* A raised card with the ink outline (Kitchen OS `.card` in cream). */
+  .card {
+    position: relative;
+    background: var(--color-surface-raised);
+    border: var(--border-hair) solid var(--color-border-outline);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+  /* A row inside a place (items, list entries, meals). */
+  .row-card {
+    background: var(--color-surface-raised);
+    border: var(--border-hair) solid var(--color-border-default);
+    border-radius: var(--radius-md);
+  }
+  /* Small caps label (V-KOS1 Rec: short, 13 px caps labels are fine). */
+  .eyebrow {
+    font-size: var(--text-caption);
+    line-height: var(--text-caption--line-height);
+    font-weight: var(--font-weight-strong);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-accent-text);
+  }
+  .section-label {
+    font-size: var(--text-caption);
+    line-height: var(--text-caption--line-height);
+    font-weight: var(--font-weight-strong);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+  /* Place tile (Kitchen OS `.tile`): a soft square holding an icon. */
+  .place-tile {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: var(--spacing-tile);
+    height: var(--spacing-tile);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-soft);
+    color: var(--color-text-default);
+  }
+  .place-tile[data-place="fridge"] {
+    background: var(--color-place-fridge);
+  }
+  .place-tile[data-place="freezer"] {
+    background: var(--color-place-freezer);
+  }
+  .place-tile[data-place="pantry"] {
+    background: var(--color-place-pantry);
+  }
+  .field {
+    min-height: var(--spacing-tap);
+    width: 100%;
+    border-radius: var(--radius-sm);
+    border: var(--border-hair) solid var(--color-border-strong);
+    background: var(--color-surface-raised);
+    padding: var(--spacing-2) var(--spacing-4);
+    font-size: var(--text-body);
+    color: var(--color-text-default);
+  }
+  .field::placeholder {
+    color: var(--color-text-muted);
+  }
+
+  /* Round check (src/ui/primitives/Checkbox.tsx). */
+  .check-box {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-full);
+    border: var(--border-thin) solid var(--color-border-strong);
+    background: var(--color-surface-raised);
+    color: var(--color-success-text);
+  }
+  .check-box .check-mark {
+    opacity: 0;
+  }
+  .check-box:has(input:checked) {
+    background: var(--color-success-bg);
+    border-color: var(--color-success-text);
+  }
+  .check-box:has(input:checked) .check-mark {
+    opacity: 1;
+  }
+  .check-box:has(input:focus-visible) {
+    outline: 3px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+  .check-box:has(input:disabled) {
+    opacity: 0.6;
+  }
+
+  /* Sheets (Base UI dialog): cream paper with an ink edge, rising from the bottom on a phone. */
+  .sheet {
+    border: var(--border-hair) solid var(--color-border-outline);
+    border-bottom-width: 0;
+    box-shadow: var(--shadow-pop);
+  }
+  @media (min-width: 56.25rem) {
+    .sheet {
+      border-bottom-width: var(--border-hair);
     }
   }
-  @media (prefers-reduced-motion: reduce) {
-    .typing-dot {
-      animation: none;
+
+  /* A place's content rises in once when you arrive (gentle, never the pop; 0 with reduced motion). */
+  .place-enter {
+    animation: place-rise var(--motion-duration-gentle) var(--ease-gentle) both;
+  }
+  @keyframes place-rise {
+    from {
+      opacity: 0;
+      transform: translateY(var(--motion-distance));
     }
   }
 }
 
 /*
- * Shell layout (ux.md §1). Phone (< 900 px): the chat is docked at the bottom, above the iPhone
- * keyboard (--keyboard-inset) and the home indicator (safe area). Desktop: a grid, see KitchenApp.
+ * Shell layout (Kitchen OS, 0042; ux.md §1). Phone (< 900 px): header on top, the place in the
+ * middle, and at the bottom the chat (latest reply, message box) above the dock of five places,
+ * clear of the iPhone keyboard (--keyboard-inset) and the home indicator. Desktop: three columns,
+ * places nav · the place · chat (0034's layout, Kitchen OS look). See KitchenApp.
  */
 /* Unlayered on purpose: these must win over utility classes (e.g. `flex`) on the same element. */
 .composer-area {
-  /* The home indicator needs room only while the keyboard is closed. */
-  padding-bottom: max(var(--spacing-3), calc(env(safe-area-inset-bottom) - var(--keyboard-inset)));
+  padding-bottom: var(--spacing-2);
+}
+.dock-nav {
+  padding-bottom: max(var(--spacing-2), calc(env(safe-area-inset-bottom) - var(--keyboard-inset)));
 }
 .chat-fab {
-  bottom: calc(env(safe-area-inset-bottom) + var(--spacing-4));
+  bottom: calc(var(--dock-height) + var(--spacing-3));
 }
 
 /*
@@ -223,41 +694,89 @@
   padding-right: max(var(--spacing-4), env(safe-area-inset-right));
 }
 
+.app-header {
+  padding-top: env(safe-area-inset-top);
+}
+
 @media (width < 56.25rem) {
   html {
     scroll-padding-top: var(--topbar-height);
     scroll-padding-bottom: calc(var(--dock-height) + var(--keyboard-inset));
   }
-  .workspace {
+  .stage {
     padding-bottom: calc(var(--dock-height) + var(--keyboard-inset) + var(--spacing-5));
     padding-left: max(var(--spacing-4), env(safe-area-inset-left));
     padding-right: max(var(--spacing-4), env(safe-area-inset-right));
   }
-  .chat-dock {
+  .bottom-area {
     position: fixed;
     inset-inline: 0;
     bottom: var(--keyboard-inset);
     z-index: 20;
+    display: flex;
+    flex-direction: column;
     max-height: calc(100dvh - var(--topbar-height) - var(--keyboard-inset));
   }
-  .chat-dock[data-dock="full"] {
+  /* Full: the conversation takes the screen between the header and the dock. */
+  .bottom-area[data-dock="full"] {
     top: var(--topbar-height);
+  }
+  .bottom-area[data-dock="full"] .chat-dock {
+    flex: 1;
+    min-height: 0;
   }
   .chat-dock[data-dock="minimized"] {
     display: none;
   }
   /* Peek: only the latest reply (and its receipt), kept to a share of the screen. */
   .chat-dock[data-dock="peek"] .chat-log {
-    max-height: 40dvh;
+    max-height: 32dvh;
   }
   .chat-dock[data-dock="peek"] [data-peek="false"] {
     display: none;
   }
+  /* While the iPhone keyboard is up, the dock steps aside so the message box keeps its room. */
+  :root[data-keyboard="open"] .dock-nav {
+    display: none;
+  }
 }
 
-/*
- * Dark theme slot (FE3, 0017): not in MVP 1. Adding it = supplying every --color-* above here,
- * plus a `data-theme` switch; no component changes.
- *
- * :root[data-theme="dark"] { --color-surface-default: …; … }
- */
+@media (width >= 56.25rem) {
+  .app-shell {
+    display: grid;
+    height: 100dvh;
+    overflow: hidden;
+    grid-template-columns: auto minmax(0, 1fr) minmax(20rem, 26rem);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .app-shell[data-chat="minimized"] {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .app-header {
+    grid-column: 1 / -1;
+  }
+  .bottom-area {
+    display: contents;
+  }
+  .stage {
+    grid-column: 2;
+    grid-row: 2;
+    overflow-y: auto;
+  }
+  .chat-dock {
+    grid-column: 3;
+    grid-row: 2;
+    min-height: 0;
+  }
+  .chat-dock[data-dock="minimized"] {
+    display: none;
+  }
+  .dock-nav {
+    grid-column: 1;
+    grid-row: 2;
+    padding-bottom: var(--spacing-4);
+  }
+  .chat-fab {
+    bottom: var(--spacing-5);
+  }
+}

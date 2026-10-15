@@ -43,7 +43,7 @@ export function UpdateKitchenSheet() {
   return (
     <Dialog.Root open={Boolean(request)} onOpenChange={(open) => !open && dismissRef.current()}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-40 bg-text-default/30" />
+        <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
         {shown && <SheetBody key={`${shown.mealId}:${shown.reviewId ?? ""}`} request={shown} dismissRef={dismissRef} finalFocus={finalFocus} />}
       </Dialog.Portal>
     </Dialog.Root>
@@ -166,10 +166,10 @@ function SheetBody({
     <Dialog.Popup
       finalFocus={finalFocus}
       aria-describedby={failed ? errorId : undefined}
-      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 rounded-t-lg bg-surface-raised px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-dock desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-lg"
+      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
     >
       <div>
-        <Dialog.Title className="text-title font-strong">{t("title")}</Dialog.Title>
+        <Dialog.Title className="font-heading text-title font-medium">{t("title")}</Dialog.Title>
         <Dialog.Description className="text-small text-text-muted">{t("cooked", { title: request.title })}</Dialog.Description>
       </div>
       <div className="flex min-h-0 flex-col gap-4 overflow-y-auto">
@@ -194,12 +194,12 @@ function SheetBody({
             maxLength={2000}
             rows={2}
             disabled={busy}
-            className="rounded-sm border border-border-strong bg-surface-raised px-3 py-2 text-body"
+            className="field"
           />
         </div>
       </div>
       {failed && (
-        <p id={errorId} role="alert" className="rounded-sm bg-error-bg px-3 py-2 text-small text-error-text">
+        <p id={errorId} role="alert" className="rounded-md bg-error-bg px-3 py-2 text-small text-error-text">
           {t(failed === "done" ? "doneFailed" : failed === "later" ? "laterFailed" : "skipFailed")}
         </p>
       )}
@@ -207,15 +207,15 @@ function SheetBody({
         type="button"
         onClick={() => void done()}
         disabled={busy}
-        className="min-h-tap w-full rounded-button bg-accent-default px-5 text-body font-strong text-text-inverse disabled:opacity-60"
+        className="btn btn-primary w-full"
       >
         {busy ? t("saving") : t("done")}
       </button>
       <div className="flex items-center justify-between">
-        <button type="button" onClick={() => void later()} disabled={busy} className="min-h-tap rounded-button px-3 text-body font-medium text-accent-text">
+        <button type="button" onClick={() => void later()} disabled={busy} className="btn-quiet">
           {t("doLater")}
         </button>
-        <button type="button" onClick={() => void skip()} disabled={busy} className="min-h-tap rounded-button px-3 text-body font-medium text-accent-text">
+        <button type="button" onClick={() => void skip()} disabled={busy} className="btn-quiet">
           {t("skip")}
         </button>
       </div>
