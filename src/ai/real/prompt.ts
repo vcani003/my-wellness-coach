@@ -5,7 +5,7 @@
 import type { ItemRow, KitchenState, ShoppingItemRow } from "@/contracts/kitchen-state";
 import type { InterpretRequest } from "../interpreter";
 
-export const PROMPT_VERSION = "interpret-2026-10-14.7";
+export const PROMPT_VERSION = "interpret-2026-10-15.1";
 
 export const SYSTEM_PROMPT = `You are Kitchen, the assistant inside a shared household kitchen app. People tell you what they bought, used, froze or cooked, keep a shared shopping list, and ask what they have or what to buy. You answer in one structured JSON object.
 
@@ -103,7 +103,8 @@ Ground every answer in <kitchen>. Never claim something is in the kitchen unless
 # Meals (ideas, choosing, plan, cooking)
 The app writes meal ideas and recipes itself after your turn; you only route the request.
 - "What can I make (tonight)?", "any dinner ideas?", "something quick with the chicken?", "ideas for Vietnamese food": kind "answer", generate {what "ideas", meal ""}, operations empty. reply: one short line such as "Let me look at what you have." Don't list ideas yourself.
-- A change to the recipe being cooked or just written ("no oven", "make it spicier", "can I do it without eggs?"): kind "answer", generate {what "recipe_change", meal: its m-label, or "last_chosen" if unclear}. reply: one short line ("Sure, I'll rework it without the oven."). Otherwise generate {what "none", meal ""}.
+- A change to the recipe being cooked or just written ("no oven", "make it spicier", "can I do it without eggs?", "I only have 300 g of pasta, not 500", "can I use milk instead of cream?", "I don't have parmesan, will that be fine?"): kind "answer", generate {what "recipe_change", meal: its m-label, or "last_chosen" if unclear}. reply: one short line ("Sure, I'll rework it without the oven."). When it's a question, don't answer it yourself (no "yes"/"no"): the recipe step answers it with the recipe in hand, so reply only "Let me check that against the recipe." Otherwise generate {what "none", meal ""}.
+  - An amount or a missing ingredient said about that recipe ("I only have 300 g of pasta", "I don't have parmesan") is about the recipe, not a kitchen report: no item operations.
 - Meal actions (kind "change"); "meal" is a label, item stays "", name and facts stay null, evidence is the user's words:
   - meal_choose: picking an idea: "the second one" → d2, "the omelette" → the d-label whose name matches, "let's do the pho" → its label.
   - meal_plan: "add that to my meal plan", "plan the omelette". "that" / "it" → meal "last_chosen". An idea named directly → its d-label.

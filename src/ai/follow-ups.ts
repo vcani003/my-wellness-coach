@@ -25,6 +25,7 @@ import {
 import type { KitchenScope } from "@/shared/membership";
 import type { MealPointer, TurnFollowUp } from "./interpreter";
 import { basicsNote } from "./meals/basics";
+import { savedRecipeMeta } from "./meals/to-recipe";
 import type { MealAI, MealContext, RecipeIngredientOut, RecipeInput, RecipePart } from "./meals";
 
 export const FOLLOW_UP_FAILED_REPLY = "Sorry, I couldn't finish that just now. What I saved is still saved.";
@@ -143,6 +144,20 @@ function toIngredientOut(i: RecipeView["ingredients"][number], flags: RecipeView
   };
 }
 
+/**
+ * The latest saved version as `<current_recipe>` for a refinement: every change builds on it.
+ * Title and servings come from the saved text, so scaling ("only 2, not 4") knows what it serves.
+ */
+export function refineCurrent(view: RecipeView, mealTitle: string): NonNullable<RecipeInput["refine"]>["current"] {
+  const meta = savedRecipeMeta(view.text, view.source);
+  return {
+    title: meta.title ?? mealTitle,
+    servings: meta.servings,
+    steps: view.steps,
+    ingredients: view.ingredients.map((i) => toIngredientOut(i, view.allergenFlags)),
+  };
+}
+
 /** A saved recipe as the same `recipe` parts a fresh one streams (a retry, or Choose on a meal that has one). */
 export function recipeParts(view: RecipeView, title: string): RecipePart[] {
   return [
@@ -196,7 +211,7 @@ export async function* recipeStep(
       input.refine = {
         messageId: origin.id,
         text: refine,
-        current: { title: meal.title, servings: null, steps: current.steps, ingredients: current.ingredients.map((i) => toIngredientOut(i, current.allergenFlags)) },
+        current: refineCurrent(current, meal.title),
       };
     }
   }

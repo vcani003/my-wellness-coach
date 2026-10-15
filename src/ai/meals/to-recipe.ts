@@ -56,6 +56,19 @@ function recipeText(r: Omit<GeneratedRecipe, "allergenFlags">): string {
   ].join("\n");
 }
 
+/**
+ * Title and servings of a saved AI recipe, read back from its stored text (`recipeText` above):
+ * the saved recipe has no servings field, so a refinement ("only 2 chicken breasts, not 4") would
+ * otherwise lose the number it scales from. User-pasted text has no fixed shape: null for both.
+ */
+export function savedRecipeMeta(text: string, source: "ai" | "user"): { title: string | null; servings: string | null } {
+  if (source !== "ai") return { title: null, servings: null };
+  const lines = text.split("\n", 4);
+  const title = lines[0]?.trim() || null;
+  const serves = lines.slice(1, 3).map((l) => /^Serves (.+)$/.exec(l.trim())?.[1]?.trim()).find(Boolean);
+  return { title, servings: serves || null };
+}
+
 export interface RecipeBuild {
   ctx: MealContext;
   labels: Map<string, string>;
