@@ -11,7 +11,18 @@
 
 ## Outstanding
 
-*Nothing outstanding.*
+### RB1–RB9. 🟡 Finding and cooking past recipes (plan: [plans/recipe-box.md](plans/recipe-box.md))
+- **RB1.** What goes in "Cooked before"? **Rec:** only meals marked Done; ideas and cancelled meals stay out.
+- **RB2.** Which version is "the" recipe? **Rec:** the one you cooked (the newest at Done); older versions aren't shown.
+- **RB3.** Same dish cooked twice? **Rec:** one row, "made 2×, last 15 Oct", which opens the most recent.
+- **RB4.** Rename recipes? **Rec:** not in MVP.
+- **RB5.** Household sees each other's? **Rec:** yes, the list covers the whole kitchen and shows who cooked each one.
+- **RB6.** Favourites or stars? **Rec:** not in MVP; search plus "made 2×" covers it.
+- **RB7.** "Let's make the chicken curry": reuse or ask? **Rec:** ask once, with the past one first: "The one from 15 Oct, or a new one?"
+- **RB8.** An old recipe now clashes with someone's allergy? **Rec:** allow it, always flag it, and offer a one-tap "make it without X".
+- **RB9.** Search by ingredient too? **Rec:** yes, by name and ingredient.
+
+> Answer:
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
