@@ -60,3 +60,4 @@ One line per decision. Read the full record only when it's relevant to your task
 | [0054](0054-smart-staples.md) | Smart staples: one shared list; explicit only; Restock pre-selects Out/Low/missing; offer, never auto-add; store optional, no amounts; answer from saved staples |
 | [0055](0055-stock-level-details.md) | KOS4 details: "Still have some" after cooking stays no-change until KOS13; buying more clears the level; Out item said present comes back with that level |
 | [0056](0056-bulk-remove-confirm.md) | KOS16: >5 removals in one chat message asks first (Yes/No, one Undo); mixed messages wait whole; any kitchen change cancels a pending yes; old batches count |
+| [0057](0057-item-edit-details.md) | KOS3: Counter guessed for counter food; staple follows a rename; rename onto existing name allowed; Freezer moves not remembered |
