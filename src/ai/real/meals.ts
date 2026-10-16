@@ -12,21 +12,25 @@ import type { z } from "zod";
 import { standardName } from "@/shared/text";
 import { askedAllergies, flagsFor } from "../meals/allergen-guard";
 import { basicsNote } from "../meals/basics";
-import { labelMaps, renderIdeasRequest, renderPastedRequest, renderRecipeRequest } from "../meals/context";
+import { labelMaps, renderIdeaRefineRequest, renderIdeasRequest, renderPastedRequest, renderRecipeRequest } from "../meals/context";
 import { applyRecipeEdits } from "../meals/apply-edits";
-import { IdeaOut, IdeasOutput, jsonFormat, RecipeIngredientOut as RawIngredient, RecipeOutput, RecipeRefineOutput } from "../meals/model-output";
+import { IdeaOut, IdeaRefineOutput, IdeasOutput, jsonFormat, RecipeIngredientOut as RawIngredient, RecipeOutput, RecipeRefineOutput } from "../meals/model-output";
 import { completeElements, parsePrefix } from "../meals/partial";
 import {
+  IDEA_REFINE_INSTRUCTIONS,
   IDEAS_INSTRUCTIONS,
   MEALS_PROMPT_VERSION,
   PASTED_RECIPE_INSTRUCTIONS,
   RECIPE_INSTRUCTIONS,
   RECIPE_REFINE_INSTRUCTIONS,
 } from "../meals/prompts";
+import { IDEA_REFINE_FAILURE_REPLY, toRefinedIdea } from "../meals/refine-idea";
 import { toIdea, type IdeaGuardContext } from "../meals/to-ideas";
 import { toIngredient, toRecipeResult, toStep, type RecipeBuild } from "../meals/to-recipe";
 import type {
   GeneratedIdea,
+  IdeaRefineInput,
+  IdeaRefineResult,
   IdeasEvent,
   IdeasResult,
   MealAI,
@@ -56,7 +60,7 @@ export interface StreamingMessagesApi {
   stream(body: StreamParams, options?: { timeout?: number }): TextStream;
 }
 
-export type MealTask = "ideas" | "recipe" | "recipe-refine" | "recipe-paste";
+export type MealTask = "ideas" | "idea-refine" | "recipe" | "recipe-refine" | "recipe-paste";
 
 export type MealLog =
   | {
@@ -93,6 +97,7 @@ const PASTE_MAX = 20_000;
 const IDEAS_FORMAT = jsonFormat(IdeasOutput);
 const RECIPE_FORMAT = jsonFormat(RecipeOutput);
 const REFINE_FORMAT = jsonFormat(RecipeRefineOutput);
+const IDEA_REFINE_FORMAT = jsonFormat(IdeaRefineOutput);
 
 export function sdkStreaming(): StreamingMessagesApi {
   // Retries cover 429/5xx and connection errors; the timeout is per attempt.
@@ -532,12 +537,30 @@ export function createRealMealAI(options: RealMealOptions = {}): MealAI {
     return collectRecipe(recipeStream("recipe-paste", PASTED_RECIPE_INSTRUCTIONS, renderPastedRequest(input, now()), build, PASTE_FAILURE_REPLY));
   }
 
+  /**
+   * A change to an idea card with no recipe yet (ai.md §5 "Refining an idea"): one small call that
+   * returns the whole card after the change. Code checks it like a new idea (toRefinedIdea).
+   */
+  async function refineIdea(input: IdeaRefineInput): Promise<IdeaRefineResult> {
+    const at = now();
+    const settings = taskSettings("ideas", env);
+    const content = renderIdeaRefineRequest(input, at);
+    for await (const ev of call("idea-refine", settings, IDEA_REFINE_INSTRUCTIONS, IDEA_REFINE_FORMAT, IdeaRefineOutput, content)) {
+      if (ev.kind === "partial") continue;
+      if (!ev.ok) return { ok: false, reason: ev.reason, reply: failReply(ev.reason, IDEA_REFINE_FAILURE_REPLY) };
+      const { reply, ...idea } = ev.value;
+      return toRefinedIdea(idea, reply, input, at);
+    }
+    return { ok: false, reason: "failed", reply: IDEA_REFINE_FAILURE_REPLY };
+  }
+
   return {
     streamMealIdeas,
     generateMealIdeas: (input) => collectIdeas(streamMealIdeas(input)),
     streamRecipe,
     generateRecipe: (input) => collectRecipe(streamRecipe(input)),
     readPastedRecipe,
+    refineIdea,
   };
 }
 

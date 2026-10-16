@@ -11,7 +11,27 @@ import { z } from "zod";
 import { AllergenFlag, Msg } from "@/contracts/common";
 import type { MealIdea, StreamEvent, UpdateKitchenPrompt } from "@/contracts/stream";
 
-export type IdeaCard = MealIdea;
+/** A line of an idea card that can change (ai.md §5 "Refining an idea"). */
+export type IdeaLine = "name" | "why" | "uses" | "missing";
+
+export type IdeaCard = MealIdea & {
+  /** Lines the last `idea.updated` changed, for the same brief highlight as recipe lines. */
+  changed?: IdeaLine[];
+  /** Bumped on each change, so a line changed twice highlights again. */
+  changeKey?: number;
+};
+
+const sameItems = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/** Which lines differ between two versions of a card. */
+export function changedIdeaLines(before: MealIdea, after: MealIdea): IdeaLine[] {
+  const lines: IdeaLine[] = [];
+  if (before.name !== after.name) lines.push("name");
+  if (before.why !== after.why) lines.push("why");
+  if (!sameItems(before.uses, after.uses)) lines.push("uses");
+  if (!sameItems(before.missing, after.missing)) lines.push("missing");
+  return lines;
+}
 
 export interface IdeaSet {
   /** null while "Finding ideas…" before the first card. */
@@ -216,6 +236,16 @@ function onStream(state: MealsSession, key: string, event: StreamEvent): MealsSe
     }
     case "ideas.dropped":
       return state.ideas?.setId === event.setId ? { ...state, ideas: null } : state;
+    case "idea.updated": {
+      // Only a card on screen changes, in place; nothing else on it moves (ai.md §5).
+      const set = state.ideas;
+      const before = set?.ideas.find((i) => i.ideaId === event.idea.ideaId);
+      if (!set || !before) return state;
+      const changed = changedIdeaLines(before, event.idea);
+      if (changed.length === 0 && sameItems(before.allergenFlags.map((f) => f.subject), event.idea.allergenFlags.map((f) => f.subject))) return state;
+      const next: IdeaCard = { ...event.idea, changed, changeKey: (before.changeKey ?? 0) + 1 };
+      return { ...state, ideas: { ...set, ideas: set.ideas.map((i) => (i.ideaId === next.ideaId ? next : i)) } };
+    }
     case "notes": {
       const last = state.lastKind[key];
       if (last?.kind === "ideas" && state.ideas?.key === key) return { ...state, ideas: { ...state.ideas, notes: event.notes } };

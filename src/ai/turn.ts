@@ -23,7 +23,7 @@ import { applyProposedChange, chooseMealTap } from "@/domains/kitchen/commands";
 import { getKitchenState, getLatestIdeaSet, getRecipe } from "@/domains/kitchen/queries";
 import type { KitchenScope } from "@/shared/membership";
 import { msg } from "@/shared/messages";
-import { foldMealSteps, recipeParts, recipeStep, runFollowUps, withoutRecipeAnnouncement } from "./follow-ups";
+import { foldMealSteps, recipeParts, recipeStep, runFollowUps, withoutIdeaRefineDraft, withoutRecipeAnnouncement } from "./follow-ups";
 import type { InterpretRequest, Interpreter } from "./interpreter";
 import { notConfiguredMealAI, type MealAI } from "./meals";
 import { replyFromReceipt } from "./receipt-reply";
@@ -71,7 +71,16 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
       state,
       version: state.version,
       history,
-      ...(shown ? { ideas: shown.ideas.map((i) => ({ ideaId: i.ideaId, name: i.name })) } : {}),
+      ...(shown
+        ? {
+            ideas: shown.ideas.map((i) => ({
+              ideaId: i.ideaId,
+              name: i.name,
+              uses: i.uses.flatMap((id) => state.items.find((item) => item.id === id)?.name.value ?? []),
+              missing: i.missing,
+            })),
+          }
+        : {}),
     };
     const interpretation = await interpreter.interpret(req);
     const folded = foldMealSteps(interpretation.proposal?.operations ?? [], interpretation.followUps ?? [], input.text);
@@ -107,7 +116,7 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
     if (result && (result.rejected.length > 0 || result.applied.length === 0)) {
       reply = interpreter.reword ? await interpreter.reword(req, interpretation, result) : replyFromReceipt(result);
     }
-    reply = withoutRecipeAnnouncement(reply, folded.followUps);
+    reply = withoutIdeaRefineDraft(withoutRecipeAnnouncement(reply, folded.followUps), folded.followUps, result);
     if (reply) yield { type: "text", delta: reply };
 
     // Meals: generated after the save, never before (§6).

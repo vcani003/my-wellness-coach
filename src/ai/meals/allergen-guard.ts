@@ -15,6 +15,11 @@ import type { Restriction } from "@/shared/profile/state";
 
 const key = (f: Pick<AllergenFlag, "userId" | "subject">) => `${f.userId}|${f.subject.toLowerCase()}`;
 
+/** The allergies these names already hit, as `asked`-style keys (a card the user already had). */
+export function allergiesIn(names: string[], restrictions: Restriction[]): Set<string> {
+  return new Set(flagsFor(names, restrictions).map(key));
+}
+
 export function flagsFor(names: string[], restrictions: Restriction[]): AllergenFlag[] {
   const clean = names.map((n) => n.trim()).filter(Boolean);
   return clean.length ? computeAllergenFlags(clean, restrictions) : [];

@@ -283,3 +283,43 @@ export function ideasInput(
     ...(opts.count ? { count: opts.count } : {}),
   };
 }
+
+// ─── Refining an idea card (ai.md §5) ───────────────────────────────────────────────────
+
+/** Vero's message on the Meal ideas view (2026-10-15), exactly as typed. */
+export const IDEA_REFINE_MESSAGE =
+  "i dont want to use the yogurt in my curry. refine the lemongrass chicken potato coconut curry to remove it";
+
+/** Ana's kitchen for the idea cards below (labels i1…i7 in this order). */
+export const IDEAS_KITCHEN: ItemSpec[] = [
+  { name: "chicken thighs", location: "fridge", daysAgo: 1 },
+  { name: "potatoes", location: "pantry" },
+  { name: "coconut milk", location: "pantry" },
+  { name: "Greek yogurt", location: "fridge", daysAgo: 2 },
+  { name: "tofu", location: "fridge", daysAgo: 1 },
+  { name: "beef mince", location: "fridge", daysAgo: 1 },
+  { name: "jasmine rice", location: "pantry" },
+];
+
+/** The cards Ana was shown (d1…d3), by kitchen item ID (item-N = iN above). */
+export const SHOWN_IDEAS = [
+  {
+    ideaId: "idea-curry",
+    name: "Lemongrass chicken potato coconut curry",
+    why: "Creamy and cosy, with the yogurt stirred in",
+    uses: ["item-1", "item-2", "item-3", "item-4"],
+    missing: ["lemongrass"],
+  },
+  { ideaId: "idea-beef", name: "Beef mince fried rice", why: "Quick, uses the beef mince", uses: ["item-6", "item-7"], missing: ["spring onions"] },
+  { ideaId: "idea-tofu", name: "Crispy tofu rice bowl", why: "Uses the tofu", uses: ["item-5", "item-7"], missing: [] },
+];
+
+/** An interpret request on the Meal ideas view: the kitchen, the shown cards, any meals. */
+export function ideasViewRequest(text: string, meals: Array<ReturnType<typeof mealInProgress> & { ideaId?: string }> = []): InterpretRequest {
+  const req = request(text, IDEAS_KITCHEN, [], [], meals);
+  const names = new Map(req.state.items.map((i) => [i.id, i.name.value]));
+  return {
+    ...req,
+    ideas: SHOWN_IDEAS.map((i) => ({ ideaId: i.ideaId, name: i.name, uses: i.uses.map((id) => names.get(id) ?? id), missing: i.missing })),
+  };
+}

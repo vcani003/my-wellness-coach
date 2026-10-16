@@ -117,6 +117,93 @@ export function guardDishIngredients(ops: Operation[], out: ModelOutput, req: In
   });
 }
 
+/**
+ * The idea card a named dish means: the same name, or else the ONE card whose name has every word
+ * of the dish ("the curry" → "Lemongrass chicken potato coconut curry"). Two such cards → none.
+ */
+function matchingIdea(req: InterpretRequest, title: string) {
+  const ideas = req.ideas ?? [];
+  const exact = ideas.find((i) => sameDish(i.name, title));
+  if (exact) return exact;
+  const words = nameTokens(title);
+  if (words.length === 0) return undefined;
+  const loose = ideas.filter((i) => {
+    const t = new Set(nameTokens(i.name));
+    return words.every((w) => t.has(w));
+  });
+  return loose.length === 1 ? loose[0] : undefined;
+}
+
+/**
+ * Words asking to cook it or get its recipe, not only to change the idea: "make the curry without
+ * yogurt", "let's cook the first one with tofu", "the recipe for…". "Make it vegetarian" alone
+ * is a change to the idea.
+ */
+export const WANTS_RECIPE =
+  /\b(cook|cooking|recipe|let'?s (make|cook|do|have|go with)|(want|going) to (make|cook)|make\b[^.?!]*?\b(without|with|using|minus|but)\b)/i;
+
+/**
+ * Words changing what's in a dish ("remove the yogurt", "swap the chicken for tofu"). Not
+ * "instead" or "switch" alone: "the second one instead" / "switch to the second one" are picks.
+ */
+export const CHANGES_A_DISH =
+  /\b(remove|take (\w+ )?out|leave (\w+ )?out|without|swap|substitute|replace|instead of|refine|tweak|don'?t (want|use)|dont (want|use)|no more)\b/i;
+
+/** Whether the message names an ingredient on this card ("the yogurt" on the curry card). */
+function namesCardIngredient(req: InterpretRequest, ideaId: string): boolean {
+  const card = (req.ideas ?? []).find((i) => i.ideaId === ideaId);
+  const words = new Set(nameTokens(req.message.text));
+  return [...(card?.uses ?? []), ...(card?.missing ?? [])].some((name) => nameTokens(name).some((w) => words.has(w)));
+}
+
+/**
+ * A change to an idea card with no recipe yet (ai.md §5 "Refining an idea"):
+ * - only changing it ("remove the yogurt from the curry") edits the card in place: no choose, no
+ *   recipe, no navigation, even if the model also picked the card (the miss Vero saw);
+ * - asking to cook it with the change ("make the curry without yogurt") chooses it and writes the
+ *   recipe with the user's words as its notes, so the recipe honours the change. The card then
+ *   follows the recipe (follow-ups.ts `ideaFollowsRecipe`).
+ * `refined`: the idea the model routed a change to (generate.recipe_change on its d-label), if any.
+ */
+function settleIdeaChanges(req: InterpretRequest, refined: string | null, ops: Operation[], followUps: TurnFollowUp[]): { operations: Operation[]; followUps: TurnFollowUp[] } {
+  const text = req.message.text.trim();
+  const wantsRecipe = WANTS_RECIPE.test(text);
+  const changes = CHANGES_A_DISH.test(text);
+  let operations = ops;
+  let follows = followUps;
+  const hasRecipe = (ideaId: string) => req.state.meals.some((m) => m.ideaId === ideaId && ACTIVE.has(m.status) && m.recipe);
+  const refineIdeas = new Set<string>();
+
+  for (const op of ops) {
+    if (op.type !== "meal.choose" || !("ideaId" in op.target)) continue;
+    const ideaId = op.target.ideaId;
+    // A plain pick stays a pick. Without the model's recipe_change, it's a change only when the
+    // message changes the dish AND names something on that card (not "I don't want the first one").
+    if (hasRecipe(ideaId) || (ideaId !== refined && !(changes && namesCardIngredient(req, ideaId)))) continue;
+    if (wantsRecipe) {
+      follows = follows.map((f) =>
+        f.kind === "recipe" && "chooseOpId" in f.meal && f.meal.chooseOpId === op.opId && !f.notes ? { ...f, notes: text.slice(0, 2000) } : f,
+      );
+      continue;
+    }
+    operations = operations.filter((o) => o.opId !== op.opId && !o.opId.startsWith(`${op.opId}:`));
+    follows = follows.filter((f) => !("meal" in f && typeof f.meal === "object" && "chooseOpId" in f.meal && f.meal.chooseOpId === op.opId));
+    refineIdeas.add(ideaId);
+  }
+
+  if (refined && !hasRecipe(refined) && !ops.some((o) => o.type === "meal.choose" && "ideaId" in o.target && o.target.ideaId === refined)) {
+    if (wantsRecipe) {
+      const opId = `${req.message.id}:idea-choose`;
+      operations = [...operations, { opId, type: "meal.choose", target: { ideaId: refined }, evidence: text.slice(0, 2000) }];
+      follows = [...follows, { kind: "recipe", meal: { chooseOpId: opId }, notes: text.slice(0, 2000) }];
+    } else {
+      refineIdeas.add(refined);
+    }
+  }
+  for (const ideaId of refineIdeas) follows = [...follows, { kind: "idea-refine", ideaId, request: text }];
+  return { operations, followUps: follows };
+}
+
 /** The named dish (MI1): an idea or meal pick when it matches one, else a new chosen meal. */
 function dishOperations(out: ModelOutput, req: InterpretRequest, ops: Operation[], followUps: TurnFollowUp[]): void {
   const dish = out.dish;
@@ -134,7 +221,7 @@ function dishOperations(out: ModelOutput, req: InterpretRequest, ops: Operation[
   const evidence = { evidence: (said && text.toLowerCase().includes(said.toLowerCase()) ? said : text).slice(0, 2000) };
   const notes = dish.notes?.trim().slice(0, 2000) || undefined;
 
-  const idea = (req.ideas ?? []).find((i) => sameDish(i.name, title));
+  const idea = matchingIdea(req, title);
   if (idea) {
     ops.push({ opId, type: "meal.choose", target: { ideaId: idea.ideaId }, ...evidence });
     const existing = req.state.meals.find((m) => m.ideaId === idea.ideaId && ACTIVE.has(m.status));
@@ -195,8 +282,15 @@ export function mealOperations(out: ModelOutput, req: InterpretRequest, now: Dat
   });
 
   const g = out.generate;
+  let refinedIdea: string | null = null;
+  const changedIdea = g?.what === "recipe_change" ? ideaLabels(req).get(g.meal?.trim() ?? "") : undefined;
   if (g?.what === "ideas") {
     followUps.push({ kind: "ideas", request: req.message.text.trim() });
+  } else if (changedIdea) {
+    // A change to an idea card (ai.md §5): its meal's recipe when it has one (edit mode), else the card.
+    const meal = req.state.meals.find((m) => m.ideaId === changedIdea.ideaId && ACTIVE.has(m.status) && m.recipe);
+    if (meal) followUps.push({ kind: "recipe", meal: { mealId: meal.id }, refine: req.message.text.trim() });
+    else refinedIdea = changedIdea.ideaId;
   } else if (g?.what === "recipe_change") {
     const t = resolve(g.meal, req, now, "meal_choose");
     // Only a meal that has a recipe can be refined; the most recently chosen one with a recipe wins.
@@ -210,5 +304,6 @@ export function mealOperations(out: ModelOutput, req: InterpretRequest, now: Dat
     else ask(whichOne(req, WHICH_RECIPE, (m) => Boolean(m.recipe)));
   }
   dishOperations(out, req, operations, followUps);
-  return { operations, followUps, ...(clarification ? { clarification } : {}) };
+  const settled = settleIdeaChanges(req, refinedIdea, operations, followUps);
+  return { ...settled, ...(clarification ? { clarification } : {}) };
 }
