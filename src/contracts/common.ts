@@ -99,6 +99,13 @@ export const MAX_OPEN_BATCHES = 3;
 export const MealStatus = z.enum(["chosen", "planned", "cooking", "done", "cancelled"]);
 export type MealStatus = z.infer<typeof MealStatus>;
 
+/**
+ * A planned meal's day (0045 KOS1): a calendar date "YYYY-MM-DD", never a timestamp, so it can't
+ * shift across time zones or DST. Helpers in `src/shared/plan-dates.ts`.
+ */
+export const PlanDate = z.iso.date();
+export type PlanDate = z.infer<typeof PlanDate>;
+
 export const RestrictionKind = z.enum(["allergy", "diet"]);
 export type RestrictionKind = z.infer<typeof RestrictionKind>;
 
@@ -113,7 +120,8 @@ export type ReviewOrigin = z.infer<typeof ReviewOrigin>;
  * How a shopping-list item got on the list (0027): said in chat, a staples answer, a recipe's
  * "Need" items, or the "Add to shopping list" offer after marking something Out or Low (SL3).
  */
-export const ShoppingSource = z.enum(["chat", "staples", "recipe", "stock-offer"]);
+/** `week-plan`: the week's missing ingredients (0045 KOS12). */
+export const ShoppingSource = z.enum(["chat", "staples", "recipe", "stock-offer", "week-plan"]);
 export type ShoppingSource = z.infer<typeof ShoppingSource>;
 
 /** Computed by code from current profiles on every read; never stored. */

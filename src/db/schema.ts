@@ -15,6 +15,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -369,6 +370,11 @@ export const meals = pgTable(
     status: text("status").notNull(),
     ideaId: text("idea_id"),
     planPosition: integer("plan_position"),
+    /**
+     * The day it's planned for (0045 KOS1): a calendar date, never a timestamp, so it can't shift
+     * across time zones or DST. Migration 0016, additive; null = undated.
+     */
+    plannedFor: date("planned_for", { mode: "string" }),
     chosenAt: ts("chosen_at").notNull(),
     recipeId: text("recipe_id"),
     note: text("note"),

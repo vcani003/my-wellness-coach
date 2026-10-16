@@ -10,13 +10,17 @@ import type { Msg } from "@/contracts/common";
 import type { RecipeView } from "@/contracts/kitchen-state";
 import type { UpdateKitchenPrompt } from "@/contracts/stream";
 import { getMeals, handleChooseMeal } from "@/ai";
-import { getRecipe } from "@/domains/kitchen/queries";
+import { getRecipe, getWeekNeeds } from "@/domains/kitchen/queries";
+import type { WeekNeeds } from "@/contracts/week-plan";
+import { todayIn } from "@/shared/plan-dates";
 import { checkChatRateLimit } from "@/lib/rate-limit";
-import { Id, ItemCategory, Location, Quantity, ShoppingSource, StockLevel } from "@/contracts/common";
+import { Id, ItemCategory, Location, PlanDate, Quantity, ShoppingSource, StockLevel } from "@/contracts/common";
 import { ShoppingDoneFields } from "@/contracts/operations";
 import {
   addRecipeNeedsToShoppingList,
   addShoppingItems,
+  addWeekNeedsToShoppingList,
+  setMealDay,
   addStapleItems,
   answerLegacyStaples,
   getLegacyStaplesOffer,
@@ -355,9 +359,46 @@ export async function makeAgain(input: z.input<typeof MakeAgainInput>): Promise<
   }
 }
 
-/** "Add to meal plan" (0008: a short list, no dates). */
-export async function addMealToPlan(input: z.input<typeof MealInput>): Promise<ActionResult> {
-  return run(MealInput, input, (ctx, d) => planMeal(ctx.db, ctx.scope, d));
+/** The person's device time zone (IANA, e.g. "America/New_York"): their "today" for the plan (0045 KOS1). */
+const TimeZone = z.string().min(1).max(64).optional();
+const PlanInput = z.object({ ...Tap, mealId: Id, date: PlanDate.optional(), timeZone: TimeZone });
+const MealDateInput = z.object({ ...Tap, mealId: Id, date: PlanDate.nullable(), timeZone: TimeZone });
+const WeekRange = { timeZone: TimeZone, from: PlanDate.optional(), to: PlanDate.optional(), includeUndated: z.boolean().optional() };
+const WeekNeedsInput = z.object({ kitchenId: Id, ...WeekRange });
+const AddWeekNeedsInput = z.object({ ...Tap, ...WeekRange, names: z.array(z.string().min(1).max(200)).min(1).max(50).optional() });
+
+/** "Add to meal plan" (0008), with an optional day (0045 KOS1: yesterday to 21 days ahead). */
+export async function addMealToPlan(input: z.input<typeof PlanInput>): Promise<ActionResult> {
+  return run(PlanInput, input, (ctx, d) => planMeal(ctx.db, ctx.scope, d));
+}
+
+/** The date picker on a planned meal (0045 KOS1): set or change its day; `date: null` clears it. */
+export async function setMealDate(input: z.input<typeof MealDateInput>): Promise<ActionResult> {
+  return run(MealDateInput, input, (ctx, d) => setMealDay(ctx.db, ctx.scope, d));
+}
+
+/**
+ * The preview for "Add the week's missing ingredients" (0045 KOS12): `WeekNeeds`, or null when it
+ * can't be read (the sheet shows its fallback, 0018). Range defaults: today to 6 days ahead, plus
+ * undated planned meals.
+ */
+export async function loadWeekNeeds(input: z.input<typeof WeekNeedsInput>): Promise<WeekNeeds | null> {
+  const parsed = WeekNeedsInput.safeParse(input);
+  if (!parsed.success) return null;
+  try {
+    const ctx = await getScope(parsed.data.kitchenId);
+    if (!ctx) return null;
+    const { timeZone, ...range } = parsed.data;
+    return await getWeekNeeds(ctx.db, ctx.scope, { ...range, today: todayIn(timeZone) });
+  } catch (error) {
+    console.error("actions: loadWeekNeeds failed", { error });
+    return null;
+  }
+}
+
+/** Add on that sheet: the chosen ones (or every one not on the list) in one change set, source `week-plan`. */
+export async function addWeekNeedsToList(input: z.input<typeof AddWeekNeedsInput>): Promise<ActionResult> {
+  return run(AddWeekNeedsInput, input, (ctx, d) => addWeekNeedsToShoppingList(ctx.db, ctx.scope, d));
 }
 
 export async function startCooking(input: z.input<typeof MealInput>): Promise<ActionResult> {

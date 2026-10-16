@@ -94,7 +94,7 @@ describe("request shape", () => {
     expect(user).toContain("i1: nước mắm (fish sauce) · pantry · Low");
     expect(user).toContain("i9: star anise · not sure where");
     expect(user).toContain("<user_message>\nwhat do I have?\n</user_message>");
-    expect(user).toContain("<today>2026-10-14</today>");
+    expect(user).toContain("<today>2026-10-14 (Wednesday)</today>");
   });
 
   it("strips look-alike tags from user text so it can't break out of its section", async () => {
@@ -717,8 +717,8 @@ describe("shopping list (0027)", () => {
     await b.interpreter.interpret(request("hi", VERO_PANTRY, [], VERO_LIST));
     const sys = (c: typeof a) => (c.calls[0].body.system as Anthropic.Beta.Messages.BetaTextBlockParam[])[0].text;
     expect(sys(a)).toBe(sys(b));
-    expect(PROMPT_VERSION).toBe("interpret-2026-10-16.6");
-    expect(a.logs[0]).toMatchObject({ promptVersion: "interpret-2026-10-16.6" });
+    expect(PROMPT_VERSION).toBe("interpret-2026-10-16.7");
+    expect(a.logs[0]).toMatchObject({ promptVersion: "interpret-2026-10-16.7" });
   });
 
   it("files 'MD Oriental Market' under 'MD Oriental' and keeps other stores as said", () => {

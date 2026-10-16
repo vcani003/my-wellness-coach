@@ -63,6 +63,8 @@ export interface Meal extends AuditFields {
   status: MealStatus;
   ideaId?: string;
   planPosition?: number;
+  /** The day it's planned for (0045 KOS1): a calendar date "YYYY-MM-DD". Absent = undated. */
+  plannedFor?: string;
   chosenAt: string;
   recipeId?: string;
   note?: string;
@@ -197,6 +199,8 @@ export const KITCHEN_EVENT = {
   mealChosen: "meal.chosen",
   mealTransitioned: "meal.transitioned",
   mealNoted: "meal.noted",
+  /** KOS1: a planned meal's day set, changed or cleared. */
+  mealDated: "meal.dated",
   recipeSaved: "recipe.saved",
   checklistTicked: "checklist.ticked",
   reviewQueued: "review.queued",
@@ -323,6 +327,11 @@ export interface MealNotedPayload {
   mealId: string;
   note: string;
 }
+/** 0045 KOS1: the day a meal is planned for, a calendar date; null = undated again. */
+export interface MealDatedPayload {
+  mealId: string;
+  date: string | null;
+}
 export interface RecipeSavedPayload {
   recipeId: string;
   mealId: string;
@@ -421,6 +430,7 @@ export function kitchenTouchedKeys(event: EventEnvelope): string[] {
     case KITCHEN_EVENT.mealChosen:
     case KITCHEN_EVENT.mealTransitioned:
     case KITCHEN_EVENT.mealNoted:
+    case KITCHEN_EVENT.mealDated:
       return [`meal:${p.mealId as string}`];
     case KITCHEN_EVENT.recipeSaved:
       return [`recipe:${p.recipeId as string}`, `meal:${p.mealId as string}`];
@@ -715,6 +725,15 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
       const prev = state.meals[p.mealId];
       if (!prev) return state;
       return put(state, "meals", prev.id, { ...prev, note: p.note, noteBy: event.actor, ...stamp(event) });
+    }
+    case KITCHEN_EVENT.mealDated: {
+      const p = event.payload as MealDatedPayload;
+      const prev = state.meals[p.mealId];
+      if (!prev) return state;
+      const next: Meal = { ...prev, ...stamp(event) };
+      if (p.date === null) delete next.plannedFor;
+      else next.plannedFor = p.date;
+      return put(state, "meals", next.id, next);
     }
     case KITCHEN_EVENT.recipeSaved: {
       const p = event.payload as RecipeSavedPayload;

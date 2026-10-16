@@ -1,13 +1,15 @@
 /**
  * Real-model eval for the interpreter (ai.md §8), scored by exact rules, not by another AI.
  * Run with `npm run eval`; skipped unless ANTHROPIC_API_KEY is set. Costs real money: about
- * 59 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list
+ * 68 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list
  * (0027), older and newer batches (0025), a dish named in chat (MI1), item categories (CAT1) and
- * inferred places (0041), stock levels (0045 KOS4) and smart staples (0054, `staples-cases.ts`).
+ * inferred places (0041), stock levels (0045 KOS4), smart staples (0054, `staples-cases.ts`) and
+ * the dated week plan (0045 KOS1/KOS12, `week-plan-cases.ts`).
  */
 import { afterAll, describe, expect, it } from "vitest";
 import { STAPLE_CASES, stapleCaseRequest } from "./staples-cases";
 import { BULK_REMOVE_CASES, bulkCaseRequest, checkBulkCase } from "./bulk-remove-cases";
+import { WEEK_PLAN_CASES, opsOf as weekPlanOps, weekPlanCaseRequest } from "./week-plan-cases";
 import type { Operation, OperationOf, OperationType } from "@/contracts/operations";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult } from "../interpreter";
@@ -685,6 +687,15 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("interpreter eval (real model)",
       const result = await interpreter.interpret(req);
       console.info(`[${c.name}] ${result.kind}: ${result.reply}`);
       checkBulkCase(c, req, result);
+    });
+  }
+
+  // Dated week plan (0045 KOS1, KOS12): the same cases the fake passes in tests/unit/week-plan-ai.test.ts.
+  for (const c of WEEK_PLAN_CASES) {
+    it(c.name, async () => {
+      const result = await interpreter.interpret(weekPlanCaseRequest(c));
+      console.info(`[${c.name}] ${result.kind}: ${result.reply}`);
+      c.check(result, weekPlanOps(result));
     });
   }
 

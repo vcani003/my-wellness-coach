@@ -11,6 +11,7 @@ import {
   Location,
   MealRef,
   MealStatus,
+  PlanDate,
   Quantity,
   ReviewKind,
   ReviewOrigin,
@@ -104,6 +105,8 @@ export const MealRow = z.object({
   ideaId: Id.optional(),
   /** Position in the plan; set while planned or cooking. */
   planPosition: z.number().int().optional(),
+  /** The day it's planned for (0045 KOS1), a calendar date. Absent = undated (the list still works). */
+  plannedFor: PlanDate.optional(),
   chosenAt: isoDate,
   recipe: RecipeSummary.optional(),
   /** After-cooking note, stored as said (0013). */
@@ -229,3 +232,13 @@ export const RecipeView = z.object({
   ...Audit,
 });
 export type RecipeView = z.infer<typeof RecipeView>;
+
+/**
+ * A recipe ingredient in the **Need** group (0013, 0027): not in the kitchen and not an assumed
+ * basic. An item reference to a row that no longer exists counts as not in the kitchen, as the
+ * recipe screen shows it. One rule for the recipe's "Add Need items" and the week's needs (KOS12).
+ */
+export function isRecipeNeed(ingredient: RecipeView["ingredients"][number]): boolean {
+  const inKitchen = ingredient.item !== undefined && !("missing" in ingredient.item);
+  return !inKitchen && !ingredient.basic;
+}

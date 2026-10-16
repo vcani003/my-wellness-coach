@@ -15,6 +15,7 @@ import type { Clarification } from "@/contracts/proposed-change";
 import type { KitchenState, MealRow } from "@/contracts/kitchen-state";
 import type { Operation } from "@/contracts/operations";
 import { nameTokens, standardName } from "@/shared/text";
+import { WEEKDAY_NAMES, addDays, isIsoDay, resolveDay, weekdayOf } from "@/shared/plan-dates";
 import type { InterpretRequest, TurnFollowUp } from "../interpreter";
 import type { ModelOp, ModelOutput } from "./model-output";
 
@@ -45,6 +46,21 @@ export function lastChosenMeal(req: InterpretRequest, now: Date): MealRow | unde
 
 type Target = { kind: "idea"; ideaId: string; name: string } | { kind: "meal"; meal: MealRow } | { kind: "none" };
 
+/**
+ * A meal or idea named by its dish ("the curry") instead of a label: the one live meal (else idea
+ * card) whose title has every word said. Two or more → none, so the caller asks "Which one?".
+ */
+function byTitle(said: string, req: InterpretRequest): Target {
+  const words = nameTokens(said.replace(/^(the|my|our)\s+/i, ""));
+  if (words.length === 0) return { kind: "none" };
+  const fits = (title: string) => sameDish(title, said) || words.every((w) => nameTokens(title).includes(w));
+  const meals = req.state.meals.filter((m) => ACTIVE.has(m.status) && fits(m.title));
+  if (meals.length === 1) return { kind: "meal", meal: meals[0] };
+  if (meals.length > 1) return { kind: "none" };
+  const ideas = (req.ideas ?? []).filter((i) => fits(i.name));
+  return ideas.length === 1 ? { kind: "idea", ...ideas[0] } : { kind: "none" };
+}
+
 function resolve(label: string | null, req: InterpretRequest, now: Date, action: ModelOp["action"]): Target {
   const l = label?.trim() ?? "";
   const idea = ideaLabels(req).get(l);
@@ -52,6 +68,7 @@ function resolve(label: string | null, req: InterpretRequest, now: Date, action:
   const mealId = mealLabels(req.state).get(l);
   const meal = mealId ? req.state.meals.find((m) => m.id === mealId) : undefined;
   if (meal) return { kind: "meal", meal };
+  if (l && l !== "last_chosen" && !/^[dm]\d+$/.test(l)) return byTitle(l, req);
   if (l === "last_chosen" || l === "") {
     if (action === "meal_done") {
       const cooking = req.state.meals.filter((m) => m.status === "cooking");
@@ -72,6 +89,20 @@ function whichOne(req: InterpretRequest, question: string, filter: (m: MealRow) 
     .slice(0, 4)
     .map((t) => ({ label: t.slice(0, 200), reply: t.slice(0, 500) }));
   return { question, options };
+}
+
+export const WHICH_DAY = "Which day?";
+
+/** "Which day?" with the next few days as one-tap replies that say the whole thing again. */
+function whichDay(title: string, action: ModelOp["action"], today: string): Clarification {
+  const name = title.trim().slice(0, 120);
+  const label = (n: number) => (n === 0 ? "Today" : n === 1 ? "Tomorrow" : WEEKDAY_NAMES[weekdayOf(addDays(today, n))]);
+  const options = [0, 1, 2, 3].map((n) => {
+    const day = label(n);
+    const when = n < 2 ? day.toLowerCase() : day;
+    return { label: day, reply: action === "meal_date" ? `Move ${name} to ${when}` : `Plan ${name} for ${when}` };
+  });
+  return { question: WHICH_DAY, options };
 }
 
 export interface MealOutcome {
@@ -157,6 +188,8 @@ export function mealOperations(out: ModelOutput, req: InterpretRequest, now: Dat
   let clarification: Clarification | undefined;
   const ask = (c: Clarification) => (clarification ??= c);
 
+  const today = req.today && isIsoDay(req.today) ? req.today : now.toISOString().slice(0, 10);
+
   out.operations.forEach((op, i) => {
     if (!op.action.startsWith("meal_")) return;
     const opId = `${req.message.id}:meal${i + 1}`;
@@ -164,13 +197,23 @@ export function mealOperations(out: ModelOutput, req: InterpretRequest, now: Dat
     const t = resolve(op.meal, req, now, op.action);
     if (t.kind === "none") return void ask(whichOne(req, WHICH_MEAL));
 
+    // KOS1: the day as said, resolved here from the message's own day (never by the model).
+    // Said but not one day ("next week") → ask which day; nothing is planned on a guess.
+    const said = op.when?.trim() ?? "";
+    const date = said ? resolveDay(said, today) : null;
+    const dated = op.action === "meal_plan" || op.action === "meal_date";
+    if (dated && (said ? !date : op.action === "meal_date")) {
+      return void ask(whichDay(t.kind === "idea" ? t.name : t.meal.title, op.action, today));
+    }
+    const day = dated && date ? { date } : {};
+
     if (t.kind === "idea") {
-      if (op.action === "meal_done") return void ask(whichOne(req, WHICH_MEAL));
+      if (op.action === "meal_done" || op.action === "meal_clear_date") return void ask(whichOne(req, WHICH_MEAL));
       operations.push({ opId, type: "meal.choose", target: { ideaId: t.ideaId }, ...evidence });
       // Choosing opens a suggested recipe by default (R2), unless this idea's meal already has one.
       const existing = req.state.meals.find((m) => m.ideaId === t.ideaId && ACTIVE.has(m.status));
       if (!existing?.recipe) followUps.push({ kind: "recipe", meal: { chooseOpId: opId } });
-      if (op.action === "meal_plan") followUps.push({ kind: "meal-step", meal: { chooseOpId: opId }, to: "planned" });
+      if (dated) followUps.push({ kind: "meal-step", meal: { chooseOpId: opId }, to: "planned", ...day });
       if (op.action === "meal_start_cooking") followUps.push({ kind: "meal-step", meal: { chooseOpId: opId }, to: "cooking" });
       return;
     }
@@ -182,7 +225,13 @@ export function mealOperations(out: ModelOutput, req: InterpretRequest, now: Dat
         if (!meal.recipe) followUps.push({ kind: "recipe", meal: { mealId: meal.id } });
         return;
       case "meal_plan":
-        operations.push({ opId, type: "meal.plan", target: { mealId: meal.id }, ...evidence });
+        operations.push({ opId, type: "meal.plan", target: { mealId: meal.id }, ...day, ...evidence });
+        return;
+      case "meal_date":
+        operations.push({ opId, type: "meal.date", target: { mealId: meal.id }, date: date!, ...evidence });
+        return;
+      case "meal_clear_date":
+        operations.push({ opId, type: "meal.date", target: { mealId: meal.id }, date: null, ...evidence });
         return;
       case "meal_start_cooking":
         operations.push({ opId, type: "meal.transition", target: { mealId: meal.id }, to: "cooking", ...evidence });

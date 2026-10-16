@@ -29,6 +29,11 @@ export type InterpretRequest = {
    * shopping guess leaves them out (0054 SS6). Optional: absent = none known.
    */
   allergies?: Array<{ subject: string; who: string }>;
+  /**
+   * The message's own day, "YYYY-MM-DD", in the person's time zone (0045 KOS1): relative days
+   * ("Tuesday", "tomorrow") are resolved from it, by code. Absent → the clock's UTC date.
+   */
+  today?: string;
 };
 
 /** A meal that exists, or the one a `meal.choose` in this proposal creates (read its applied refs). */
@@ -46,7 +51,7 @@ export type MealPointer = { mealId: string } | { chooseOpId: string };
 export type TurnFollowUp =
   | { kind: "ideas"; request: string }
   | { kind: "recipe"; meal: MealPointer; refine?: string; notes?: string }
-  | { kind: "meal-step"; meal: { chooseOpId: string }; to: "planned" | "cooking" }
+  | { kind: "meal-step"; meal: { chooseOpId: string }; to: "planned" | "cooking"; date?: string }
   | { kind: "after-cooking"; mealId: string };
 
 export type InterpretResult = {
@@ -62,6 +67,13 @@ export type InterpretResult = {
    * stream event after the reply, for its "Add these to my list" button. Absent = none.
    */
   staples?: StaplesAnswer;
+  /**
+   * "Add what we need for this week's meals" / "what do we need this week?" (0045 KOS12). The
+   * turn computes the week's needs from the plan (it needs the recipes): `add` puts them on the
+   * list in the same change set (source `week-plan`); otherwise it answers with them and offers
+   * to add. Absent = neither.
+   */
+  weekNeeds?: { add: boolean };
 };
 
 export interface Interpreter {

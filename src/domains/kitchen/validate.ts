@@ -64,6 +64,7 @@ import {
   type MealChosenPayload,
   type Recipe,
   type MealNotedPayload,
+  type MealDatedPayload,
   type MealTransitionedPayload,
   type RecipeSavedPayload,
   type Review,
@@ -83,6 +84,7 @@ import {
   type StockSetPayload,
 } from "./state";
 import { matchStaple, stapleIdsForItem } from "@/shared/staples";
+import { englishDayLabel, inPlanWindow, isIsoDay, planWindow } from "@/shared/plan-dates";
 import { getProfileEntity } from "@/shared/profile/state";
 
 /** Messages longer than this with no `pastedRanges` count as pasted (backend-data.md §6). */
@@ -103,6 +105,11 @@ export interface PlanContext {
   via: Via;
   /** ISO 8601; the `recordedAt` of every event in this change set. */
   now: string;
+  /**
+   * Today's calendar date for the person making the change, in their time zone (0045 KOS1): the
+   * plan window is counted from it. Absent → `now`'s UTC date.
+   */
+  today?: string;
   changeSetId: string;
   source: ProposalSource;
   /** The chat message text, for evidence and paste checks. */
@@ -1013,8 +1020,62 @@ function stepMeal(target: OperationOf<"meal.plan">["target"], kitchen: KitchenEn
 function mealPlan(op: OperationOf<"meal.plan">, env: OpEnv): OpOutcome {
   const meal = stepMeal(op.target, env.kitchen);
   if (!meal) return reject("UNKNOWN_TARGET");
+  // KOS1: with a day, plan it for that day (or move it there if it's already in the plan).
+  if (op.date !== undefined) return planForDay(meal, op.date, env);
   if (meal.status === "planned" || meal.status === "cooking") return noChange();
   return mealTransition(meal, "planned", undefined, env, "MEAL_PLANNED");
+}
+
+/** Today for the person making the change (their time zone, 0045 KOS1); else `now`'s UTC date. */
+function todayOf(ctx: PlanContext): string {
+  return ctx.today && isIsoDay(ctx.today) ? ctx.today : ctx.now.slice(0, 10);
+}
+
+/** Receipt params for a day: the date (the UI formats it by locale, 0015) and an English label. */
+const dayParams = (date: string) => ({ date, day: englishDayLabel(date) });
+
+/**
+ * Plan a meal for a day (0045 KOS1). A chosen meal is planned and dated in one operation (one
+ * receipt line, one Undo); a planned or cooking meal just gets the day. The day must be in the
+ * plan window, yesterday to 21 days ahead, counted from the person's today.
+ */
+function planForDay(meal: Meal, date: string, env: OpEnv): OpOutcome {
+  if (meal.status === "done" || meal.status === "cancelled") {
+    return reject("INVALID_TRANSITION", { title: meal.title, from: meal.status, to: "planned" });
+  }
+  const today = todayOf(env.ctx);
+  if (!inPlanWindow(date, today)) {
+    const w = planWindow(today);
+    return reject("DATE_OUT_OF_WINDOW", { title: meal.title, ...dayParams(date), from: w.from, to: w.to });
+  }
+  const k = kitchenStream(env.ctx.kitchenId);
+  const dated = (): EventEnvelope => emit(env, k, KITCHEN_EVENT.mealDated, { mealId: meal.id, date } satisfies MealDatedPayload);
+  if (meal.status === "chosen") {
+    const planned = mealTransition(meal, "planned", undefined, env, "MEAL_PLANNED");
+    if (!planned.ok) return planned;
+    return ok([...planned.events, dated()], msg("MEAL_PLANNED_FOR", { title: meal.title, ...dayParams(date) }), planned.refs);
+  }
+  if (meal.plannedFor === date) return noChange();
+  return ok([dated()], msg("MEAL_DATE_SET", { title: meal.title, ...dayParams(date) }), [
+    { kind: "meal", id: meal.id, change: "updated" },
+  ]);
+}
+
+/** "Move the pasta to Friday", the date picker, or clearing the day (0045 KOS1). */
+function mealDate(op: OperationOf<"meal.date">, env: OpEnv): OpOutcome {
+  const meal = stepMeal(op.target, env.kitchen);
+  if (!meal) return reject("UNKNOWN_TARGET");
+  if (op.date !== null) return planForDay(meal, op.date, env);
+  if (meal.status === "done" || meal.status === "cancelled") {
+    return reject("INVALID_TRANSITION", { title: meal.title, from: meal.status, to: "planned" });
+  }
+  if (meal.plannedFor === undefined) return noChange();
+  const payload: MealDatedPayload = { mealId: meal.id, date: null };
+  return ok(
+    [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.mealDated, payload)],
+    msg("MEAL_DATE_CLEARED", { title: meal.title }),
+    [{ kind: "meal", id: meal.id, change: "updated" }],
+  );
 }
 
 function mealTransitionOp(op: OperationOf<"meal.transition">, env: OpEnv): OpOutcome {
@@ -1694,6 +1755,7 @@ function targetKeys(op: Operation): string[] {
     case "meal.choose":
       return "mealId" in op.target ? [`meal:${op.target.mealId}`] : [];
     case "meal.plan":
+    case "meal.date":
     case "meal.transition":
       return "mealId" in op.target ? [`meal:${op.target.mealId}`] : [];
     case "recipe.save":
@@ -1744,6 +1806,8 @@ function validateOperation(op: Operation, env: OpEnv): OpOutcome {
       return mealMakeAgain(op, env);
     case "meal.plan":
       return mealPlan(op, env);
+    case "meal.date":
+      return mealDate(op, env);
     case "meal.transition":
       return mealTransitionOp(op, env);
     case "recipe.save":

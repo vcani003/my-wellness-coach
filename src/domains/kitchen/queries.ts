@@ -20,6 +20,8 @@ import { actorRef, buildKitchenState, buildRecipeView } from "./read-model";
 import type { KitchenEntities } from "./state";
 import { loadKitchenEntities } from "./store";
 import { computeUseItUpSignals, type UseItUpSignal } from "./use-it-up";
+import type { WeekNeeds } from "@/contracts/week-plan";
+import { computeWeekNeeds, weekNeedsRange } from "./week-needs";
 
 export { computeUseItUpSignals, signalFor, type UseItUpSignal } from "./use-it-up";
 export { findPastMealsByTitle, listPastMeals } from "./past-meals";
@@ -88,6 +90,19 @@ export async function getRecipe(db: Queryable, scope: KitchenScope, mealId: stri
   const kitchen = await loadKitchenEntities(db, scope.kitchenId);
   const ctx = await loadReadContext(db, scope.kitchenId, kitchen);
   return buildRecipeView(kitchen, mealId, ctx);
+}
+
+/**
+ * The week's missing ingredients (0045 KOS12): the preview the Add sheet shows, and what the
+ * add uses. `today` is the person's own day (their time zone); range defaults in `weekNeedsRange`.
+ */
+export async function getWeekNeeds(
+  db: Queryable,
+  scope: KitchenScope,
+  args: { today: string; from?: string; to?: string; includeUndated?: boolean },
+): Promise<WeekNeeds> {
+  const kitchen = await loadKitchenEntities(db, scope.kitchenId);
+  return computeWeekNeeds(kitchen, weekNeedsRange(args.today, args));
 }
 
 /** Change-set summaries after `sinceVersion`, oldest first: "Since your last visit". */

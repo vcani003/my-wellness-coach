@@ -9,6 +9,7 @@ import {
   ItemCategory,
   Location,
   MealStatus,
+  PlanDate,
   Quantity,
   RestrictionKind,
   ReviewKind,
@@ -206,10 +207,28 @@ export const MealMakeAgain = z.object({
   fromMealId: Id,
 });
 
+/**
+ * Add to the plan. `date` (0045 KOS1) plans it for that day; a meal already in the plan just gets
+ * the day (like `meal.date`). Without one it stays undated, as before. The day must be in the plan
+ * window (yesterday to 21 days ahead), else DATE_OUT_OF_WINDOW.
+ */
 export const MealPlan = z.object({
   ...common,
   type: z.literal("meal.plan"),
   target: MealStepTarget,
+  date: PlanDate.optional(),
+});
+
+/**
+ * Set, change or clear a planned meal's day (0045 KOS1): "move the pasta to Friday", the date
+ * picker. `null` clears it (undated). A chosen meal given a day is planned for it, in the same
+ * change set. Done or cancelled meals → INVALID_TRANSITION.
+ */
+export const MealDate = z.object({
+  ...common,
+  type: z.literal("meal.date"),
+  target: MealStepTarget,
+  date: PlanDate.nullable(),
 });
 
 export const MealTransition = z.object({
@@ -478,6 +497,7 @@ export const Operation = z.discriminatedUnion("type", [
   MealChoose,
   MealMakeAgain,
   MealPlan,
+  MealDate,
   MealTransition,
   RecipeSave,
   ChecklistTick,

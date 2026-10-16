@@ -331,7 +331,7 @@ export function foldMealSteps(operations: Operation[], followUps: TurnFollowUp[]
     const opId = `${choose.opId}:step`;
     ops.push(
       f.to === "planned"
-        ? { opId, type: "meal.plan", target, ...(evidence ? { evidence } : {}) }
+        ? { opId, type: "meal.plan", target, ...(f.date ? { date: f.date } : {}), ...(evidence ? { evidence } : {}) }
         : { opId, type: "meal.transition", target, to: "cooking", ...(evidence ? { evidence } : {}) },
     );
   }

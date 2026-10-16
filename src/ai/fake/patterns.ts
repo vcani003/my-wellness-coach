@@ -21,7 +21,15 @@ export type FakeIntent =
   | { kind: "clearList" }
   | { kind: "throwOut"; targets: Segment[] }
   | { kind: "mealIdeas" }
-  | { kind: "meal"; action: "meal_choose" | "meal_plan" | "meal_start_cooking" | "meal_done"; label: string }
+  | {
+      kind: "meal";
+      action: "meal_choose" | "meal_plan" | "meal_start_cooking" | "meal_done" | "meal_date" | "meal_clear_date";
+      label: string;
+      /** KOS1: the day as said ("Tuesday"); resolved by code (meal-ops.ts). */
+      when?: string;
+    }
+  | { kind: "weekPlan" }
+  | { kind: "weekNeeds" }
   | { kind: "dish"; title: string; evidence: string; notes: string; have: Segment[] }
   | { kind: "category"; target: Segment; category: ItemCategory }
   | { kind: "place"; target: Segment; location: Location }
@@ -228,8 +236,36 @@ const PLAN = /\badd (?:that|it) to (?:my|the|our) (?:meal )?plan\b/i;
 const START = /\b(start(?:ing)? cooking|cooking it now)\b/i;
 const DONE = /\b(i|we) (made|cooked) it\b|\bdone cooking\b/i;
 
+/**
+ * The dated plan (0045 KOS1, KOS12): "plan the curry for Tuesday" · "plan it for tomorrow" ·
+ * "move the pasta to Friday" · "take the day off the pasta" · "what are we eating this week?" ·
+ * "add what we need for this week's meals" / "what do we need for this week?".
+ */
+const PLAN_FOR = /^\s*(?:please\s+)?(?:plan|schedule)\s+(?:the\s+|my\s+)?(.+?)\s+for\s+(.+?)\s*[.!?]*$/i;
+const MOVE_TO = /^\s*(?:please\s+)?(?:move|push|switch)\s+(?:the\s+|my\s+)?(.+?)\s+to\s+(.+?)\s*[.!?]*$/i;
+const CLEAR_DAY = /^\s*(?:please\s+)?(?:take|remove|clear)\s+the\s+(?:date|day)\s+(?:off|from)\s+(?:the\s+|my\s+)?(.+?)\s*[.!?]*$/i;
+const WEEK_PLAN = /\bwhat\b.*\b(eating|on the plan|planned|for dinner)\b.*\bweek\b/i;
+const WEEK_NEEDS = /\b(what (?:do )?we need|what's missing|ingredients|need to buy)\b.*\bweek\b/i;
+const IT = /^(it|that|this one)$/i;
+
+function planIntent(text: string): FakeIntent | null {
+  if (WEEK_NEEDS.test(text)) return { kind: "weekNeeds" };
+  if (WEEK_PLAN.test(text)) return { kind: "weekPlan" };
+  const label = (s: string) => (IT.test(s.trim()) ? "last_chosen" : s.trim());
+  const clear = CLEAR_DAY.exec(text);
+  if (clear) return { kind: "meal", action: "meal_clear_date", label: label(clear[1]) };
+  const plan = PLAN_FOR.exec(text);
+  if (plan) return { kind: "meal", action: "meal_plan", label: label(plan[1]), when: plan[2].trim() };
+  const move = MOVE_TO.exec(text);
+  // "Move the rice to the pantry" is a place, not a day (0041).
+  if (move && !placeFromWords(move[2])) return { kind: "meal", action: "meal_date", label: label(move[1]), when: move[2].trim() };
+  return null;
+}
+
 export function matchIntent(text: string): FakeIntent {
   if (UNDO.test(text)) return { kind: "undo" };
+  const planned = planIntent(text);
+  if (planned) return planned;
   if (IDEAS.test(text)) return { kind: "mealIdeas" };
   const choose = CHOOSE.exec(text);
   if (choose) return { kind: "meal", action: "meal_choose", label: `d${ORDINALS[choose[1].toLowerCase()]}` };

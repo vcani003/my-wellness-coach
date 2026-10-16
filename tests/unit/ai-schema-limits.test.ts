@@ -147,6 +147,7 @@ describe("wire shape ↔ ModelOutput (the mapping keeps behaviour unchanged)", (
           store: null,
           meal: "",
           category: { value: "none", basis: "inferred", confidence: "low" },
+          when: "",
         },
       ],
       clarification: { question: "", options: [] },

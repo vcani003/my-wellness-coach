@@ -41,6 +41,8 @@ import { guardDishIngredients, mealOperations } from "./meal-ops";
 import { itemLabels, shoppingLabels } from "./prompt";
 import { STAPLES_OFFER, STAPLE_WORDS, staplesAnswer } from "../staples";
 import { legacyStapleNames, nameKeys } from "@/shared/staples";
+import { isIsoDay } from "@/shared/plan-dates";
+import { WEEK_NEEDS_ADD, weekPlanAnswer } from "../week-plan";
 
 type MetaFact = { basis: Fact<unknown>["basis"]; confidence: Fact<unknown>["confidence"] };
 
@@ -404,12 +406,20 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest, now: 
     }
   }
 
+  // "What are we eating this week?" (0045 KOS1): from the plan, by code.
+  if (out.generate?.what === "week_plan" && out.kind !== "clarify" && out.operations.length === 0) {
+    const today = req.today && isIsoDay(req.today) ? req.today : now.toISOString().slice(0, 10);
+    return { ok: true, result: { kind: "answer", proposal: null, reply: weekPlanAnswer(req.state, today) } };
+  }
+  // "Add what we need for this week's meals" (KOS12): the turn computes them (it needs recipes).
+  const weekNeeds = out.generate?.what === "week_needs" ? { weekNeeds: { add: WEEK_NEEDS_ADD.test(req.message.text) } } : {};
+
   // Meal actions and "what can I make?" / "no oven" (0005, 0013): resolved by code.
   const meals = mealOperations(out, req, now);
   const followUps = meals.followUps.length ? { followUps: meals.followUps } : {};
 
   if (out.kind === "answer" && !meals.clarification && meals.operations.length === 0) {
-    return { ok: true, result: { kind: "answer", proposal: null, reply, ...followUps } };
+    return { ok: true, result: { kind: "answer", proposal: null, reply, ...followUps, ...weekNeeds } };
   }
 
   const clarifyOnly = (c: { question: string; options: Array<{ label: string; reply: string }> }, text: string): ProposalOutcome => {
@@ -457,7 +467,9 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest, now: 
   if (meals.clarification && operations.length === 0) return clarifyOnly(meals.clarification, meals.clarification.question);
 
   if (operations.length === 0) {
-    if (meals.followUps.length) return { ok: true, result: { kind: "answer", proposal: null, reply, ...followUps } };
+    if (meals.followUps.length || "weekNeeds" in weekNeeds) {
+      return { ok: true, result: { kind: "answer", proposal: null, reply, ...followUps, ...weekNeeds } };
+    }
     return { ok: true, result: { kind: "answer", proposal: null, reply: NOTHING_TO_CHANGE_REPLY } };
   }
 
@@ -467,5 +479,5 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest, now: 
     ...(meals.clarification ? { clarification: meals.clarification } : {}),
   });
   if (!parsed.success) return { ok: false, reason: `proposal failed the contract: ${parsed.error.message}` };
-  return { ok: true, result: { kind: "change", proposal: parsed.data, reply, ...followUps } };
+  return { ok: true, result: { kind: "change", proposal: parsed.data, reply, ...followUps, ...weekNeeds } };
 }

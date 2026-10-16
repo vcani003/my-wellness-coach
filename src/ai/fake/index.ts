@@ -13,7 +13,9 @@
  *   "I was thinking a <dish>, with … I have X" / "I want to make <dish>" (MI1) ·
  *   with a recipe open: "I'm using X too", "no X", "use 3 X instead of 2", "skip step 2", "make it …" ·
  *   staples (0054): "X is a staple [from Store]", "we always keep X", "X isn't a staple any more",
- *   "what staples do I need?" / "restock", and "yes" to its own "remember these as your staples?"
+ *   "what staples do I need?" / "restock", and "yes" to its own "remember these as your staples?" ·
+ *   the dated plan (0045 KOS1, KOS12): "plan the curry for Tuesday", "move the pasta to Friday",
+ *   "take the day off the pasta", "what are we eating this week?", "add what we need for this week's meals"
  * and answers anything else politely with no changes. Everything it proposes still goes through
  * the real backend validate → apply path. The AI specialist replaces this folder (ai.md §9).
  */
@@ -27,6 +29,8 @@ import { mentionsAllergen } from "@/shared/profile/allergens";
 import { matchStaple } from "@/shared/staples";
 import { standardName } from "@/shared/text";
 import { STAPLES_OFFER, staplesAnswer } from "../staples";
+import { WEEK_NEEDS_ADD, weekPlanAnswer } from "../week-plan";
+import { isIsoDay } from "@/shared/plan-dates";
 import { matchIntent, splitList, type Segment } from "./patterns";
 
 /** The recipe changes the fake understands (fake/meals.ts `fakeEdits`), plus "make it vegetarian" (a rewrite). */
@@ -211,7 +215,7 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
             generate: null,
             dish: null,
             operations: [
-              { action: intent.action, meal: intent.label, evidence: req.message.text.trim(), item: null, name: null, quantity: null, location: null, frozen: null, stock: null, amountUsed: null, batch: null, store: null },
+              { action: intent.action, meal: intent.label, evidence: req.message.text.trim(), item: null, name: null, quantity: null, location: null, frozen: null, stock: null, amountUsed: null, batch: null, store: null, when: intent.when ?? null },
             ],
           };
           const m = mealOperations(out, req, new Date());
@@ -219,9 +223,24 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
           if (m.clarification) {
             return { kind: "clarify", reply: m.clarification.question, proposal: { ...base, operations: [], clarification: m.clarification } };
           }
-          const replies = { meal_choose: "Good choice. Here's the recipe.", meal_plan: "Added it to your plan.", meal_start_cooking: "Enjoy cooking!", meal_done: "Enjoy! Let me know what's left." };
+          const replies = {
+            meal_choose: "Good choice. Here's the recipe.",
+            meal_plan: intent.when ? "Done, it's on the plan." : "Added it to your plan.",
+            meal_start_cooking: "Enjoy cooking!",
+            meal_done: "Enjoy! Let me know what's left.",
+            meal_date: "Moved it.",
+            meal_clear_date: "Done: no day for it now.",
+          };
           return { kind: "change", reply: replies[intent.action], proposal: { ...base, operations: m.operations }, followUps: m.followUps };
         }
+        case "weekPlan": {
+          // KOS1: from the plan, by code (the same answer as the real interpreter).
+          const today = req.today && isIsoDay(req.today) ? req.today : new Date().toISOString().slice(0, 10);
+          return { kind: "answer", proposal: null, reply: weekPlanAnswer(req.state, today) };
+        }
+        case "weekNeeds":
+          // KOS12: the turn reads the week's needs and adds them (or lists them, for a question).
+          return { kind: "answer", proposal: null, reply: "Let me check this week's meals.", weekNeeds: { add: WEEK_NEEDS_ADD.test(req.message.text) } };
         case "dish": {
           // MI1: what they say they have goes into the kitchen, then the dish is chosen directly
           // through the same code as the real interpreter (meal-ops.ts) and its recipe follows.

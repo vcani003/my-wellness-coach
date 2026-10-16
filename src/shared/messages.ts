@@ -39,6 +39,10 @@ const TEMPLATES: Record<string, string> = {
   ITEM_DEFROSTED: "{name}: defrosted",
   MEAL_CHOSEN: "Chose {title}",
   MEAL_PLANNED: "Added {title} to the meal plan",
+  // dated plan (0045 KOS1). `date` is "YYYY-MM-DD" (the UI formats it by locale, 0015); `day` is the English label.
+  MEAL_PLANNED_FOR: "Planned {title} for {day}",
+  MEAL_DATE_SET: "Moved {title} to {day}",
+  MEAL_DATE_CLEARED: "{title}: no day set",
   MEAL_STATUS: "{title}: {status}",
   MEAL_NOTE_SAVED: "Saved a note on {title}",
   RECIPE_SAVED: "Saved the recipe for {title}",
@@ -96,6 +100,10 @@ const TEMPLATES: Record<string, string> = {
   NOT_TICKED: "{name} isn't ticked yet",
   ALREADY_MAKING: "{title} is already in your plan",
   RECIPE_LOCKED: "{title} is finished, so its recipe stays as it was. Make it again to change it.",
+  // 0045 KOS1: `from` / `to` are the window's dates.
+  DATE_OUT_OF_WINDOW: "{day} is outside the plan. Pick a day from yesterday to 3 weeks ahead.",
+  // 0045 KOS12: nothing missing for the meals in that range (or none chosen).
+  WEEK_NEEDS_NONE: "Nothing to add: you have what those meals need",
   // errors
   INVALID_PROPOSAL: "I couldn't understand that change, so nothing changed",
   SAVE_FAILED: "I couldn't save that, so nothing changed",

@@ -31,8 +31,11 @@ import {
   getLatestIdeaSet,
   getMealProfileContext,
   getRecipe,
+  getWeekNeeds,
   wasApplied,
 } from "@/domains/kitchen/queries";
+import { todayIn } from "@/shared/plan-dates";
+import { weekNeedsAddedReply, weekNeedsAnswer } from "./week-plan";
 import type { KitchenScope } from "@/shared/membership";
 import { msg } from "@/shared/messages";
 import {
@@ -44,7 +47,14 @@ import {
   toPending,
   type PendingBulkRemove,
 } from "./bulk-remove";
-import { foldMealSteps, recipeParts, recipeStep, runFollowUps, withoutRecipeAnnouncement } from "./follow-ups";
+import {
+  FOLLOW_UP_FAILED_REPLY,
+  foldMealSteps,
+  recipeParts,
+  recipeStep,
+  runFollowUps,
+  withoutRecipeAnnouncement,
+} from "./follow-ups";
 import type { InterpretRequest, Interpreter } from "./interpreter";
 import { notConfiguredMealAI, type MealAI } from "./meals";
 import { replyFromReceipt } from "./receipt-reply";
@@ -58,6 +68,13 @@ export interface ChatTurnInput {
    * clients keep working.
    */
   history?: InterpretRequest["history"];
+  /**
+   * The person's device time zone (IANA), for "today" in the dated plan (0045 KOS1): relative days
+   * and the plan window count from it. Absent or unknown → UTC.
+   */
+  timeZone?: string;
+  /** Injected clock for tests. */
+  now?: Date;
 }
 
 export interface ChatTurnDeps {
@@ -94,6 +111,8 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
     yield { type: "status", phase: "interpreting" };
 
     const state = await getKitchenState(db, scope);
+    // The message's own day in the person's time zone (0045 KOS1).
+    const today = todayIn(input.timeZone, input.now ?? new Date());
     // The idea cards this user was last shown, in card order, so "the second one" resolves.
     const shown = await bestEffort("load idea cards", null, () => getLatestIdeaSet(db, scope));
     // Every member's allergies (0019), so a general staples guess leaves them out (0054 SS6).
@@ -113,10 +132,41 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
       history,
       ...(shown ? { ideas: shown.ideas.map((i) => ({ ideaId: i.ideaId, name: i.name })) } : {}),
       ...(allergies.length ? { allergies } : {}),
+      today,
     };
     const interpretation = await interpreter.interpret(req);
     const folded = foldMealSteps(interpretation.proposal?.operations ?? [], interpretation.followUps ?? [], input.text);
-    const proposal = interpretation.proposal ? { ...interpretation.proposal, operations: folded.operations } : null;
+    let proposal = interpretation.proposal ? { ...interpretation.proposal, operations: folded.operations } : null;
+
+    // KOS12: "add what we need for this week's meals" goes on the list in the same change set;
+    // "what do we need this week?" is answered from the same list (code, never the model).
+    const weekNeeds = interpretation.weekNeeds
+      ? await bestEffort("read the week's needs", null, () => getWeekNeeds(db, scope, { today }))
+      : null;
+    if (interpretation.weekNeeds?.add && weekNeeds) {
+      const evidence = input.text.trim().slice(0, 2000);
+      const adds = weekNeeds.items
+        .filter((i) => !i.onList)
+        .slice(0, 50)
+        .map((i, n) => ({
+          opId: `${input.clientMessageId}:week${n + 1}`,
+          type: "shopping.add" as const,
+          source: "week-plan" as const,
+          evidence,
+          fields: { name: { value: i.name, basis: "said" as const, confidence: "high" as const } },
+        }));
+      if (adds.length) {
+        proposal = proposal
+          ? { ...proposal, operations: [...proposal.operations, ...adds].slice(0, 50) }
+          : {
+              proposalId: input.clientMessageId,
+              kitchenId: scope.kitchenId,
+              basedOnVersion: state.version,
+              source: { via: "chat" as const, messageId: input.clientMessageId },
+              operations: adds,
+            };
+      }
+    }
 
     // KOS16: more than 5 removals are held and asked about, never applied here.
     const bulk = proposal && proposal.operations.length > 0 ? bulkConfirmFor(proposal.operations, state) : null;
@@ -158,7 +208,7 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
           kitchenId: scope.kitchenId,
           source: { via: "chat", messageId: input.clientMessageId },
         },
-        { messageText: input.text },
+        { messageText: input.text, timeZone: input.timeZone, ...(input.now ? { now: input.now } : {}) },
       );
       if (!outcome.ok) {
         yield { type: "error", reason: outcome.error.reason, changed: false, retryable: outcome.error.retryable };
@@ -174,6 +224,16 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
     let reply = interpretation.reply;
     if (result && (result.rejected.length > 0 || result.applied.length === 0)) {
       reply = interpreter.reword ? await interpreter.reword(req, interpretation, result) : replyFromReceipt(result);
+    }
+    if (interpretation.weekNeeds) {
+      // KOS12: written by code from the week's needs and what saved.
+      const weekLine = !weekNeeds
+        ? FOLLOW_UP_FAILED_REPLY
+        : interpretation.weekNeeds.add
+          ? weekNeedsAddedReply(weekNeeds, result)
+          : weekNeedsAnswer(weekNeeds);
+      const others = (interpretation.proposal?.operations.length ?? 0) > 0;
+      reply = others && reply ? `${reply} ${weekLine}` : weekLine;
     }
     reply = withoutRecipeAnnouncement(reply, folded.followUps);
     if (reply) yield { type: "text", delta: reply };
@@ -253,7 +313,7 @@ async function* answerHeld(
           source: { via: "chat", messageId: held.sourceMessageId },
           operations: held.operations,
         },
-        { messageText: held.messageText },
+        { messageText: held.messageText, timeZone: input.timeZone, ...(input.now ? { now: input.now } : {}) },
       );
       if (!outcome.ok) {
         yield { type: "error", reason: outcome.error.reason, changed: false, retryable: outcome.error.retryable };

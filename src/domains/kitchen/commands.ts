@@ -22,6 +22,7 @@ import type { MealIdea, UpdateKitchenPrompt } from "@/contracts/stream";
 import { standardName } from "@/shared/text";
 import { legacyStapleNames, stapleIdsForItem } from "@/shared/staples";
 import { quantityFromText } from "@/shared/quantity";
+import { todayIn } from "@/shared/plan-dates";
 import { msg } from "@/shared/messages";
 import { listMembers, type KitchenScope } from "@/shared/membership";
 import { appendEvents, eventExistsInStreams, loadChangeSetEvents, loadStream } from "@/shared/events/store";
@@ -32,7 +33,8 @@ import { getKitchenEntity, replay, type Item } from "./state";
 import { openBatches, type Batch } from "./batches";
 import { loadKitchenEntities, persistKitchenEntities, replaceKitchenProjections } from "./store";
 import { SOFT_SUMMARY_CODES, planProposal, touchedKeys, type RevertPlan } from "./validate";
-import { getRecipe, ideaFlags, itemNames, readKitchenState } from "./queries";
+import { getRecipe, getWeekNeeds, ideaFlags, itemNames, readKitchenState } from "./queries";
+import { isRecipeNeed } from "@/contracts/kitchen-state";
 import { PLACES_SORT_ACTION, placesSortProposalId, planPlacesSort, sortedReply, type PlannedMove } from "./sort-places";
 
 export type ApplyOutcome =
@@ -44,6 +46,11 @@ export interface ApplyOptions {
   messageText?: string;
   /** Injected clock for tests. */
   now?: Date;
+  /**
+   * The person's IANA time zone (their device's), for "today" in the dated plan (0045 KOS1). Absent
+   * or unknown → UTC.
+   */
+  timeZone?: string;
 }
 
 type StoredResult = Omit<ApplyResultT, "state">;
@@ -179,12 +186,14 @@ export async function applyProposedChange(
       }
 
       const changeSetId = randomUUID();
-      const now = (options.now ?? new Date()).toISOString();
+      const clock = options.now ?? new Date();
+      const now = clock.toISOString();
       const plan = planProposal(proposal, {
         kitchenId: scope.kitchenId,
         actorId: scope.userId,
         via: proposal.source.via,
         now,
+        today: todayIn(options.timeZone, clock),
         changeSetId,
         source: proposal.source,
         messageText: options.messageText,
@@ -351,14 +360,19 @@ export interface TapArgs {
   basedOnVersion: number;
 }
 
-function tap(db: Db, scope: KitchenScope, args: TapArgs, action: string, operations: Operation[]) {
-  return applyProposedChange(db, scope, {
-    proposalId: args.tapId,
-    kitchenId: scope.kitchenId,
-    basedOnVersion: args.basedOnVersion,
-    source: { via: "button", action },
-    operations,
-  });
+function tap(db: Db, scope: KitchenScope, args: TapArgs, action: string, operations: Operation[], options: ApplyOptions = {}) {
+  return applyProposedChange(
+    db,
+    scope,
+    {
+      proposalId: args.tapId,
+      kitchenId: scope.kitchenId,
+      basedOnVersion: args.basedOnVersion,
+      source: { via: "button", action },
+      operations,
+    },
+    options,
+  );
 }
 
 const said = <T>(value: T) => ({ value, basis: "said" as const, confidence: "high" as const });
@@ -754,8 +768,67 @@ export function chooseMealTap(db: Db, scope: KitchenScope, args: TapArgs & ({ id
   return tap(db, scope, args, "meal.choose", [{ opId: "choose", type: "meal.choose", target }]);
 }
 
-export function planMeal(db: Db, scope: KitchenScope, args: TapArgs & { mealId: string }) {
-  return tap(db, scope, args, "meal.plan", [{ opId: "plan", type: "meal.plan", target: { mealId: args.mealId } }]);
+/**
+ * Add to plan. With `date` (0045 KOS1) it's planned for that day; `timeZone` is the person's own,
+ * for the plan window (yesterday to 21 days ahead).
+ */
+export function planMeal(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { mealId: string; date?: string; timeZone?: string; now?: Date },
+) {
+  return tap(
+    db,
+    scope,
+    args,
+    "meal.plan",
+    [{ opId: "plan", type: "meal.plan", target: { mealId: args.mealId }, ...(args.date ? { date: args.date } : {}) }],
+    { timeZone: args.timeZone, now: args.now },
+  );
+}
+
+/**
+ * The date picker on a planned meal (0045 KOS1): set or change its day, or `null` to clear it.
+ * A chosen meal given a day is planned for it. One change set, one Undo.
+ */
+export function setMealDay(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { mealId: string; date: string | null; timeZone?: string; now?: Date },
+) {
+  return tap(
+    db,
+    scope,
+    args,
+    "meal.date",
+    [{ opId: "date", type: "meal.date", target: { mealId: args.mealId }, date: args.date }],
+    { timeZone: args.timeZone, now: args.now },
+  );
+}
+
+/**
+ * "Add the week's missing ingredients to the list" (0045 KOS12): the planned meals' Need items
+ * in the range (`getWeekNeeds`), merged, go on the list in **one** change set (one Undo) with source
+ * `week-plan`, through `addShoppingItems` (the Restock pattern, 0054). `names` (standard names or as
+ * shown) limits it to the ones chosen on the preview; without it, everything not already on the
+ * list. Nothing to add → WEEK_NEEDS_NONE, nothing changed.
+ */
+export async function addWeekNeedsToShoppingList(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { timeZone?: string; now?: Date; from?: string; to?: string; includeUndated?: boolean; names?: string[] },
+): Promise<ApplyOutcome> {
+  try {
+    const today = todayIn(args.timeZone, args.now ?? new Date());
+    const needs = await getWeekNeeds(db, scope, { today, from: args.from, to: args.to, includeUndated: args.includeUndated });
+    const chosen = args.names ? new Set(args.names.map(standardName)) : null;
+    const items = needs.items.filter((i) => (chosen ? chosen.has(i.standardName) : !i.onList)).slice(0, 50);
+    if (items.length === 0) return { ok: false, error: { reason: msg("WEEK_NEEDS_NONE"), retryable: false } };
+    return addShoppingItems(db, scope, { ...args, source: "week-plan", items: items.map((i) => ({ name: i.name })) });
+  } catch (error) {
+    console.error("kitchen.apply: couldn't add the week's needs", { error });
+    return { ok: false, error: { reason: msg("SAVE_FAILED"), retryable: true } };
+  }
 }
 
 /**
@@ -835,8 +908,9 @@ export async function addRecipeNeedsToShoppingList(
     const recipe = await getRecipe(db, scope, args.mealId);
     if (!recipe) return { ok: false, error: { reason: msg("UNKNOWN_TARGET"), retryable: false } };
     const chosen = args.names ? new Set(args.names.map(standardName)) : null;
+    // The Need group exactly as the recipe screen shows it (`isRecipeNeed`, shared with KOS12).
     const needs = recipe.ingredients
-      .filter((i) => !i.item && !i.basic)
+      .filter(isRecipeNeed)
       .filter((i) => !chosen || chosen.has(standardName(i.name)))
       .slice(0, 50);
     return addShoppingItems(db, scope, { ...args, source: "recipe", items: needs.map((i) => ({ name: i.name })) });

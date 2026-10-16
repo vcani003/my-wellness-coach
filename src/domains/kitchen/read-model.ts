@@ -258,6 +258,7 @@ export function buildRecipeView(
       .filter((r) => r.mealId === mealId)
       .sort((a, b) => b.version - a.version)[0];
   if (!recipe) return null;
+  const finished = meal?.status === "done" || meal?.status === "cancelled";
   try {
     const view = {
       id: recipe.id,
@@ -267,10 +268,15 @@ export function buildRecipeView(
       text: recipe.text,
       ingredients: recipe.ingredients.map((ing) => {
         let item: { id: string; name: string } | { id: string; missing: true } | undefined;
-        if (ing.itemId) {
-          const found = kitchen.items[ing.itemId];
-          item = found ? { id: found.id, name: found.name.value } : { id: ing.itemId, missing: true };
+        const linked = ing.itemId ? kitchen.items[ing.itemId] : undefined;
+        if (ing.itemId && !linked) {
+          item = { id: ing.itemId, missing: true };
+        } else if (linked && (finished || linked.stock?.value !== "out")) {
+          // A Done or cancelled recipe is a record (0040 A2): it keeps the item it was cooked with.
+          item = { id: linked.id, name: linked.name.value };
         } else if (!ing.basic) {
+          // Not linked, or (a live meal) linked to an item that's Out since (0011: Out isn't in
+          // the kitchen): a current item of that name, else Need (0045 KOS12 found the Out case).
           const m = resolveItem({ name: ing.name }, kitchen);
           if (m.kind === "found" && m.item.stock?.value !== "out") item = { id: m.item.id, name: m.item.name.value };
         }

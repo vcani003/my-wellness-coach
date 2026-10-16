@@ -30,6 +30,8 @@ export interface ProposeOptions {
   staleKeys?: Set<string>;
   knownEventIds?: Set<string>;
   reverts?: Map<string, RevertPlan>;
+  /** The person's today (0045 KOS1); absent = the clock's UTC date (2026-10-14). */
+  today?: string;
 }
 
 export class MemoryKitchen {
@@ -71,6 +73,7 @@ export class MemoryKitchen {
       actorId: opts.actor ?? "vero",
       via,
       now,
+      ...(opts.today ? { today: opts.today } : {}),
       changeSetId: `cs-${n}`,
       source: proposal.source,
       messageText: opts.messageText,
