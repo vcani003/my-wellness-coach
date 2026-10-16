@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 /**
  * Stock levels on the Kitchen place (0045 KOS4, 0055): the labels (Plenty / Some left / Running
- * low; unknown shows nothing), the row's ⋯ "How much is left?" menu, the "What changed" receipt
- * with Undo under the row, the Out ghost, the Low/Out "Add rice to my list" offer (SL3), failures,
- * and the control being off while offline.
+ * low; unknown shows nothing), "How much is left?" in the item's edit sheet (KOS3 took it over
+ * from the ⋯ menu), the "What changed" receipt with Undo, the Out ghost, the Low/Out "Add rice to
+ * my list" offer (SL3), failures, and the control being off while offline.
  */
 import "@testing-library/jest-dom/vitest";
 import { cleanup, screen, waitFor, within } from "@testing-library/react";
@@ -87,10 +87,11 @@ function show(initial: KitchenState, actions: Partial<KitchenActions> = {}, stat
 }
 
 const row = (id: string) => document.querySelector<HTMLElement>(`[data-entity-id="${id}"]`)!;
-const more = (name = "Rice") => screen.getByRole("button", { name: `More for ${name}` });
-async function choose(level: string, name = "Rice") {
-  await userEvent.click(more(name));
-  await userEvent.click(await screen.findByRole("menuitemradio", { name: level }));
+const edit = (name = "rice") => screen.getByRole("button", { name: `Edit ${name}` });
+const levels = () => within(screen.getByRole("dialog")).getByRole("group", { name: "How much is left?" });
+async function choose(level: string, name = "rice") {
+  await userEvent.click(edit(name));
+  await userEvent.click(within(levels()).getByRole("button", { name: level }));
 }
 
 describe("Stock level labels", () => {
@@ -115,43 +116,50 @@ describe("Stock level labels", () => {
     }
   });
 
-  it("labels each batch in the batch list", async () => {
+  it("labels each batch in the sheet's batch choice", async () => {
     const b = (id: string, stock?: "plenty" | "low"): BatchRow => ({ id, addedAt: T0, createdAt: T0, createdBy: VERO, updatedAt: T0, updatedBy: VERO, ...(stock ? { stock: said(stock) } : {}) });
     show(kitchen([rice({ batches: [b("b1", "low"), b("b2", "plenty")] })]));
-    await userEvent.click(screen.getByRole("button", { name: /^Rice/ }));
-    const list = screen.getByRole("list", { name: "Rice: batches, oldest first" });
-    const [older, newer] = within(list).getAllByRole("listitem");
-    expect(within(older).getByText("Running low")).toBeInTheDocument();
-    expect(within(newer).getByText("Plenty")).toBeInTheDocument();
+    await userEvent.click(edit());
+    const [, older, newer] = within(screen.getByRole("radiogroup", { name: "Which batch?" })).getAllByRole("radio");
+    expect(older).toHaveAccessibleName(/Running low/);
+    expect(newer).toHaveAccessibleName(/Plenty/);
   });
 });
 
-describe("Setting a level from the row's ⋯ menu", () => {
-  it("offers Plenty · Some left · Running low · Out as radio items, the current one checked", async () => {
+describe("Setting a level in the edit sheet", () => {
+  it("offers Plenty · Some left · Running low · Out as toggle buttons, the current one pressed", async () => {
     show(kitchen([rice({ stock: said("some" as const) })]));
-    await userEvent.click(more());
-    const group = await screen.findByRole("group", { name: "How much is left?" });
-    const items = within(group).getAllByRole("menuitemradio");
-    expect(items.map((i) => i.textContent)).toEqual(["Plenty", "Some left", "Running low", "Out"]);
-    expect(within(group).getByRole("menuitemradio", { name: "Some left" })).toHaveAttribute("aria-checked", "true");
-    expect(within(group).getByRole("menuitemradio", { name: "Plenty" })).toHaveAttribute("aria-checked", "false");
+    await userEvent.click(edit());
+    const buttons = within(levels()).getAllByRole("button");
+    expect(buttons.map((i) => i.textContent)).toEqual(["Plenty", "Some left", "Running low", "Out"]);
+    expect(within(levels()).getByRole("button", { name: "Some left" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(levels()).getByRole("button", { name: "Plenty" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("works from the keyboard and sets the whole item: receipt under the row, focus on it, Undo named for the change", async () => {
+  it("works from the keyboard and sets the whole item at once: receipt in the sheet and under the row, focus stays put, announced", async () => {
     const initial = kitchen([rice()]);
     const setStockLevel = vi.fn(async (_id: string, level: StockLevel) => ok(levelResult(initial, level)));
     show(initial, { setStockLevel });
-    more().focus();
+    edit().focus();
     await userEvent.keyboard("{Enter}");
-    await screen.findByRole("group", { name: "How much is left?" });
-    await userEvent.keyboard("{ArrowDown}{Enter}");
+    const sheet = await screen.findByRole("dialog", { name: "Edit rice" });
+    const plenty = within(levels()).getByRole("button", { name: "Plenty" });
+    plenty.focus();
+    await userEvent.keyboard("{Enter}");
     await waitFor(() => expect(setStockLevel).toHaveBeenCalledTimes(1));
-    // Without a batch: the whole item (0055).
-    expect(setStockLevel.mock.calls[0]).toEqual(["rice", expect.any(String)]);
-    const receipt = await within(row("rice")).findByRole("region", { name: "What changed" });
-    expect(receipt).toHaveTextContent(/Rice: (plenty|some left)/);
-    await waitFor(() => expect(row("rice").querySelector("[data-level-note]")).toHaveFocus());
-    expect(within(receipt).getByRole("button", { name: /^Undo: Rice: / })).toBeInTheDocument();
+    // Without a batch: the whole item (0055), based on the version the sheet opened at.
+    expect(setStockLevel.mock.calls[0]).toEqual(["rice", "plenty", undefined, 1]);
+    const receipt = await within(sheet).findByRole("region", { name: "What changed" });
+    expect(receipt).toHaveTextContent("Rice: plenty");
+    expect(within(receipt).getByRole("button", { name: "Undo: Rice: plenty" })).toBeInTheDocument();
+    expect(within(levels()).getByRole("button", { name: "Plenty" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(levels()).getByRole("button", { name: "Plenty" })).toHaveFocus();
+    await waitFor(() => expect(screen.getByTestId("announcer")).toHaveTextContent("Done. Rice: plenty"));
+    // Close: back on the row, its receipt under it.
+    await userEvent.click(within(sheet).getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(within(row("rice")).getByRole("region", { name: "What changed" })).toHaveTextContent("Rice: plenty");
+    await waitFor(() => expect(edit()).toHaveFocus());
   });
 
   it("Running low shows the label, the receipt and 'Add rice to my list', which adds it once tapped", async () => {
@@ -159,7 +167,7 @@ describe("Setting a level from the row's ⋯ menu", () => {
     const addToList = vi.fn(async () => ok({ ...levelResult(initial, "low"), changeSetId: "cs-list", state: { ...levelResult(initial, "low").state, shoppingList: [listRow("rice")] } }));
     show(initial, { setStockLevel: async (_id, level) => ok(levelResult(initial, level)), addToList });
     await choose("Running low");
-    const receipt = await within(row("rice")).findByRole("region", { name: "What changed" });
+    const receipt = await within(screen.getByRole("dialog")).findByRole("region", { name: "What changed" });
     expect(receipt).toHaveTextContent("Rice: running low");
     expect(within(row("rice")).getByText("Running low", { selector: "[data-stock]" })).toBeInTheDocument();
 
@@ -173,14 +181,14 @@ describe("Setting a level from the row's ⋯ menu", () => {
     const initial = kitchen([rice()]);
     show(initial, { setStockLevel: async (_id, level) => ok(levelResult(initial, level)) });
     await choose("Plenty");
-    await within(row("rice")).findByRole("region", { name: "What changed" });
+    await within(screen.getByRole("dialog")).findByRole("region", { name: "What changed" });
     expect(screen.queryByRole("button", { name: /to my list/ })).not.toBeInTheDocument();
     cleanup();
 
     const onList = { ...kitchen([rice()]), shoppingList: [listRow("rice")] };
     show(onList, { setStockLevel: async (_id, level) => ok(levelResult(onList, level)) });
     await choose("Running low");
-    await within(row("rice")).findByRole("region", { name: "What changed" });
+    await within(screen.getByRole("dialog")).findByRole("region", { name: "What changed" });
     expect(screen.queryByRole("button", { name: /to my list/ })).not.toBeInTheDocument();
   });
 
@@ -192,7 +200,19 @@ describe("Setting a level from the row's ⋯ menu", () => {
     expect(screen.queryByRole("region", { name: "What changed" })).not.toBeInTheDocument();
   });
 
-  it("Out keeps the row in place as Out (no menu) with the receipt; Undo brings it back", async () => {
+  it("with a batch picked, sets that batch only (KOS4-e)", async () => {
+    const b = (id: string): BatchRow => ({ id, addedAt: T0, createdAt: T0, createdBy: VERO, updatedAt: T0, updatedBy: VERO });
+    const initial = kitchen([rice({ batches: [b("b1"), b("b2")] })]);
+    const setStockLevel = vi.fn(async (_id: string, level: StockLevel) => ok(levelResult(initial, level)));
+    show(initial, { setStockLevel });
+    await userEvent.click(edit());
+    const [, , newer] = within(screen.getByRole("radiogroup", { name: "Which batch?" })).getAllByRole("radio");
+    await userEvent.click(newer);
+    await userEvent.click(within(levels()).getByRole("button", { name: "Running low" }));
+    await waitFor(() => expect(setStockLevel).toHaveBeenCalledWith("rice", "low", "b2", 1));
+  });
+
+  it("Out closes the sheet and keeps the row in place as Out (no edit button) with the receipt, focus on Undo; Undo brings it back", async () => {
     const initial = kitchen([rice(), item("salt", "salt", { location: said("pantry" as const) })]);
     const out = levelResult(initial, "out");
     const undo = vi.fn(async () => ok({ ...out, changeSetId: "cs-undo", state: { ...initial, version: 3 } }));
@@ -205,8 +225,10 @@ describe("Setting a level from the row's ⋯ menu", () => {
       return r;
     });
     expect(within(ghost).getByText("Out", { selector: "[data-stock]" })).toBeInTheDocument();
-    expect(within(ghost).queryByRole("button", { name: "More for Rice" })).not.toBeInTheDocument();
+    expect(within(ghost).queryByRole("button", { name: "Edit rice" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
     const receipt = within(ghost).getByRole("region", { name: "What changed" });
+    await waitFor(() => expect(within(receipt).getByRole("button", { name: "Undo: Rice: out" })).toHaveFocus());
     expect(receipt).toHaveTextContent("Rice: out");
     // Out offers the list too (SL3).
     expect(within(receipt).getByRole("button", { name: "Add rice to my list" })).toBeInTheDocument();
@@ -215,39 +237,41 @@ describe("Setting a level from the row's ⋯ menu", () => {
     expect(undo).toHaveBeenCalledWith("cs-out");
     await waitFor(() => expect(row("rice")).not.toHaveAttribute("data-change", "gone"));
     expect(within(row("rice")).getByText("Undone")).toBeInTheDocument();
-    expect(more()).toBeInTheDocument();
+    expect(edit()).toBeInTheDocument();
     expect(within(row("rice")).queryByRole("button", { name: "Add rice to my list" })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("announcer")).toHaveTextContent("Undone: Rice: out"));
-    expect(row("rice").querySelector("[data-level-note]")).toHaveFocus();
+    expect(row("rice").querySelector("[data-item-note]")).toHaveFocus();
   });
 
   it("a refused Undo says so in place", async () => {
     const initial = kitchen([rice()]);
     show(initial, { setStockLevel: async (_id, level) => ok(levelResult(initial, level)) });
     await choose("Some left");
-    const receipt = await within(row("rice")).findByRole("region", { name: "What changed" });
+    const receipt = await within(screen.getByRole("dialog")).findByRole("region", { name: "What changed" });
     await userEvent.click(within(receipt).getByRole("button", { name: /^Undo/ }));
     expect(await within(receipt).findByText("Can't undo this now. Tell me what to fix.")).toBeInTheDocument();
   });
 
-  it("a failed save says nothing changed and keeps the row as it was (0018)", async () => {
+  it("a failed save says nothing changed in the sheet and keeps the row as it was (0018)", async () => {
     show(kitchen([rice()]), { setStockLevel: async () => Promise.reject(new Error("network")) });
     await choose("Running low");
-    expect(await screen.findByText("I couldn't save that, so nothing changed. Try again.")).toBeInTheDocument();
+    expect(await within(screen.getByRole("dialog")).findByRole("alert")).toHaveTextContent("I couldn't save that, so nothing changed.");
     expect(row("rice").querySelector("[data-stock]")).toBeNull();
   });
 });
 
 describe("Offline", () => {
-  it("turns ⋯ off while the kitchen is stale (offline), with the place's offline line", () => {
+  it("while the kitchen is stale (offline), the sheet opens to read, with the levels off and the place's offline line", async () => {
     show(kitchen([rice()]), {}, "stale");
-    expect(more()).toBeDisabled();
     expect(screen.getByText(/^Offline · showing your kitchen as of/)).toBeInTheDocument();
+    await userEvent.click(edit());
+    for (const b of within(levels()).getAllByRole("button")) expect(b).toBeDisabled();
   });
 
-  it("turns ⋯ off when the phone has no connection", () => {
+  it("the levels are off when the phone has no connection", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     show(kitchen([rice()]));
-    expect(more()).toBeDisabled();
+    await userEvent.click(edit());
+    expect(within(levels()).getByRole("button", { name: "Running low" })).toBeDisabled();
   });
 });

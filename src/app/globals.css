@@ -63,6 +63,7 @@
   --color-place-fridge: #e3f0ff; /* place tints (0048): sky */
   --color-place-freezer: #efeaff; /* lavender */
   --color-place-pantry: #fff4d0; /* lemon */
+  --color-place-counter: #ffe6d2; /* apricot: fruit on the counter (KOS3); never berry */
   --color-hero-start: #ffe3ec; /* Today's hero card: soft pink → peach (ink text stays AA) */
   --color-hero-end: #fff0da;
   --color-scrim: rgb(51 38 58 / 0.35); /* behind sheets */
@@ -512,6 +513,9 @@
   .place-tile[data-place="pantry"] {
     background: var(--color-place-pantry);
   }
+  .place-tile[data-place="counter"] {
+    background: var(--color-place-counter);
+  }
   /*
    * Stock level meter (KOS4): three rising bars filled to the level (Plenty 3, Some 2, Low 1,
    * Out 0), in the label's own colour. Decorative: the word beside it always says the level.
@@ -614,6 +618,100 @@
   }
   .check-box:has(input:disabled) {
     opacity: 0.6;
+  }
+
+  /*
+   * A choice tile (src/ui/primitives/RadioGroup.tsx `ChoiceTiles`): a white tile with a faint edge.
+   * The chosen one is coral-soft, ringed and bolder (never colour alone, 1.4.1), like `.seg-option`.
+   */
+  .choice {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    min-height: var(--spacing-tap);
+    padding: var(--spacing-1) var(--spacing-3);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-raised);
+    box-shadow:
+      inset 0 0 0 1.5px var(--color-border-default),
+      var(--shadow-soft);
+    color: var(--color-text-default);
+    font-weight: var(--font-weight-medium);
+    font-size: var(--text-small);
+    line-height: var(--text-small--line-height);
+    cursor: pointer;
+    transition: background-color var(--motion-duration-quick) var(--ease-gentle);
+  }
+  .choice:has([data-checked]),
+  .choice[aria-pressed="true"] {
+    background: var(--color-selected-bg);
+    color: var(--color-accent-text);
+    font-weight: 900;
+    box-shadow:
+      inset 0 0 0 2px var(--color-selected-border),
+      var(--shadow-soft);
+  }
+  .choice:has(:focus-visible),
+  .choice:focus-visible {
+    outline: 3px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+  .choice:has([data-disabled]),
+  .choice:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  /* "now" on the current place / type: the lemon wash, like "Updated". */
+  .choice-tag {
+    flex: none;
+    border-radius: var(--radius-button);
+    background: var(--color-highlight-bg);
+    padding: 0 var(--spacing-2);
+    color: var(--color-highlight-text);
+    font-size: var(--text-caption);
+    line-height: var(--text-caption--line-height);
+    font-weight: var(--font-weight-strong);
+  }
+
+  /* On/off switch (src/ui/primitives/Switch.tsx): the thumb moves and the on track is mint-green. */
+  .switch {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    width: 52px;
+    height: 32px;
+    padding: 3px;
+    border-radius: var(--radius-full);
+    background: var(--color-border-strong);
+    transition: background-color var(--motion-duration-quick) var(--ease-gentle);
+  }
+  /* The hit area grows to 44 px tall without changing the drawing. */
+  .switch::before {
+    content: "";
+    position: absolute;
+    inset: -6px -2px;
+  }
+  .switch[data-checked] {
+    background: var(--color-success-fill);
+  }
+  .switch:focus-visible {
+    outline: 3px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+  .switch[data-disabled] {
+    opacity: 0.6;
+  }
+  .switch-thumb {
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-full);
+    background: var(--color-surface-raised);
+    box-shadow: var(--shadow-soft);
+    transition: transform var(--motion-duration-quick) var(--ease-gentle);
+  }
+  .switch-thumb[data-checked] {
+    transform: translateX(20px);
   }
 
   /* Sheets (Base UI dialog): white, rising from the bottom on a phone, on the large soft shadow. */

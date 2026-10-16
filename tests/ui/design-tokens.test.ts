@@ -44,7 +44,7 @@ const on = (fg: string, bgs: string[], min: number): Pair[] => bgs.map((bg) => [
 const PAIRS: Pair[] = [
   ...on("text-default", ["surface-default", "surface-raised", "surface-sunken", "surface-soft", "accent-soft", "selected-bg"], 4.5),
   ...on("text-default", ["highlight-bg", "success-bg", "warning-bg", "error-bg", "info-bg", "allergy-bg"], 4.5),
-  ...on("text-default", ["place-fridge", "place-freezer", "place-pantry", "hero-start", "hero-end"], 4.5),
+  ...on("text-default", ["place-fridge", "place-freezer", "place-pantry", "place-counter", "hero-start", "hero-end"], 4.5),
   ...on("text-muted", ["surface-default", "surface-raised", "surface-sunken", "surface-soft", "hero-start", "hero-end"], 4.5),
   ...on("accent-text", ["surface-default", "surface-raised", "surface-sunken", "surface-soft", "hero-start", "hero-end"], 4.5),
   // The primary button: ink on every stop of the coral → orange gradient, and on its hover stops.

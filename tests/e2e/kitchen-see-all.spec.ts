@@ -118,7 +118,7 @@ test("Kitchen: By type groups, search narrows (accents ignored), the toggle whil
   await expectAccessible(page, "Kitchen, search after coming back");
 });
 
-test("Kitchen: set a level from the row's ⋯ (KOS4), receipt with Undo under the row, Out stays in place, Add to my list", async ({ page, baseURL }, testInfo) => {
+test("Kitchen: set a level in the item's edit sheet (KOS4 inside KOS3), receipt with Undo, Out stays in place, Add to my list", async ({ page, baseURL }, testInfo) => {
   const phone = testInfo.project.name === "phone";
   await resetAndActAs(page, baseURL!);
 
@@ -131,20 +131,19 @@ test("Kitchen: set a level from the row's ⋯ (KOS4), receipt with Undo under th
   // Unknown level: no label.
   await expect(rice.locator("[data-stock]")).toHaveCount(0);
 
-  // ⋯ → How much is left? (axe with the menu open).
-  await rice.getByRole("button", { name: "More for Jasmine rice" }).click();
-  const menu = page.getByRole("group", { name: "How much is left?" });
-  await expect(menu.getByRole("menuitemradio")).toHaveText(["Plenty", "Some left", "Running low", "Out"]);
-  await expectAccessible(page, "Kitchen, level menu open");
-  await menu.getByRole("menuitemradio", { name: "Running low" }).click();
+  // Tap the row → its edit sheet → How much is left? (acts at once).
+  await rice.getByRole("button", { name: "Edit jasmine rice" }).click();
+  const sheet = page.getByRole("dialog", { name: "Edit jasmine rice" });
+  const levels = sheet.getByRole("group", { name: "How much is left?" });
+  await expect(levels.getByRole("button")).toHaveText(["Plenty", "Some left", "Running low", "Out"]);
+  await levels.getByRole("button", { name: "Running low" }).click();
 
-  // The receipt under the row, with focus, the label, and the list offer.
-  const receipt = rice.getByRole("region", { name: "What changed" });
+  // The receipt in the sheet, the level pressed, and the list offer.
+  const receipt = sheet.getByRole("region", { name: "What changed" });
   await expect(receipt).toContainText("Jasmine rice: running low");
-  await expect(rice.locator("[data-level-note]")).toBeFocused();
-  await expect(rice.locator("[data-stock]")).toHaveText("Running low");
-  await expectAccessible(page, "Kitchen, level set");
-  if (process.env.STOCK_LEVEL_SCREENSHOT && phone) await screenshot(page, "kitchen-stock-level-phone.png");
+  await expect(levels.getByRole("button", { name: "Running low" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("announcer")).toContainText("Done. Jasmine rice: running low");
+  await expectAccessible(page, "Kitchen, level set in the sheet");
 
   await receipt.getByRole("button", { name: "Add jasmine rice to my list" }).click();
   await expect(receipt).toContainText("Jasmine rice is on your list.");
@@ -152,21 +151,27 @@ test("Kitchen: set a level from the row's ⋯ (KOS4), receipt with Undo under th
   // Undo: the level goes back to unknown; the list keeps the rice (its own change).
   await receipt.getByRole("button", { name: "Undo: Jasmine rice: running low" }).click();
   await expect(receipt).toContainText("Undone");
-  await expect(rice.locator("[data-stock]")).toHaveCount(0);
+  await expect(levels.getByRole("button", { name: "Running low" })).toHaveAttribute("aria-pressed", "false");
 
-  // Plenty: no list offer.
-  await rice.getByRole("button", { name: "More for Jasmine rice" }).click();
-  await page.getByRole("menuitemradio", { name: "Plenty" }).click();
-  await expect(rice.getByRole("region", { name: "What changed" })).toContainText("Jasmine rice: plenty");
+  // Plenty: no list offer. Done: back on the row, the receipt under it.
+  await levels.getByRole("button", { name: "Plenty" }).click();
+  await expect(sheet.getByRole("region", { name: "What changed" })).toContainText("Jasmine rice: plenty");
+  await expect(sheet.getByRole("button", { name: /to my list/ })).toHaveCount(0);
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(rice.getByRole("button", { name: "Edit jasmine rice" })).toBeFocused();
   await expect(rice.locator("[data-stock]")).toHaveText("Plenty");
-  await expect(rice.getByRole("button", { name: /to my list/ })).toHaveCount(0);
+  await expect(rice.getByRole("region", { name: "What changed" })).toContainText("Jasmine rice: plenty");
+  if (process.env.STOCK_LEVEL_SCREENSHOT && phone) await screenshot(page, "kitchen-stock-level-phone.png");
 
-  // Out: the item leaves the kitchen but its row stays, marked Out, until Undo or the next message.
-  await rice.getByRole("button", { name: "More for Jasmine rice" }).click();
-  await page.getByRole("menuitemradio", { name: "Out" }).click();
+  // Out: the item leaves the kitchen and the sheet closes, but its row stays, marked Out, until Undo or the next message.
+  await rice.getByRole("button", { name: "Edit jasmine rice" }).click();
+  await sheet.getByRole("group", { name: "How much is left?" }).getByRole("button", { name: "Out" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(rice).toHaveAttribute("data-change", "gone");
   await expect(rice.locator("[data-stock]")).toHaveText("Out");
-  await expect(rice.getByRole("button", { name: "More for Jasmine rice" })).toHaveCount(0);
+  await expect(rice.getByRole("button", { name: "Edit jasmine rice" })).toHaveCount(0);
+  await expect(rice.getByRole("button", { name: "Undo: Jasmine rice: out" })).toBeFocused();
   await expectAccessible(page, "Kitchen, set to Out");
   await rice.getByRole("button", { name: "Undo: Jasmine rice: out" }).click();
   await expect(rice).not.toHaveAttribute("data-change", "gone");

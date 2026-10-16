@@ -22,14 +22,17 @@ import {
   addStaples,
   addToShoppingList,
   dismissStaplesOffer,
+  editItem,
   finishShopping,
   loadStaplesOffer,
   makeAgain,
   queueShoppingForLater,
+  removeItem,
   removeShoppingListItem,
   removeStaple,
   resolveToReview,
   restockStaples,
+  setItemStaple,
   setItemStockLevel,
   tickShoppingListItem,
   undoChange,
@@ -322,10 +325,11 @@ function KitchenScreen({
 
   // Buttons that change the kitchen without chat (the list's tick, Remove, Done shopping, To review).
   const actions = useMemo<KitchenActions>(() => {
-    const tap = () => ({
+    // `version`: the one an edit sheet opened at (KOS3), so a change made since is refused whole.
+    const tap = (version?: number) => ({
       kitchenId,
       tapId: crypto.randomUUID(),
-      basedOnVersion: sync.getSnapshot().state?.version ?? 0,
+      basedOnVersion: version ?? sync.getSnapshot().state?.version ?? 0,
     });
     return {
       kitchenId,
@@ -339,7 +343,12 @@ function KitchenScreen({
       undo: (changeSetId) => undoChange({ ...tap(), changeSetId }),
       closeBatch: (itemId, batchIds) => closeBatch({ ...tap(), itemId, batchIds }),
       keepOlderBatch: (itemId, batchIds) => keepOlderBatch({ ...tap(), itemId, batchIds }),
-      setStockLevel: (itemId, level, batchId) => setItemStockLevel({ ...tap(), itemId, level, ...(batchId ? { batchId } : {}) }),
+      setStockLevel: (itemId, level, batchId, version) =>
+        setItemStockLevel({ ...tap(version), itemId, level, ...(batchId ? { batchId } : {}) }),
+      editItem: (itemId, edit, opts) =>
+        editItem({ ...tap(opts?.basedOnVersion), itemId, edit, ...(opts?.batchId ? { batchId: opts.batchId } : {}) }),
+      removeItem: (itemId, opts) => removeItem({ ...tap(opts?.basedOnVersion), itemId }),
+      setItemStaple: (itemId, staple, opts) => setItemStaple({ ...tap(opts?.basedOnVersion), itemId, staple }),
       addToList: (source, items) => addToShoppingList({ ...tap(), source, items }),
       addStaples: (items) => addStaples({ ...tap(), items }),
       updateStaple: (stapleId, store) => updateStaple({ ...tap(), stapleId, store }),
