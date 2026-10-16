@@ -124,3 +124,4 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | KOS4-a–e | Stock level details | [0055](decisions/0055-stock-level-details.md): all Recs |
 | KOS16-a–c | Asking before >5 removals | [0056](decisions/0056-bulk-remove-confirm.md): all Recs |
 | KOS3-a–h | Item edit details | [0057](decisions/0057-item-edit-details.md): all Recs |
+| KOS1-a–d | Week plan details | [0058](decisions/0058-week-plan-details.md): all Recs |
