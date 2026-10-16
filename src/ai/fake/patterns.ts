@@ -22,6 +22,10 @@ export type FakeIntent =
   | { kind: "dish"; title: string; evidence: string; notes: string; have: Segment[] }
   | { kind: "category"; target: Segment; category: ItemCategory }
   | { kind: "place"; target: Segment; location: Location }
+  | { kind: "stapleAdd"; items: Segment[]; store?: string }
+  | { kind: "stapleRemove"; targets: Segment[] }
+  | { kind: "staplesQuestion" }
+  | { kind: "yes" }
   | { kind: "unknown" };
 
 /** A piece of the message: `raw` is exactly as typed (used as evidence), `name` is cleaned. */
@@ -148,6 +152,35 @@ function categoryIntent(text: string): FakeIntent | null {
   return null;
 }
 
+/**
+ * Staples (0054): "fish sauce is a staple" · "rice and eggs are staples from Publix" · "we always
+ * keep jasmine rice" · "eggs aren't a staple any more" · "what staples do I need?" / "restock".
+ * "We always keep the bread in the freezer" is a place habit (0041), never a staple.
+ */
+const STAPLE_IS = new RegExp(
+  String.raw`^\s*(.+?)\s+(?:is|are)\s+(?:a\s+|one\s+of\s+(?:my|our|the)\s+)?staples?(?:\s+(?:from|at)\s+(.+?))?` + END,
+  "i",
+);
+const STAPLE_ALWAYS = new RegExp(String.raw`^\s*(?:we|i)\s+always\s+(?:keep|have|buy|get)\s+(.+?)(?:\s+(?:from|at)\s+(.+?))?` + END, "i");
+const STAPLE_NOT = [
+  new RegExp(String.raw`^\s*(.+?)\s+(?:isn'?t|is not|aren'?t|are not)\s+(?:a\s+|one\s+of\s+(?:my|our|the)\s+)?staples?(?:\s+any\s*more)?` + END, "i"),
+  new RegExp(String.raw`^\s*(?:please\s+)?(?:take|remove)\s+(.+?)\s+(?:off|from)\s+(?:my|our|the)\s+staples` + END, "i"),
+];
+const STAPLES_QUESTION = /\b(what|which) staples\b|^\s*restock\b|\bbuild (my|our|the) (shopping )?list\b/i;
+const PLACE_WORD = /\b(fridge|freezer|pantry)\b/i;
+const YES = /^\s*(yes|yeah|yep|sure|ok(ay)?|please do|go ahead)\b/i;
+
+function stapleIntent(text: string): FakeIntent | null {
+  if (STAPLES_QUESTION.test(text)) return { kind: "staplesQuestion" };
+  for (const re of STAPLE_NOT) {
+    const m = re.exec(text);
+    if (m) return { kind: "stapleRemove", targets: segments(m[1]) };
+  }
+  const m = STAPLE_IS.exec(text) ?? (PLACE_WORD.test(text) ? null : STAPLE_ALWAYS.exec(text));
+  if (!m) return null;
+  return { kind: "stapleAdd", items: segments(m[1]), ...(m[2] ? { store: m[2].trim() } : {}) };
+}
+
 /** Meals (0005, 0013): "what can I make?", "the second one", "add that to my plan", "start cooking", "I made it". */
 const IDEAS = /\b(what can (i|we) (make|cook)|meal ideas|dinner ideas|any (other )?ideas|something else)\b/i;
 
@@ -190,6 +223,9 @@ export function matchIntent(text: string): FakeIntent {
   if (dish) return dish;
   const category = categoryIntent(text);
   if (category) return category;
+  const staple = stapleIntent(text);
+  if (staple) return staple;
+  if (YES.test(text)) return { kind: "yes" };
   const plenty = PLENTY.exec(text);
   if (plenty) return { kind: "level", level: "plenty", targets: segments(plenty[1]) };
   const some = SOME.exec(text);

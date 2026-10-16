@@ -12,7 +12,7 @@
  */
 import { and, asc, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { changeSets, itemBatches, kitchens, mealIdeas, meals, users } from "@/db/schema";
+import { changeSets, itemBatches, kitchens, mealIdeas, meals, staples, users } from "@/db/schema";
 import type { Db, Queryable } from "@/db/client";
 import { ApplyResult, type ApplyResult as ApplyResultT } from "@/contracts/apply-result";
 import type { Msg, Quantity, ShoppingSource, StockLevel } from "@/contracts/common";
@@ -20,6 +20,7 @@ import type { Operation } from "@/contracts/operations";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { MealIdea, UpdateKitchenPrompt } from "@/contracts/stream";
 import { standardName } from "@/shared/text";
+import { legacyStapleNames } from "@/shared/staples";
 import { msg } from "@/shared/messages";
 import { listMembers, type KitchenScope } from "@/shared/membership";
 import { appendEvents, eventExistsInStreams, loadChangeSetEvents, loadStream } from "@/shared/events/store";
@@ -448,6 +449,113 @@ export function removeShoppingItem(db: Db, scope: KitchenScope, args: TapArgs & 
   return tap(db, scope, args, "shopping.remove", [
     { opId: "remove", type: "shopping.remove", target: { shoppingItemId: args.shoppingItemId } },
   ]);
+}
+
+// ─── Staples (0054) ───────────────────────────────────────────────────────────────────
+// One list for the whole kitchen (SS1). Every change is one change set with Undo (0007, 0017).
+
+/** Add a staple, or several (the "You told me these before" offer): one change set, one Undo. */
+export function addStapleItems(db: Db, scope: KitchenScope, args: TapArgs & { items: { name: string; store?: string }[] }) {
+  return tap(
+    db,
+    scope,
+    args,
+    "staple.add",
+    args.items.map((i, n) => ({
+      opId: `staple-${n + 1}`,
+      type: "staple.add",
+      fields: { name: said(i.name), ...(i.store?.trim() ? { store: said(i.store) } : {}) },
+    })),
+  );
+}
+
+/** Store… in Edit staples (SS5): a store picked or typed, or `null` for "Anywhere". */
+export function updateStapleStore(db: Db, scope: KitchenScope, args: TapArgs & { stapleId: string; store: string | null }) {
+  const store = args.store?.trim();
+  return tap(db, scope, args, "staple.update", [
+    store
+      ? { opId: "store", type: "staple.update", target: { stapleId: args.stapleId }, fields: { store: said(store) } }
+      : { opId: "store", type: "staple.update", target: { stapleId: args.stapleId }, fields: {}, clear: ["store"] },
+  ]);
+}
+
+/** Remove in Edit staples: no confirmation, it has Undo. */
+export function removeStapleItem(db: Db, scope: KitchenScope, args: TapArgs & { stapleId: string }) {
+  return tap(db, scope, args, "staple.remove", [{ opId: "remove", type: "staple.remove", target: { stapleId: args.stapleId } }]);
+}
+
+/**
+ * Restock (SS3) and "Add these to my list" under a staples answer (SS6): the chosen staples go on
+ * the shopping list in **one** change set (one Undo), through `addShoppingItems` with source
+ * `staples`, each under its usual store (SS5). It merges like any add: one already on the list is
+ * a no-change "already on the list". Staples removed meanwhile are skipped; none left →
+ * UNKNOWN_TARGET, nothing changed.
+ */
+export async function restockFromStaples(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { stapleIds: string[] },
+): Promise<ApplyOutcome> {
+  try {
+    const entities = await loadKitchenEntities(db, scope.kitchenId);
+    const chosen = [...new Set(args.stapleIds)].flatMap((id) => {
+      const s = entities.staples?.[id];
+      return s ? [s] : [];
+    });
+    if (chosen.length === 0) return { ok: false, error: { reason: msg("UNKNOWN_TARGET"), retryable: false } };
+    return addShoppingItems(db, scope, {
+      ...args,
+      source: "staples",
+      items: chosen.slice(0, 50).map((s) => ({ name: s.name.value, ...(s.store ? { store: s.store.value } : {}) })),
+    });
+  } catch (error) {
+    console.error("kitchen.apply: couldn't restock staples", { error });
+    return { ok: false, error: { reason: msg("SAVE_FAILED"), retryable: true } };
+  }
+}
+
+/**
+ * The one-time "You told me these before" offer (SS2): the names in this person's old free-text
+ * "Staples: …" preference lines, minus what's already a staple. The fixed proposal ID marks it
+ * answered (Add them or Not now, like the places sort's mark), so it's offered once.
+ */
+export const legacyStaplesProposalId = (userId: string) => `staples-legacy-0054:${userId}`;
+
+export async function getLegacyStaplesOffer(db: Queryable, scope: KitchenScope): Promise<{ names: string[] } | null> {
+  const [answered] = await db
+    .select({ id: changeSets.id })
+    .from(changeSets)
+    .where(and(eq(changeSets.kitchenId, scope.kitchenId), eq(changeSets.proposalId, legacyStaplesProposalId(scope.userId))))
+    .limit(1);
+  if (answered) return null;
+  const profiles = await loadProfiles(db, [scope.userId]);
+  const statements = Object.values(profiles.preferences)
+    .filter((p) => p.userId === scope.userId)
+    .map((p) => p.statement.value);
+  if (statements.length === 0) return null;
+  const saved = await db.select({ std: staples.standardName }).from(staples).where(eq(staples.kitchenId, scope.kitchenId));
+  const already = new Set(saved.map((r) => r.std));
+  const names = legacyStapleNames(statements).filter((n) => !already.has(standardName(n)));
+  return names.length ? { names } : null;
+}
+
+/** "Add them" (or "Not now" with `accept: false`, which saves nothing but answers the offer). */
+export async function answerLegacyStaples(
+  db: Db,
+  scope: KitchenScope,
+  args: { basedOnVersion: number; accept: boolean },
+): Promise<ApplyOutcome> {
+  try {
+    const offer = await getLegacyStaplesOffer(db, scope);
+    const tapId = legacyStaplesProposalId(scope.userId);
+    const items = args.accept && offer ? offer.names.slice(0, 50).map((name) => ({ name })) : [];
+    if (items.length) return addStapleItems(db, scope, { tapId, basedOnVersion: args.basedOnVersion, items });
+    // Not now (or nothing left to add): an empty change set is the "answered" mark.
+    return tap(db, scope, { tapId, basedOnVersion: args.basedOnVersion }, "staple.offer.dismiss", []);
+  } catch (error) {
+    console.error("kitchen.apply: couldn't answer the staples offer", { error });
+    return { ok: false, error: { reason: msg("SAVE_FAILED"), retryable: true } };
+  }
 }
 
 /** "Done shopping" (SL2): the chosen ticked items go into the kitchen; unchosen ticked items stay. */

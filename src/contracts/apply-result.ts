@@ -33,8 +33,11 @@ export const RejectionCode = z.enum([
 // Batches (0025) add no codes: a bad batch ID → UNKNOWN_TARGET; a closed batch → ALREADY_OUT.
 export type RejectionCode = z.infer<typeof RejectionCode>;
 
-/** `shopping` = a shopping-list item; `removed` also covers one moved into the kitchen. */
-export const RefKind = z.enum(["item", "meal", "recipe", "tick", "review", "profile", "shopping"]);
+/**
+ * `shopping` = a shopping-list item; `removed` also covers one moved into the kitchen.
+ * `staple` (0054) = one of the kitchen's staples; its `id` is the staple's ID (standard name).
+ */
+export const RefKind = z.enum(["item", "meal", "recipe", "tick", "review", "profile", "shopping", "staple"]);
 export type RefKind = z.infer<typeof RefKind>;
 
 export const ChangeRef = z.object({
@@ -69,12 +72,35 @@ export const BatchOffer = z.object({
 });
 export type BatchOffer = z.infer<typeof BatchOffer>;
 
+/**
+ * "Add fish sauce to my list" (SL3, 0054 SS4, 0055 KOS4-d): an item this operation made Running
+ * low or Out, on any receipt (chat, a level button, after cooking, auto-Out). Only an **offer**:
+ * nothing is added until it's tapped. Left out when it's already open on the list at apply time;
+ * hide it too once `isListOfferOpen` is false. The tap is `addToShoppingList {source:
+ * "stock-offer", items: [{name, store?}]}` with this `name` and `store`.
+ */
+export const ListOffer = z.object({
+  itemId: Id,
+  /** The item's name now. */
+  name: z.string(),
+  /** Its standard name, to tell whether it's on the list since (`isListOfferOpen`). */
+  standardName: z.string(),
+  level: z.enum(["low", "out"]),
+  /** Set when it's one of the kitchen's staples: "Fish sauce is one of your staples · Add to my list". */
+  stapleId: Id.optional(),
+  /** The staple's usual store (SS5), when it has one: the add goes under it. */
+  store: z.string().optional(),
+});
+export type ListOffer = z.infer<typeof ListOffer>;
+
 export const AppliedOp = z.object({
   opId: Id,
   summary: Msg,
   refs: z.array(ChangeRef),
   /** One per item that got a new batch next to older ones (item.add, shopping.done). */
   batchOffers: z.array(BatchOffer).optional(),
+  /** One per item this operation made Low or Out (item.use, item.stock.set, item.batch.close). */
+  listOffers: z.array(ListOffer).optional(),
 });
 export type AppliedOp = z.infer<typeof AppliedOp>;
 
@@ -108,6 +134,20 @@ export function isBatchOfferOpen(
     const b = open.get(o.batchId);
     return b !== undefined && b.keptAt === undefined;
   });
+}
+
+/**
+ * Whether a receipt's "Add X to my list" (`ListOffer`) still makes sense in `state`: it isn't open
+ * on the list (anyone may have added it since), and the item is still Low (for a Low offer) or
+ * still not back in the kitchen (for an Out one). Pure; for live and reloaded receipts alike.
+ */
+export function isListOfferOpen(
+  offer: ListOffer,
+  state: { items: { id: string; stock?: { value: string } }[]; shoppingList?: { standardName: string }[] },
+): boolean {
+  if ((state.shoppingList ?? []).some((e) => e.standardName === offer.standardName)) return false;
+  const item = state.items.find((i) => i.id === offer.itemId);
+  return offer.level === "out" ? item === undefined : item?.stock?.value === "low";
 }
 
 /** One line of "Since your last visit" (`GET /api/kitchens/:id/changes?since=`). */

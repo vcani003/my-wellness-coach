@@ -7,6 +7,7 @@
 import type { ApplyResult } from "@/contracts/apply-result";
 import type { KitchenState } from "@/contracts/kitchen-state";
 import type { ProposedChange } from "@/contracts/proposed-change";
+import type { StaplesAnswer } from "@/contracts/stream";
 
 export type InterpretRequest = {
   kitchenId: string;
@@ -23,6 +24,11 @@ export type InterpretRequest = {
    * omelette" can be chosen (0013). Optional: without it, ideas can't be chosen from chat.
    */
   ideas?: Array<{ ideaId: string; name: string }>;
+  /**
+   * Every member's allergies (0019: they count whoever is asking), so a general staples or
+   * shopping guess leaves them out (0054 SS6). Optional: absent = none known.
+   */
+  allergies?: Array<{ subject: string; who: string }>;
 };
 
 /** A meal that exists, or the one a `meal.choose` in this proposal creates (read its applied refs). */
@@ -51,6 +57,11 @@ export type InterpretResult = {
   reply: string;
   /** Steps to run after apply; absent = none. */
   followUps?: TurnFollowUp[];
+  /**
+   * A staples answer built by code from the saved staples (0054 SS6): sent as the `staples`
+   * stream event after the reply, for its "Add these to my list" button. Absent = none.
+   */
+  staples?: StaplesAnswer;
 };
 
 export interface Interpreter {

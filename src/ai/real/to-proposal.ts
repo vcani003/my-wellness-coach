@@ -23,16 +23,24 @@
  * - Stock levels (0045 KOS4): "we have plenty of rice" / "there's some milk left" is
  *   `item.stock.set`, not a use. A `use` with plenty/some and no amount is the same thing. Only
  *   Low and Out count as "marked Out/Low" for the list guard (`offersListAdd`).
+ * - Staples (0054): a staple is saved only when the user's words say so ("fish sauce is a staple",
+ *   "we always keep rice") and name it, or on a yes right after Kitchen offered to remember those
+ *   staples (SS2); its store only when said there (SS5). Removing one needs their words too. A
+ *   yes to "remember these as your staples" saves staples, never a "Staples: …" preference.
+ *   "What staples do I need?" is answered by code from the saved staples (SS6, `staplesAnswer`);
+ *   with none saved, the model's general guess stands.
  * - The result must pass the contract's Zod schema, or nothing is proposed.
  */
 import { offersListAdd, type BatchWhich, type Fact, type ItemCategory, type Location, type ShoppingSource } from "@/contracts/common";
-import type { ItemBatchTarget, Operation, ShoppingTarget } from "@/contracts/operations";
+import type { ItemBatchTarget, Operation, OperationOf, ShoppingTarget } from "@/contracts/operations";
 import { nameTokens, standardName } from "@/shared/text";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult } from "../interpreter";
 import type { ModelOp, ModelOutput } from "./model-output";
 import { guardDishIngredients, mealOperations } from "./meal-ops";
 import { itemLabels, shoppingLabels } from "./prompt";
+import { STAPLES_OFFER, STAPLE_WORDS, staplesAnswer } from "../staples";
+import { legacyStapleNames, nameKeys } from "@/shared/staples";
 
 type MetaFact = { basis: Fact<unknown>["basis"]; confidence: Fact<unknown>["confidence"] };
 
@@ -78,6 +86,19 @@ const LIST_INTENT = /\b(list|buy|need|shop|shopping|pick up|grab)\b/i;
 function mentions(text: string, name: string): boolean {
   const hay = ` ${standardName(text)} `;
   return nameTokens(name).some((t) => t.length > 1 && hay.includes(` ${t} `));
+}
+
+/**
+ * Every word of the name, or of one of its parts ("nước mắm" or "fish sauce" for "nước mắm (fish
+ * sauce)"), appears in the text. Stricter than `mentions`, so "fish sauce is a staple" never
+ * vouches for "soy sauce" (0054 SS2).
+ */
+function saysName(text: string, name: string): boolean {
+  const words = new Set(standardName(text).split(" "));
+  return nameKeys(name).some((key) => {
+    const tokens = nameTokens(key);
+    return tokens.length > 0 && tokens.every((t) => words.has(t));
+  });
 }
 
 type Labels = { items: Map<string, string>; shopping: Map<string, string> };
@@ -188,6 +209,23 @@ function toOperationOrNull(op: ModelOp, opId: string, req: InterpretRequest, lab
       if (!target) return null;
       return { ...common, type: "shopping.remove", target };
     }
+    case "staple_add": {
+      // SS2: said ("X is a staple") or a yes to Kitchen's offer of X; never guessed.
+      if (!name) return null;
+      const text = req.message.text;
+      const saidHere = STAPLE_WORDS.test(text) && saysName(text, name.value);
+      const offer = offeredToRememberStaples(req);
+      const fromOffer = !saidHere && !!offer && saysName(offer, name.value);
+      if (!saidHere && !fromOffer) return null;
+      // SS5: a store only when it was said (here, or in the offer that was accepted).
+      const storeSaid = store?.value && saysName(fromOffer ? offer! : text, store.value);
+      const fields = { name: { ...name, basis: "said" as const }, ...(storeSaid && { store: { ...store!, basis: "said" as const } }) };
+      return { ...common, type: "staple.add", fields };
+    }
+    case "staple_remove": {
+      if (!name || !STAPLE_WORDS.test(req.message.text) || !saysName(req.message.text, name.value)) return null;
+      return { ...common, type: "staple.remove", target: { name: name.value } };
+    }
     case "add": {
       // Restocking a listed item: reuse its exact name so the backend matches it (0025).
       const listed = itemId ? req.state.items.find((i) => i.id === itemId) : undefined;
@@ -269,6 +307,29 @@ function offeredToRemember(req: InterpretRequest): boolean {
   return !!last && /\bremember\b/i.test(last);
 }
 
+/** Kitchen's last turn offered to remember staples (0054 SS2): its text, else undefined. */
+function offeredToRememberStaples(req: InterpretRequest): string | undefined {
+  const last = lastAssistantTurn(req);
+  return last && STAPLES_OFFER.test(last) ? last : undefined;
+}
+
+/**
+ * A yes to "remember these as your staples?" that the model still wrote as a "Staples: …"
+ * preference (the pre-0054 shape): saved as staples instead, one per name Kitchen offered.
+ */
+function staplesFromPreference(statement: string, evidence: string, req: InterpretRequest): OperationOf<"staple.add">[] {
+  const offer = offeredToRememberStaples(req);
+  if (!offer) return [];
+  return legacyStapleNames([statement])
+    .filter((n) => saysName(offer, n))
+    .map((n, i) => ({
+      opId: `${req.message.id}:staple${i + 1}`,
+      type: "staple.add" as const,
+      evidence,
+      fields: { name: { value: n, basis: "said" as const, confidence: "high" as const } },
+    }));
+}
+
 /** Kitchen's last turn offered to add things to the shopping list (staples answer or SL3 offer). */
 function offeredToAddToList(req: InterpretRequest): string | undefined {
   const last = lastAssistantTurn(req);
@@ -335,6 +396,14 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest, now: 
     basedOnVersion: req.version,
     source: { via: "chat" as const, messageId: req.message.id },
   };
+  // "What staples do I need?" (0054 SS6): from the saved staples, by code, when there are any.
+  if (out.generate?.what === "staples" && out.kind !== "clarify" && out.operations.length === 0) {
+    const answer = staplesAnswer(req.state);
+    if (answer) {
+      return { ok: true, result: { kind: "answer", proposal: null, reply: answer.reply, ...(answer.staples ? { staples: answer.staples } : {}) } };
+    }
+  }
+
   // Meal actions and "what can I make?" / "no oven" (0005, 0013): resolved by code.
   const meals = mealOperations(out, req, now);
   const followUps = meals.followUps.length ? { followUps: meals.followUps } : {};
@@ -368,7 +437,13 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest, now: 
   const operations = [...guardDishIngredients(guardShopping(converted, out, req), out, req), ...meals.operations];
 
   const pref = out.rememberPreference;
-  if (pref && pref.statement.trim() && offeredToRemember(req) && inMessage(req.message.text, pref.evidence)) {
+  const prefOk = !!pref && !!pref.statement.trim() && offeredToRemember(req) && inMessage(req.message.text, pref.evidence);
+  // 0054 SS2: a yes to "remember these as your staples" saves staples, not a preference line.
+  const asStaples = prefOk ? staplesFromPreference(pref!.statement, pref!.evidence.trim(), req) : [];
+  if (asStaples.length) {
+    const named = new Set(operations.flatMap((o) => (o.type === "staple.add" ? [standardName(o.fields.name.value)] : [])));
+    operations.push(...asStaples.filter((o) => !named.has(standardName(o.fields.name.value))));
+  } else if (pref && prefOk) {
     operations.push({
       opId: `${req.message.id}:pref`,
       type: "profile.preference.save",

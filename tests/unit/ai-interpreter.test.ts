@@ -334,13 +334,14 @@ describe("answer and clarify modes", () => {
 });
 
 describe("remembering a preference (0012)", () => {
-  const pref = { statement: "Staples: fish sauce, jasmine rice", evidence: "yes" };
+  // A staples offer saves staples instead (0054 SS2): tests/unit/staples.test.ts.
+  const pref = { statement: "Prefers quick weeknight dinners", evidence: "yes" };
 
   it("saves only on a yes right after Kitchen offered", async () => {
-    const { interpreter } = respond(output({ rememberPreference: pref, reply: "Saved your staples." }));
+    const { interpreter } = respond(output({ rememberPreference: pref, reply: "I'll remember that." }));
     const history = [
-      { role: "user" as const, text: "what staples do I need?" },
-      { role: "assistant" as const, text: "Fish sauce and rice. Want me to remember these as your staples?" },
+      { role: "user" as const, text: "something quick tonight, we're always rushed on weeknights" },
+      { role: "assistant" as const, text: "Here are two quick ones. Want me to remember that you like quick weeknight dinners?" },
     ];
     const result = await interpreter.interpret(request("yes please", [], history));
     const ops = ProposedChange.parse(result.proposal).operations;
@@ -716,8 +717,8 @@ describe("shopping list (0027)", () => {
     await b.interpreter.interpret(request("hi", VERO_PANTRY, [], VERO_LIST));
     const sys = (c: typeof a) => (c.calls[0].body.system as Anthropic.Beta.Messages.BetaTextBlockParam[])[0].text;
     expect(sys(a)).toBe(sys(b));
-    expect(PROMPT_VERSION).toBe("interpret-2026-10-16.1");
-    expect(a.logs[0]).toMatchObject({ promptVersion: "interpret-2026-10-16.1" });
+    expect(PROMPT_VERSION).toBe("interpret-2026-10-16.2");
+    expect(a.logs[0]).toMatchObject({ promptVersion: "interpret-2026-10-16.2" });
   });
 
   it("files 'MD Oriental Market' under 'MD Oriental' and keeps other stores as said", () => {

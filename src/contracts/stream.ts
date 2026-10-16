@@ -5,7 +5,25 @@
 import { z } from "zod";
 import { AllergenFlag, Id, Msg } from "./common";
 import { ApplyResult } from "./apply-result";
+import { StapleNeed } from "./kitchen-state";
 import { Clarification } from "./proposed-change";
+
+/**
+ * "What staples do I need?" answered from the saved staples (0054 SS6): the staples that answer
+ * named as needed (Out, Running low, Not in yet), computed by code. Under the reply the UI shows
+ * **Add these to my list**, which calls `restockStaples {stapleIds}` with these IDs.
+ */
+export const StaplesAnswer = z.object({
+  items: z.array(
+    z.object({
+      stapleId: Id,
+      name: z.string(),
+      store: z.string().optional(),
+      need: StapleNeed.exclude(["have", "on-list"]),
+    }),
+  ),
+});
+export type StaplesAnswer = z.infer<typeof StaplesAnswer>;
 
 export const StreamPhase = z.enum(["interpreting", "saving", "writing", "ideas", "recipe"]);
 
@@ -62,6 +80,8 @@ export const StreamEvent = z.discriminatedUnion("type", [
     version: z.number().int(),
     newVersion: z.number().int().nonnegative(),
   }),
+  /** A staples answer from the saved staples (0054 SS6), after its `text`. Only when some are needed. */
+  z.object({ type: z.literal("staples"), ...StaplesAnswer.shape }),
   /** Open "Update your kitchen" for a meal just marked done (0013). */
   z.object({ type: z.literal("update-kitchen"), ...UpdateKitchenPrompt.shape }),
   z.object({ type: z.literal("done"), turnId: Id, assistantMessageId: Id }),

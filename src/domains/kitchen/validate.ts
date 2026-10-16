@@ -6,7 +6,7 @@
  * The valid ones become one change set; the rejected ones come back with reasons, so one bad
  * guess doesn't sink "I bought 4 things."
  */
-import type { AppliedOp, BatchOffer, ChangeRef, RefKind, RejectedOp } from "@/contracts/apply-result";
+import type { AppliedOp, BatchOffer, ChangeRef, ListOffer, RefKind, RejectedOp } from "@/contracts/apply-result";
 import { MAX_OPEN_BATCHES, type BatchWhich, type Fact, type ItemCategory, type Location, type Msg, type Quantity, type StockLevel } from "@/contracts/common";
 import {
   PASTE_ALLOWED_OPERATION_TYPES,
@@ -16,6 +16,7 @@ import {
   type ItemTarget,
   type ReviewEntry,
   type ShoppingTarget,
+  type StapleTarget,
   type Operation,
   type OperationOf,
 } from "@/contracts/operations";
@@ -75,8 +76,13 @@ import {
   type ShoppingRemovedPayload,
   type ShoppingTickedPayload,
   type ShoppingUpdatedPayload,
+  type Staple,
+  type StapleAddedPayload,
+  type StapleRemovedPayload,
+  type StapleUpdatedPayload,
   type StockSetPayload,
 } from "./state";
+import { matchStaple } from "@/shared/staples";
 import { getProfileEntity } from "@/shared/profile/state";
 
 /** Messages longer than this with no `pastedRanges` count as pasted (backend-data.md §6). */
@@ -1424,6 +1430,181 @@ function moveToKitchen(
   return { events, summary: msg("SHOPPING_DONE", { count: names.length, names: names.join(", ") }), refs, batchOffers };
 }
 
+// ─── Staples (0054) ───────────────────────────────────────────────────────────────────
+
+const stapleList = (kitchen: KitchenEntities): Staple[] => Object.values(kitchen.staples ?? {});
+
+/**
+ * A staple's store spelled like one the kitchen already uses (on a staple or on the list), so the
+ * Restock adds land in the same list group (SL1). Blank → none.
+ */
+function stapleStore(store: Fact<string> | undefined, kitchen: KitchenEntities): Fact<string> | undefined {
+  if (!store) return undefined;
+  const key = normalizeText(store.value);
+  if (!key) return undefined;
+  const known = [...stapleList(kitchen).map((s) => s.store), ...openShopping(kitchen).map((e) => e.store)].find(
+    (s) => s && normalizeText(s.value) === key,
+  );
+  return { ...store, value: known ? known.value : store.value.trim() };
+}
+
+type StapleMatch = { kind: "found"; staple: Staple } | { kind: "none" } | { kind: "ambiguous" } | { kind: "unknown-id" };
+
+/** `{stapleId}` exact; `{name}`: exact standard name (or the name in brackets), then all the words. */
+export function resolveStaple(target: StapleTarget, kitchen: KitchenEntities): StapleMatch {
+  if ("stapleId" in target) {
+    const staple = kitchen.staples?.[target.stapleId];
+    return staple ? { kind: "found", staple } : { kind: "unknown-id" };
+  }
+  const std = standardName(target.name);
+  const all = stapleList(kitchen);
+  const m = matchStaple(
+    { name: target.name, standardName: std },
+    all.map((s) => ({ staple: s, name: s.name.value, standardName: s.standardName })),
+  );
+  if (m.length === 1) return { kind: "found", staple: m[0].staple };
+  return m.length > 1 ? { kind: "ambiguous" } : { kind: "none" };
+}
+
+function stapleRejectFor(match: StapleMatch, target: StapleTarget): OpOutcome | null {
+  const name = "name" in target ? target.name : "";
+  if (match.kind === "unknown-id") return reject("UNKNOWN_TARGET");
+  if (match.kind === "ambiguous") return reject("AMBIGUOUS_ITEM", { name });
+  if (match.kind === "none") return ok([], msg("STAPLE_NOT_FOUND", { name }), []);
+  return null;
+}
+
+const stapleRef = (id: string, change: ChangeRef["change"]): ChangeRef => ({ kind: "staple", id, change });
+
+/**
+ * "Fish sauce is a staple" / Add a staple (SS1, SS2). Keyed by standard name, so it's never
+ * duplicated: already a staple → `STAPLE_ALREADY` (no change), unless a new store is said (SS5),
+ * which is then set.
+ */
+function stapleAdd(op: OperationOf<"staple.add">, env: OpEnv): OpOutcome {
+  const k = kitchenStream(env.ctx.kitchenId);
+  const name = { ...op.fields.name, value: op.fields.name.value.trim() };
+  const std = standardName(name.value);
+  if (!std) return reject("INVALID_OPERATION");
+  const store = stapleStore(nn(op.fields.store), env.kitchen);
+  const existing = env.kitchen.staples?.[std];
+  if (existing) {
+    if (!store || store.value === existing.store?.value) return ok([], msg("STAPLE_ALREADY", { name: existing.name.value }), []);
+    const payload: StapleUpdatedPayload = { standardName: std, set: { store }, clear: [] };
+    return ok(
+      [emit(env, k, KITCHEN_EVENT.stapleUpdated, payload)],
+      msg("STAPLE_STORE", { name: existing.name.value, store: store.value }),
+      [stapleRef(std, "updated")],
+    );
+  }
+  const payload: StapleAddedPayload = compact({ standardName: std, name, store });
+  return ok(
+    [emit(env, k, KITCHEN_EVENT.stapleAdded, payload)],
+    store ? msg("STAPLE_ADDED_STORE", { name: name.value, store: store.value }) : msg("STAPLE_ADDED", { name: name.value }),
+    [stapleRef(std, "added")],
+  );
+}
+
+/** A staple's usual store set (said or picked) or cleared (SS5). The same store → no change. */
+function stapleUpdate(op: OperationOf<"staple.update">, env: OpEnv): OpOutcome {
+  const match = resolveStaple(op.target, env.kitchen);
+  const rejected = stapleRejectFor(match, op.target);
+  if (rejected) return rejected;
+  const staple = (match as { staple: Staple }).staple;
+  const store = stapleStore(nn(op.fields.store), env.kitchen);
+  const clearing = !store && (op.clear ?? []).includes("store");
+  if (store ? store.value === staple.store?.value : !clearing || !staple.store) return noChange();
+  const payload: StapleUpdatedPayload = { standardName: staple.standardName, set: store ? { store } : {}, clear: store ? [] : ["store"] };
+  return ok(
+    [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.stapleUpdated, payload)],
+    store ? msg("STAPLE_STORE", { name: staple.name.value, store: store.value }) : msg("STAPLE_STORE_CLEARED", { name: staple.name.value }),
+    [stapleRef(staple.standardName, "updated")],
+  );
+}
+
+/** "Eggs aren't a staple any more" / Remove (no confirmation: it has Undo). History keeps it. */
+function stapleRemove(op: OperationOf<"staple.remove">, env: OpEnv): OpOutcome {
+  const match = resolveStaple(op.target, env.kitchen);
+  const rejected = stapleRejectFor(match, op.target);
+  if (rejected) return rejected;
+  const staple = (match as { staple: Staple }).staple;
+  const payload: StapleRemovedPayload = { standardName: staple.standardName };
+  return ok(
+    [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.stapleRemoved, payload)],
+    msg("STAPLE_REMOVED", { name: staple.name.value }),
+    [stapleRef(staple.standardName, "removed")],
+  );
+}
+
+// ─── "Add X to my list" after Low / Out (SL3, 0054 SS4, 0055 KOS4-d) ──────────────────
+
+/** The operations whose item refs may carry the offer: they're how something becomes Low or Out. */
+const LIST_OFFER_OPS: ReadonlySet<Operation["type"]> = new Set(["item.use", "item.stock.set", "item.batch.close"]);
+
+/** "low" / "out" for an item as the kitchen sees it now; anything else is undefined. */
+function lowOrOut(item: Item | undefined): "low" | "out" | undefined {
+  if (!item) return undefined;
+  if (openBatches(item).length === 0) return "out";
+  return item.stock?.value === "low" ? "low" : undefined;
+}
+
+/**
+ * The offers for one applied operation: each item it moved into Low or Out (from anything else),
+ * named as it is now, with its staple and the staple's store when it's one (SS4, SS5). Only an
+ * offer: nothing is added (SL3).
+ */
+function listOffersFor(op: Operation, refs: ChangeRef[], before: KitchenEntities, after: KitchenEntities): ListOffer[] {
+  if (!LIST_OFFER_OPS.has(op.type)) return [];
+  const out: ListOffer[] = [];
+  for (const id of new Set(refs.filter((r) => r.kind === "item").map((r) => r.id))) {
+    const item = after.items[id];
+    const level = lowOrOut(item);
+    if (!item || !level || lowOrOut(before.items[id]) === level) continue;
+    const staple = matchStaple(
+      { name: item.name.value, standardName: item.standardName },
+      stapleList(after).map((s) => ({ staple: s, name: s.name.value, standardName: s.standardName })),
+    )[0]?.staple;
+    out.push(
+      compact({
+        itemId: id,
+        name: item.name.value,
+        standardName: item.standardName,
+        level,
+        stapleId: staple?.standardName,
+        store: staple?.store?.value,
+      }),
+    );
+  }
+  return out;
+}
+
+/**
+ * Keep an offer only if it still holds once the whole change set is in: the item is still Low/Out
+ * and nothing open on the list is it ("we're out of fish sauce, add it to my list" needs no offer).
+ * One offer per item: the last one wins.
+ */
+function stillOffered(applied: AppliedOp[], kitchen: KitchenEntities): AppliedOp[] {
+  const list = openShopping(kitchen).map((e) => ({ name: e.name.value, standardName: e.standardName }));
+  const seen = new Set<string>();
+  const keep = new Map<AppliedOp, ListOffer[]>();
+  for (const a of [...applied].reverse()) {
+    const offers = (a.listOffers ?? []).filter((o) => {
+      if (seen.has(o.itemId)) return false;
+      seen.add(o.itemId);
+      if (lowOrOut(kitchen.items[o.itemId]) !== o.level) return false;
+      return matchStaple({ name: o.name, standardName: o.standardName }, list).length === 0;
+    });
+    keep.set(a, offers);
+  }
+  return applied.map((a) => {
+    if (!a.listOffers) return a;
+    const { listOffers: _drop, ...rest } = a;
+    void _drop;
+    const offers = keep.get(a) ?? [];
+    return offers.length ? { ...rest, listOffers: offers } : rest;
+  });
+}
+
 const REF_KIND: Record<string, RefKind> = {
   item: "item",
   meal: "meal",
@@ -1431,6 +1612,7 @@ const REF_KIND: Record<string, RefKind> = {
   tick: "tick",
   review: "review",
   shopping: "shopping",
+  staple: "staple",
   restriction: "profile",
   preference: "profile",
 };
@@ -1488,6 +1670,9 @@ function targetKeys(op: Operation): string[] {
       return "shoppingItemId" in op.target ? [`shopping:${op.target.shoppingItemId}`] : [];
     case "shopping.done":
       return op.items.map((i) => `shopping:${i.shoppingItemId}`);
+    case "staple.update":
+    case "staple.remove":
+      return "stapleId" in op.target ? [`staple:${op.target.stapleId}`] : [];
     default:
       return [];
   }
@@ -1542,6 +1727,12 @@ function validateOperation(op: Operation, env: OpEnv): OpOutcome {
       return shoppingRemove(op, env);
     case "shopping.done":
       return shoppingDone(op, env);
+    case "staple.add":
+      return stapleAdd(op, env);
+    case "staple.update":
+      return stapleUpdate(op, env);
+    case "staple.remove":
+      return stapleRemove(op, env);
     case "changeset.revert":
       return changesetRevert(op, env);
     case "profile.restriction.add":
@@ -1613,19 +1804,43 @@ export function planProposal(proposal: ProposedChange, ctx: PlanContext): Plan {
       rejected.push({ opId: op.opId, reason: outcome.reason });
       continue;
     }
+    const kitchenBefore = world.kitchen;
     for (const event of outcome.events) {
       world = applyToWorld(world, event);
       for (const key of touchedKeys(event)) touched.add(key);
       events.push(event);
     }
     if (op.type === "changeset.revert" && outcome.events.length > 0) reverted.push(op.target.changeSetId);
+    let listOffers: ListOffer[] = [];
+    try {
+      listOffers = outcome.events.length ? listOffersFor(op, outcome.refs, kitchenBefore, world.kitchen) : [];
+    } catch (error) {
+      // The offer is a convenience: a bug in it never costs the change itself (0018).
+      console.error("kitchen.validate: list offer failed", { opId: op.opId, error });
+    }
     applied.push({
       opId: op.opId,
       summary: outcome.summary,
       refs: outcome.refs,
       ...(outcome.batchOffers?.length ? { batchOffers: outcome.batchOffers } : {}),
+      ...(listOffers.length ? { listOffers } : {}),
     });
   }
 
-  return { applied, rejected, events, kitchen: world.kitchen, profiles: world.profiles, touched: [...touched], reverted };
+  let finalApplied = applied;
+  try {
+    finalApplied = stillOffered(applied, world.kitchen);
+  } catch (error) {
+    console.error("kitchen.validate: list offers dropped", { error });
+    finalApplied = applied.map(({ listOffers: _drop, ...rest }) => (void _drop, rest));
+  }
+  return {
+    applied: finalApplied,
+    rejected,
+    events,
+    kitchen: world.kitchen,
+    profiles: world.profiles,
+    touched: [...touched],
+    reverted,
+  };
 }

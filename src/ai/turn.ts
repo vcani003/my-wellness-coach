@@ -20,7 +20,7 @@ import type { StreamEvent } from "@/contracts/stream";
 import { saveAssistantMessage, saveUserMessage } from "@/domains/chat/commands";
 import { getRecentTurns } from "@/domains/chat/queries";
 import { applyProposedChange, chooseMealTap } from "@/domains/kitchen/commands";
-import { getKitchenState, getLatestIdeaSet, getRecipe } from "@/domains/kitchen/queries";
+import { getKitchenState, getLatestIdeaSet, getMealProfileContext, getRecipe } from "@/domains/kitchen/queries";
 import type { KitchenScope } from "@/shared/membership";
 import { msg } from "@/shared/messages";
 import { foldMealSteps, recipeParts, recipeStep, runFollowUps, withoutRecipeAnnouncement } from "./follow-ups";
@@ -64,6 +64,14 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
     const state = await getKitchenState(db, scope);
     // The idea cards this user was last shown, in card order, so "the second one" resolves.
     const shown = await bestEffort("load idea cards", null, () => getLatestIdeaSet(db, scope));
+    // Every member's allergies (0019), so a general staples guess leaves them out (0054 SS6).
+    const allergies = await bestEffort("load allergies", [] as NonNullable<InterpretRequest["allergies"]>, async () => {
+      const profile = await getMealProfileContext(db, scope);
+      const names = new Map(profile.members.map((m) => [m.userId, m.name]));
+      return profile.restrictions
+        .filter((r) => r.kind === "allergy")
+        .map((r) => ({ subject: r.subject.value, who: names.get(r.userId) ?? "a member" }));
+    });
     const req: InterpretRequest = {
       kitchenId: scope.kitchenId,
       userId: scope.userId,
@@ -72,6 +80,7 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
       version: state.version,
       history,
       ...(shown ? { ideas: shown.ideas.map((i) => ({ ideaId: i.ideaId, name: i.name })) } : {}),
+      ...(allergies.length ? { allergies } : {}),
     };
     const interpretation = await interpreter.interpret(req);
     const folded = foldMealSteps(interpretation.proposal?.operations ?? [], interpretation.followUps ?? [], input.text);
@@ -109,6 +118,8 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
     }
     reply = withoutRecipeAnnouncement(reply, folded.followUps);
     if (reply) yield { type: "text", delta: reply };
+    // 0054 SS6: the staples the answer named, for its "Add these to my list" button.
+    if (interpretation.staples?.items.length) yield { type: "staples", items: interpretation.staples.items };
 
     // Meals: generated after the save, never before (§6).
     const newId = randomUUID();

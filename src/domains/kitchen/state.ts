@@ -141,6 +141,18 @@ export interface LocationPref extends AuditFields {
   location: Location;
 }
 
+/**
+ * One of the kitchen's staples (0054 SS1: one list for the whole kitchen), keyed by standard name.
+ * Its need (Out / Low / Not in yet / have / on the list) is computed on read, never stored.
+ * Removed staples leave the state; history keeps them.
+ */
+export interface Staple extends AuditFields {
+  standardName: string;
+  name: Fact<string>;
+  /** Usual store (SS5), only when said or picked. Absent = "Anywhere". */
+  store?: Fact<string>;
+}
+
 export interface KitchenEntities {
   items: Record<string, Item>;
   meals: Record<string, Meal>;
@@ -153,9 +165,11 @@ export interface KitchenEntities {
   categoryPrefs: Record<string, CategoryPref>;
   /** Keyed by standard name (0041). */
   locationPrefs: Record<string, LocationPref>;
+  /** Keyed by standard name (0054). Optional so a state built by older code still reads (0018). */
+  staples?: Record<string, Staple>;
 }
 
-export type KitchenEntity = Item | Meal | Recipe | Tick | Review | ShoppingItem | CategoryPref | LocationPref;
+export type KitchenEntity = Item | Meal | Recipe | Tick | Review | ShoppingItem | CategoryPref | LocationPref | Staple;
 
 export const emptyKitchen = (): KitchenEntities => ({
   items: {},
@@ -166,6 +180,7 @@ export const emptyKitchen = (): KitchenEntities => ({
   shopping: {},
   categoryPrefs: {},
   locationPrefs: {},
+  staples: {},
 });
 
 export const tickId = (mealId: string, ingredientKey: string) => `${mealId}|${ingredientKey}`;
@@ -198,6 +213,10 @@ export const KITCHEN_EVENT = {
   batchDefrosted: "item.batch.defrosted",
   categoryRemembered: "item.category.remembered",
   locationRemembered: "item.location.remembered",
+  /** Smart staples (0054). */
+  stapleAdded: "staple.added",
+  stapleUpdated: "staple.updated",
+  stapleRemoved: "staple.removed",
 } as const;
 
 type ItemFactFields = Pick<Item, "quantity" | "location" | "frozen" | "opened" | "occurredAt">;
@@ -369,6 +388,22 @@ export interface ShoppingMovedPayload {
   itemId: string;
 }
 
+/** A new staple (0054). Its own key `staple:<standardName>`, so Undo puts it back as it was. */
+export interface StapleAddedPayload {
+  standardName: string;
+  name: Fact<string>;
+  store?: Fact<string>;
+}
+/** A staple's usual store set or cleared (SS5). */
+export interface StapleUpdatedPayload {
+  standardName: string;
+  set: { store?: Fact<string> };
+  clear: "store"[];
+}
+export interface StapleRemovedPayload {
+  standardName: string;
+}
+
 /** Entity keys a kitchen event touches (`item:<id>` …), for Undo conflicts and STALE_TARGET. */
 export function kitchenTouchedKeys(event: EventEnvelope): string[] {
   const p = event.payload as Record<string, unknown>;
@@ -405,6 +440,10 @@ export function kitchenTouchedKeys(event: EventEnvelope): string[] {
       return [`catpref:${p.standardName as string}`];
     case KITCHEN_EVENT.locationRemembered:
       return [`locpref:${p.standardName as string}`];
+    case KITCHEN_EVENT.stapleAdded:
+    case KITCHEN_EVENT.stapleUpdated:
+    case KITCHEN_EVENT.stapleRemoved:
+      return [`staple:${p.standardName as string}`];
     case CHANGESET_REVERTED:
       return Object.keys((event.payload as ChangesetRevertedPayload).restore);
     default:
@@ -421,13 +460,14 @@ const COLLECTION = {
   shopping: "shopping",
   catpref: "categoryPrefs",
   locpref: "locationPrefs",
+  staple: "staples",
 } as const satisfies Record<string, keyof KitchenEntities>;
 
 export function getKitchenEntity(state: KitchenEntities, key: string): KitchenEntity | null {
   const { kind, id } = splitEntityKey(key);
   const coll = COLLECTION[kind as keyof typeof COLLECTION];
   if (!coll) return null;
-  return (state[coll] as Record<string, KitchenEntity>)[id] ?? null;
+  return (state[coll] as Record<string, KitchenEntity> | undefined)?.[id] ?? null;
 }
 
 // ─── apply ────────────────────────────────────────────────────────────────────────────
@@ -446,7 +486,7 @@ function put<K extends keyof KitchenEntities>(
   state: KitchenEntities,
   coll: K,
   id: string,
-  value: KitchenEntities[K][string] | null,
+  value: NonNullable<KitchenEntities[K]>[string] | null,
 ): KitchenEntities {
   const next = { ...state[coll] } as Record<string, unknown>;
   if (value === null) delete next[id];
@@ -616,6 +656,23 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
         ...(prev ? { createdAt: prev.createdAt, createdBy: prev.createdBy, ...stamp(event) } : created(event)),
       };
       return put(state, "locationPrefs", p.standardName, pref);
+    }
+    case KITCHEN_EVENT.stapleAdded: {
+      const p = event.payload as StapleAddedPayload;
+      const staple: Staple = { standardName: p.standardName, name: p.name, ...(p.store ? { store: p.store } : {}), ...created(event) };
+      return put(state, "staples", p.standardName, staple);
+    }
+    case KITCHEN_EVENT.stapleUpdated: {
+      const p = event.payload as StapleUpdatedPayload;
+      const prev = state.staples?.[p.standardName];
+      if (!prev) return state;
+      const next: Staple = { ...prev, ...compact(p.set), ...stamp(event) };
+      for (const field of p.clear) delete next[field];
+      return put(state, "staples", p.standardName, next);
+    }
+    case KITCHEN_EVENT.stapleRemoved: {
+      const p = event.payload as StapleRemovedPayload;
+      return put(state, "staples", p.standardName, null);
     }
     case KITCHEN_EVENT.itemRemoved: {
       const p = event.payload as ItemRemovedPayload;

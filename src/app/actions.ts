@@ -17,6 +17,12 @@ import { ShoppingDoneFields } from "@/contracts/operations";
 import {
   addRecipeNeedsToShoppingList,
   addShoppingItems,
+  addStapleItems,
+  answerLegacyStaples,
+  getLegacyStaplesOffer,
+  removeStapleItem,
+  restockFromStaples,
+  updateStapleStore,
   doneShopping,
   makeMealAgain,
   moveMeal,
@@ -139,6 +145,68 @@ const StockLevelInput = z.object({ ...Tap, itemId: Id, batchId: Id.optional(), l
  */
 export async function setItemStockLevel(input: z.input<typeof StockLevelInput>): Promise<ActionResult> {
   return run(StockLevelInput, input, (ctx, d) => setStockLevel(ctx.db, ctx.scope, d));
+}
+
+// ─── Staples (0054) ───────────────────────────────────────────────────────────────────
+// The list and each staple's `need` are in `KitchenState.staples` (computed on read, SS3).
+
+const StapleName = z.string().trim().min(1).max(200);
+const StapleStoreName = z.string().trim().min(1).max(100);
+const AddStaplesInput = z.object({ ...Tap, items: z.array(z.object({ name: StapleName, store: StapleStoreName.optional() })).min(1).max(50) });
+const UpdateStapleInput = z.object({ ...Tap, stapleId: Id, store: StapleStoreName.nullable() });
+const StapleInput = z.object({ ...Tap, stapleId: Id });
+const RestockInput = z.object({ ...Tap, stapleIds: z.array(Id).min(1).max(50) });
+const KitchenInput = z.object({ kitchenId: Id });
+const StaplesOfferInput = z.object({ kitchenId: Id, basedOnVersion: z.number().int().nonnegative() });
+
+/** Add a staple (or several), with an optional usual store (SS5). Already a staple → `STAPLE_ALREADY`. */
+export async function addStaples(input: z.input<typeof AddStaplesInput>): Promise<ActionResult> {
+  return run(AddStaplesInput, input, (ctx, d) => addStapleItems(ctx.db, ctx.scope, d));
+}
+
+/** Store… on a staple: a store name, or `null` for "Anywhere" (SS5). */
+export async function updateStaple(input: z.input<typeof UpdateStapleInput>): Promise<ActionResult> {
+  return run(UpdateStapleInput, input, (ctx, d) => updateStapleStore(ctx.db, ctx.scope, d));
+}
+
+/** Remove a staple: no confirmation, it has Undo. */
+export async function removeStaple(input: z.input<typeof StapleInput>): Promise<ActionResult> {
+  return run(StapleInput, input, (ctx, d) => removeStapleItem(ctx.db, ctx.scope, d));
+}
+
+/**
+ * Restock (SS3), and "Add these to my list" under a staples answer (SS6): the chosen staples go on
+ * the list in one change set with one Undo, each under its usual store, source `staples`.
+ */
+export async function restockStaples(input: z.input<typeof RestockInput>): Promise<ActionResult> {
+  return run(RestockInput, input, (ctx, d) => restockFromStaples(ctx.db, ctx.scope, d));
+}
+
+/**
+ * The one-time "You told me these before: … · Add them · Not now" offer (SS2): names from your
+ * old "Staples: …" preference that aren't staples yet. `null` = nothing to offer (or answered).
+ */
+export async function loadStaplesOffer(input: z.input<typeof KitchenInput>): Promise<{ names: string[] } | null> {
+  const parsed = KitchenInput.safeParse(input);
+  if (!parsed.success) return null;
+  try {
+    const ctx = await getScope(parsed.data.kitchenId);
+    if (!ctx) return null;
+    return await getLegacyStaplesOffer(ctx.db, ctx.scope);
+  } catch (error) {
+    console.error("actions: loadStaplesOffer failed", { error });
+    return null;
+  }
+}
+
+/** "Add them": the offered names become staples (one change set, one Undo); the offer is answered. */
+export async function acceptStaplesOffer(input: z.input<typeof StaplesOfferInput>): Promise<ActionResult> {
+  return run(StaplesOfferInput, input, (ctx, d) => answerLegacyStaples(ctx.db, ctx.scope, { ...d, accept: true }));
+}
+
+/** "Not now": nothing changes, and the offer isn't shown again. */
+export async function dismissStaplesOffer(input: z.input<typeof StaplesOfferInput>): Promise<ActionResult> {
+  return run(StaplesOfferInput, input, (ctx, d) => answerLegacyStaples(ctx.db, ctx.scope, { ...d, accept: false }));
 }
 
 // ─── Meals (0005, 0013) ───────────────────────────────────────────────────────────────

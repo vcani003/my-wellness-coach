@@ -92,6 +92,13 @@
       "when": 1792090039017,
       "tag": "0012_item_location_prefs",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792169353250,
+      "tag": "0014_staples",
+      "breakpoints": true
     }
   ]
 }

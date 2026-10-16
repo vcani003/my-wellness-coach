@@ -9,7 +9,9 @@
  *   "X goes under <category>" (CAT1; adds also get the shared keyword guess) ·
  *   "X goes in the pantry" / "put X in the fridge" (0041; adds get their place from the backend) ·
  *   "I was thinking a <dish>, with … I have X" / "I want to make <dish>" (MI1) ·
- *   with a recipe open: "I'm using X too", "no X", "use 3 X instead of 2", "skip step 2", "make it …"
+ *   with a recipe open: "I'm using X too", "no X", "use 3 X instead of 2", "skip step 2", "make it …" ·
+ *   staples (0054): "X is a staple [from Store]", "we always keep X", "X isn't a staple any more",
+ *   "what staples do I need?" / "restock", and "yes" to its own "remember these as your staples?"
  * and answers anything else politely with no changes. Everything it proposes still goes through
  * the real backend validate → apply path. The AI specialist replaces this folder (ai.md §9).
  */
@@ -19,7 +21,11 @@ import type { InterpretRequest, InterpretResult, Interpreter } from "../interpre
 import { mealOperations } from "../real/meal-ops";
 import type { ModelOutput } from "../real/model-output";
 import { CATEGORY_LABEL_EN, guessCategory } from "@/shared/item-category";
-import { matchIntent, type Segment } from "./patterns";
+import { mentionsAllergen } from "@/shared/profile/allergens";
+import { matchStaple } from "@/shared/staples";
+import { standardName } from "@/shared/text";
+import { STAPLES_OFFER, staplesAnswer } from "../staples";
+import { matchIntent, splitList, type Segment } from "./patterns";
 
 /** The recipe changes the fake understands (fake/meals.ts `fakeEdits`), plus "make it vegetarian" (a rewrite). */
 export const FAKE_RECIPE_CHANGE =
@@ -45,6 +51,32 @@ export const FALLBACK_REPLY =
 export const NOTHING_TO_UNDO_REPLY = "There's nothing of yours to undo right now.";
 
 type Op = ProposedChange["operations"][number];
+
+/**
+ * The fake's general staples guess (0054 SS6, only when none are saved): a fixed everyday list,
+ * minus what's in the kitchen and not low, what's on the list, and every member's allergens.
+ */
+export const FAKE_STAPLES = ["jasmine rice", "fish sauce", "eggs", "garlic", "soy sauce", "peanut butter"];
+export const FAKE_GUESS_LEAD = "A few basics to keep on hand: ";
+export const FAKE_REMEMBER_OFFER = "Want me to remember these as your staples?";
+
+function fakeStaplesGuess(req: InterpretRequest): string[] {
+  const allergens = (req.allergies ?? []).map((a) => a.subject);
+  const stocked = req.state.items.filter((i) => i.stock?.value !== "low").map((i) => ({ name: i.name.value, standardName: i.standardName }));
+  const listed = (req.state.shoppingList ?? []).map((e) => ({ name: e.name.value, standardName: e.standardName }));
+  return FAKE_STAPLES.filter((n) => {
+    const me = { name: n, standardName: standardName(n) };
+    return !mentionsAllergen(n, allergens) && matchStaple(me, stocked).length === 0 && matchStaple(me, listed).length === 0;
+  });
+}
+
+/** The names in the fake's own "…on hand: X, Y and Z. Want me to remember these as your staples?". */
+function offeredFakeStaples(req: InterpretRequest): string[] {
+  const last = [...req.history].reverse().find((t) => t.role === "assistant")?.text ?? "";
+  if (!STAPLES_OFFER.test(last)) return [];
+  const m = /:\s*(.+?)\.\s*Want me to remember/i.exec(last);
+  return m ? splitList(m[1]) : [];
+}
 
 /** For "undo": the speaker's own recent change sets, newest first (looked up by the route). */
 export type RecentChangesLookup = (req: InterpretRequest) => Promise<ChangeSetSummary[]>;
@@ -202,6 +234,39 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
             proposal: { ...base, operations: [...adds, ...m.operations] },
             followUps: m.followUps,
           };
+        }
+        case "stapleAdd":
+          // 0054 SS2: said in the user's own words; the store only when they say one (SS5).
+          operations = intent.items.map((s) => ({
+            opId: "",
+            type: "staple.add",
+            evidence: s.raw,
+            fields: { name: said(s.name), ...(intent.store ? { store: said(intent.store) } : {}) },
+          }));
+          reply = `Got it: ${names(intent.items)} ${intent.items.length > 1 ? "are" : "is"} on your staples now.`;
+          break;
+        case "stapleRemove":
+          operations = intent.targets.map((s) => ({ opId: "", type: "staple.remove", evidence: req.message.text.trim(), target: { name: s.name } }));
+          reply = `Done: took ${names(intent.targets)} off your staples.`;
+          break;
+        case "staplesQuestion": {
+          // SS6: from the saved staples, by code; the general guess only when there are none.
+          const answer = staplesAnswer(req.state);
+          if (answer) return { kind: "answer", proposal: null, reply: answer.reply, ...(answer.staples ? { staples: answer.staples } : {}) };
+          const guess = fakeStaplesGuess(req);
+          return {
+            kind: "answer",
+            proposal: null,
+            reply: guess.length ? `${FAKE_GUESS_LEAD}${list(guess)}. ${FAKE_REMEMBER_OFFER}` : "You look well stocked on the basics.",
+          };
+        }
+        case "yes": {
+          // A yes to "remember these as your staples?" (SS2): the names Kitchen offered, as staples.
+          const offered = offeredFakeStaples(req);
+          if (offered.length === 0) return { kind: "answer", proposal: null, reply: FALLBACK_REPLY };
+          operations = offered.map((name) => ({ opId: "", type: "staple.add", evidence: req.message.text.trim(), fields: { name: said(name) } }));
+          reply = `Saved ${list(offered)} as your staples.`;
+          break;
         }
         case "unknown":
           return { kind: "answer", proposal: null, reply: FALLBACK_REPLY };

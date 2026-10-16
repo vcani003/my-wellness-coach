@@ -7,14 +7,11 @@
  *   (not even after Undo), never touching a place that's set, and safe when two loads race.
  * People are fictional (Ana, Ben).
  */
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/pglite/migrator";
-import { MIGRATIONS_FOLDER, type Db } from "@/db/client";
+import type { Db } from "@/db/client";
 import { changeSets, events, itemLocationPrefs } from "@/db/schema";
 import { listChatHistory } from "@/domains/chat/queries";
 import { rebuildProjections, undo } from "@/domains/kitchen/commands";
@@ -24,31 +21,27 @@ import { sortUnplacedOnce } from "@/server/places-sort";
 import type { KitchenScope } from "@/shared/membership";
 import { said } from "../support/memory-kitchen";
 import { newKitchen, ok, openLocalDb } from "../support/db";
+import { journalTags, migrationsUpTo, publicTables } from "../support/migrations";
 
 const medium = (value: string) => ({ value, basis: "inferred", confidence: "medium" });
 
 describe("migration 0012 (0041): additive, on top of a database already at 0011", () => {
   it("applies after 0011 and adds only the empty item_location_prefs table", async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mig-0011-"));
-    fs.mkdirSync(path.join(dir, "meta"));
-    const journal = JSON.parse(fs.readFileSync(path.join(MIGRATIONS_FOLDER, "meta/_journal.json"), "utf8"));
-    const tags = (journal.entries as { idx: number; tag: string }[]).map((e) => e.tag);
-    expect(tags.slice(-2)).toEqual(["0011_recipe_box", "0012_item_location_prefs"]);
-    journal.entries = journal.entries.filter((e: { idx: number }) => e.idx <= 11);
-    fs.writeFileSync(path.join(dir, "meta/_journal.json"), JSON.stringify(journal));
-    for (const e of journal.entries as { tag: string }[]) fs.copyFileSync(path.join(MIGRATIONS_FOLDER, `${e.tag}.sql`), path.join(dir, `${e.tag}.sql`));
-    const { db: old, close: closeOld } = await openLocalDb({ migrationsFolder: dir });
+    const tags = journalTags();
+    expect(tags.indexOf("0012_item_location_prefs")).toBe(tags.indexOf("0011_recipe_box") + 1);
+    const at0011 = migrationsUpTo("0011_recipe_box");
+    const at0012 = migrationsUpTo("0012_item_location_prefs");
+    const { db: old, close: closeOld } = await openLocalDb({ migrationsFolder: at0011.dir });
     try {
-      const tables = async () =>
-        ((await old.execute(sql`select table_name from information_schema.tables where table_schema = 'public' order by table_name`)) as unknown as { rows: { table_name: string }[] }).rows.map((r) => r.table_name);
-      const before = await tables();
+      const before = await publicTables(old);
       expect(before).not.toContain("item_location_prefs");
-      await migrate(old as unknown as Parameters<typeof migrate>[0], { migrationsFolder: MIGRATIONS_FOLDER });
-      expect(await tables()).toEqual([...before, "item_location_prefs"].sort());
+      await migrate(old as unknown as Parameters<typeof migrate>[0], { migrationsFolder: at0012.dir });
+      expect(await publicTables(old)).toEqual([...before, "item_location_prefs"].sort());
       expect(await old.select().from(itemLocationPrefs)).toEqual([]);
     } finally {
       await closeOld();
-      fs.rmSync(dir, { recursive: true, force: true });
+      at0011.cleanup();
+      at0012.cleanup();
     }
   });
 });

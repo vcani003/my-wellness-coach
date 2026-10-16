@@ -23,6 +23,8 @@ const QuantityFact = z.object({
  * defrost for batches, 0025) and
  * shopping-list actions (list_*, 0027). A list action never touches the kitchen; "I bought X" is a
  * kitchen add (the backend takes it off the list, SL5, and adds a batch when X is already there).
+ * staple_add / staple_remove (0054): only when the user says it, or says yes to Kitchen's offer
+ * to remember staples (SS2); code checks both (to-proposal.ts).
  */
 export const ModelAction = z.enum([
   "add",
@@ -37,6 +39,8 @@ export const ModelAction = z.enum([
   "list_tick",
   "list_untick",
   "list_remove",
+  "staple_add",
+  "staple_remove",
   "meal_choose",
   "meal_plan",
   "meal_start_cooking",
@@ -68,7 +72,7 @@ export const ModelOp = z.object({
    * say; code then leaves the backend's default (the oldest first).
    */
   batch: BatchWhich.nullable(),
-  /** list_add / list_update: the store to buy it at, as said (SL1). */
+  /** list_add / list_update / staple_add: the store to buy it at, as said (SL1, 0054 SS5). */
   store: TextFact.nullable(),
   /**
    * meal_*: which meal. An idea label ("d2"), a meal label ("m1"), or "last_chosen" for "that" /
@@ -104,10 +108,12 @@ export const ModelOutput = z.object({
   listOfferAccepted: z.enum(["staples", "stock-offer"]).nullable(),
   /**
    * "What can I make?" → "ideas". A change to the open recipe ("no oven", "make it spicier") →
-   * "recipe_change" with `meal`. Code turns it into a follow-up after apply. Otherwise null.
+   * "recipe_change" with `meal`. Code turns it into a follow-up after apply. "What staples do I
+   * need?" / "restock" → "staples": code answers from the saved staples when there are any (0054
+   * SS6). Otherwise null.
    */
   generate: z
-    .object({ what: z.enum(["ideas", "recipe_change"]), meal: z.string().nullable() })
+    .object({ what: z.enum(["ideas", "recipe_change", "staples"]), meal: z.string().nullable() })
     .nullable(),
   /**
    * A dish the user names themselves ("I was thinking a chicken curry…") that isn't an idea card
@@ -181,7 +187,7 @@ export const WireOutput = z.object({
   rememberPreference: z.object({ statement: z.string(), evidence: z.string() }),
   listOfferAccepted: z.enum(["staples", "stock-offer", "none"]),
   /** what "none" (meal "") unless routing to ideas or a recipe change. */
-  generate: z.object({ what: z.enum(["ideas", "recipe_change", "none"]), meal: z.string() }),
+  generate: z.object({ what: z.enum(["ideas", "recipe_change", "staples", "none"]), meal: z.string() }),
   /** title "" unless the user named a dish themselves (MI1). notes "" when none. */
   dish: z.object({ title: z.string(), notes: z.string(), evidence: z.string() }),
 });

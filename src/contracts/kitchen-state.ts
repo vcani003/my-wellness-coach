@@ -145,6 +145,37 @@ export const ShoppingItemRow = z.object({
 });
 export type ShoppingItemRow = z.infer<typeof ShoppingItemRow>;
 
+/**
+ * Where a staple stands (0054 SS3), **computed by code on every read** from the kitchen and the
+ * list, never stored: `out` (it was in the kitchen and is Out), `low` (Running low), `missing`
+ * (never in the kitchen: "Not in yet"), `have` (in the kitchen: Some, Plenty or no level), or
+ * `on-list` (already open on the shopping list, which wins over the rest). Restock pre-selects
+ * the first three (`stapleNeedsBuying`).
+ */
+export const StapleNeed = z.enum(["out", "low", "missing", "have", "on-list"]);
+export type StapleNeed = z.infer<typeof StapleNeed>;
+export const stapleNeedsBuying = (need: StapleNeed): boolean => need === "out" || need === "low" || need === "missing";
+
+/** One of the kitchen's staples (0054 SS1: one list for the whole kitchen). `createdBy` = who added it. */
+export const StapleRow = z.object({
+  /** Its standard name: what the staple actions take as `stapleId`. */
+  id: Id,
+  /** As said ("nước mắm (fish sauce)"). */
+  name: fact(z.string()),
+  standardName: z.string(),
+  /** Usual store (SS5), only when said or picked. Absent = "Anywhere". */
+  store: fact(z.string()).optional(),
+  need: StapleNeed,
+  /** The kitchen item it matched, when it's in the kitchen (`have` / `low`). */
+  itemId: Id.optional(),
+  /** That item's level when known (KOS4): for `have`, plenty or some; for `low`, low. */
+  level: StockLevel.optional(),
+  /** The open list item, when `on-list`. */
+  shoppingItemId: Id.optional(),
+  ...Audit,
+});
+export type StapleRow = z.infer<typeof StapleRow>;
+
 export const KitchenState = z.object({
   kitchenId: Id,
   version: z.number().int().nonnegative(),
@@ -163,6 +194,11 @@ export const KitchenState = z.object({
    * so a state saved by an older build (offline cache) still parses (0018).
    */
   shoppingList: z.array(ShoppingItemRow).default([]),
+  /**
+   * The kitchen's staples (0054), in the order added, each with its computed `need`. Defaults to
+   * [] so a state saved by an older build (offline cache) still parses (0018).
+   */
+  staples: z.array(StapleRow).default([]),
 });
 export type KitchenState = z.infer<typeof KitchenState>;
 

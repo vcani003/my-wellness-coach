@@ -336,6 +336,27 @@ export const itemLocationPrefs = pgTable(
   (t) => [primaryKey({ columns: [t.kitchenId, t.standardName] })],
 );
 
+/**
+ * The kitchen's staples (0054 SS1): one list per kitchen, keyed by standard name. From
+ * `staple.added` / `.updated` / `.removed`. Their need (Out, Low, Not in yet…) is computed on
+ * read and never stored (SS3). `created_by` is who added it. Migration 0014, additive.
+ */
+export const staples = pgTable(
+  "staples",
+  {
+    kitchenId: text("kitchen_id")
+      .notNull()
+      .references(() => kitchens.id, { onDelete: "cascade" }),
+    standardName: text("standard_name").notNull(),
+    /** As said. */
+    name: jsonb("name").$type<Fact<string>>().notNull(),
+    /** Usual store (SS5); null = "Anywhere". */
+    store: jsonb("store").$type<Fact<string>>(),
+    ...audit,
+  },
+  (t) => [primaryKey({ columns: [t.kitchenId, t.standardName] })],
+);
+
 export const meals = pgTable(
   "meals",
   {

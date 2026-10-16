@@ -1,11 +1,12 @@
 /**
  * Real-model eval for the interpreter (ai.md §8), scored by exact rules, not by another AI.
  * Run with `npm run eval`; skipped unless ANTHROPIC_API_KEY is set. Costs real money: about
- * 49 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list
+ * 59 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list
  * (0027), older and newer batches (0025), a dish named in chat (MI1), item categories (CAT1) and
- * inferred places (0041) and stock levels (0045 KOS4).
+ * inferred places (0041), stock levels (0045 KOS4) and smart staples (0054, `staples-cases.ts`).
  */
 import { afterAll, describe, expect, it } from "vitest";
+import { STAPLE_CASES, stapleCaseRequest } from "./staples-cases";
 import type { Operation, OperationOf, OperationType } from "@/contracts/operations";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult } from "../interpreter";
@@ -386,6 +387,7 @@ const cases: Case[] = [
     },
   },
   {
+    // 0054 SS2: a yes saves staples (with the stores the offer named), never a "Staples:" preference.
     name: "yes to remembering staples",
     text: "yes, remember those",
     history: [
@@ -393,9 +395,12 @@ const cases: Case[] = [
       { role: "assistant", text: "MD Oriental: fish sauce, rice noodles. Publix: eggs. Want me to remember these as your staples?" },
     ],
     check: (r, ops) => {
-      const [save] = only(ops, "profile.preference.save");
-      expect(save.fields.statement.value).toMatch(/fish sauce/i);
-      expect(save.confirmedByMessageId).toBe("msg-1");
+      expect(only(ops, "profile.preference.save")).toHaveLength(0);
+      const adds = only(ops, "staple.add");
+      const store = (n: string) => adds.find((o) => o.fields.name.value.toLowerCase().includes(n))?.fields.store?.value;
+      expect(adds).toHaveLength(3);
+      expect(store("fish sauce")).toBe("MD Oriental");
+      expect(store("egg")).toBe("Publix");
     },
   },
   // ─── Shopping list (0027) ─── VERO_LIST: shop-1 garlic … shop-8 coconut milk (MD Oriental) · shop-9 oatmilk (Publix)
@@ -649,6 +654,15 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("interpreter eval (real model)",
   for (const c of cases) {
     it(c.name, async () => {
       const result = await interpreter.interpret(request(c.text, c.items, c.history, c.list, c.meals));
+      console.info(`[${c.name}] ${result.kind}: ${result.reply}`);
+      c.check(result, opsOf(result));
+    });
+  }
+
+  // Smart staples (0054): the same cases the fake passes in tests/unit/staples-ai.test.ts.
+  for (const c of STAPLE_CASES) {
+    it(c.name, async () => {
+      const result = await interpreter.interpret(stapleCaseRequest(c));
       console.info(`[${c.name}] ${result.kind}: ${result.reply}`);
       c.check(result, opsOf(result));
     });

@@ -1,6 +1,6 @@
 /** Small KitchenState builders for the AI unit tests and the eval set. */
 import type { ItemCategory, Location, StockLevel } from "@/contracts/common";
-import { KitchenState, type ItemRow } from "@/contracts/kitchen-state";
+import { KitchenState, type ItemRow, type StapleNeed, type StapleRow } from "@/contracts/kitchen-state";
 import { standardName } from "@/shared/text";
 import type { Restriction } from "@/shared/profile/state";
 import type { InterpretRequest } from "../interpreter";
@@ -122,6 +122,42 @@ export function request(
     state,
     version: state.version,
     history,
+  };
+}
+
+/** A saved staple (0054) as the backend would send it, with its need already computed. */
+export interface StapleSpec {
+  name: string;
+  store?: string;
+  need: StapleNeed;
+}
+
+export function stapleRow(spec: StapleSpec): StapleRow {
+  const f = <T>(value: T) => ({ value, basis: "said" as const, confidence: "high" as const });
+  const at = daysBack(5);
+  return {
+    id: standardName(spec.name),
+    name: f(spec.name),
+    standardName: standardName(spec.name),
+    ...(spec.store && { store: f(spec.store) }),
+    need: spec.need,
+    createdAt: at,
+    createdBy: actor,
+    updatedAt: at,
+    updatedBy: actor,
+  };
+}
+
+/** `request` plus the kitchen's staples and every member's allergies (0054). */
+export function withStaples(
+  req: InterpretRequest,
+  staples: StapleSpec[] = [],
+  allergies: NonNullable<InterpretRequest["allergies"]> = [],
+): InterpretRequest {
+  return {
+    ...req,
+    state: KitchenState.parse({ ...req.state, staples: staples.map(stapleRow) }),
+    ...(allergies.length ? { allergies } : {}),
   };
 }
 

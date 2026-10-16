@@ -68,6 +68,14 @@ const TEMPLATES: Record<string, string> = {
   SHOPPING_NOT_FOUND: "{name} isn't on the shopping list",
   SHOPPING_DONE: "Put {count} things from the shopping list in your kitchen: {names}",
   SHOPPING_REVIEW_QUEUED: "Saved for later in To review: {names}",
+  // staples (0054)
+  STAPLE_ADDED: "{name} is one of your staples now",
+  STAPLE_ADDED_STORE: "{name} is one of your staples now ({store})",
+  STAPLE_ALREADY: "{name} is already one of your staples",
+  STAPLE_STORE: "{name}: usually from {store}",
+  STAPLE_STORE_CLEARED: "{name}: from anywhere",
+  STAPLE_REMOVED: "{name} isn't a staple any more",
+  STAPLE_NOT_FOUND: "{name} isn't one of your staples",
   // rejections
   UNKNOWN_ITEM: "That item isn't in this kitchen",
   AMBIGUOUS_ITEM: "More than one item matches {name}",

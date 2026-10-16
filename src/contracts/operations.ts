@@ -418,6 +418,48 @@ export const ShoppingDone = z.object({
   items: z.array(ShoppingDoneItem).min(1).max(100),
 });
 
+// ─── Staples (0054, SS1–SS5) ─────────────────────────────────────────────────────────
+
+/**
+ * A staple: `{stapleId}` (exact; a staple's ID is its standard name) or `{name}` (as said; matched
+ * like list items: exact standard name, then all the words).
+ */
+export const StapleTarget = z.union([
+  z.strictObject({ stapleId: Id }),
+  z.strictObject({ name: z.string().min(1).max(200) }),
+]);
+export type StapleTarget = z.infer<typeof StapleTarget>;
+
+/** A staple's usual store (SS5): kept only when said or picked. Absent = "Anywhere". No amounts. */
+const stapleStore = optionalFact(z.string().min(1).max(100));
+
+/**
+ * "Fish sauce is a staple", "we always keep jasmine rice", a yes to "remember these as your
+ * staples?", or Add a staple (SS2: said, said yes to, or tapped; never guessed). One list for the
+ * whole kitchen (SS1). Already a staple → a no-change, unless a new store is given (then it's set).
+ */
+export const StapleAdd = z.object({
+  ...common,
+  type: z.literal("staple.add"),
+  fields: z.object({ name: fact(z.string().min(1).max(200)), store: stapleStore }),
+});
+
+/** Change or clear a staple's usual store (SS5). Same store already → no change. */
+export const StapleUpdate = z.object({
+  ...common,
+  type: z.literal("staple.update"),
+  target: StapleTarget,
+  fields: z.object({ store: stapleStore }),
+  clear: z.array(z.enum(["store"])).optional(),
+});
+
+/** "Eggs aren't a staple any more", or Remove in Edit staples. Not a staple → a no-change. */
+export const StapleRemove = z.object({
+  ...common,
+  type: z.literal("staple.remove"),
+  target: StapleTarget,
+});
+
 export const ChangesetRevert = z.object({
   ...common,
   type: z.literal("changeset.revert"),
@@ -452,6 +494,9 @@ export const Operation = z.discriminatedUnion("type", [
   ShoppingTick,
   ShoppingRemove,
   ShoppingDone,
+  StapleAdd,
+  StapleUpdate,
+  StapleRemove,
   ChangesetRevert,
 ]);
 export type Operation = z.infer<typeof Operation>;
