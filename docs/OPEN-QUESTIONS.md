@@ -11,10 +11,7 @@
 
 ## Outstanding
 
-### IR5. 🟡 Undo for a recipe changed in chat
-[0051](decisions/0051-refining-meal-ideas-in-chat.md) IR2 assumed "Undo still applies" when a chat change edits a saved recipe. While building it we found there's no Undo button for that: recipe saves don't show a "What changed" box, and the real assistant has no "undo" command for recipes (only the test fake does). The card already follows an undo if one ever happens. The alternative is to add an Undo now, either a "What changed" box with Undo after a recipe edit, or a working "undo" in chat. **Rec:** leave it out for MVP 1 and add it only if testers ask for it.
-
-> Answer:
+*Nothing outstanding.*
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
@@ -121,3 +118,4 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | KOS17–KOS18 | App name; chips per place | [0047](decisions/0047-app-name-and-place-chips.md): both Recs |
 | BRT1–BRT3 | Bright look details | [0050](decisions/0050-bright-look-details.md): all Recs |
 | IR1–IR4 | Refining a meal idea in chat | [0051](decisions/0051-refining-meal-ideas-in-chat.md): all Recs |
+| IR5 | Undo for a recipe changed in chat | [0052](decisions/0052-undo-for-recipe-changed-in-chat.md): add the Undo box, button only |

@@ -55,3 +55,4 @@ One line per decision. Read the full record only when it's relevant to your task
 | [0049](0049-agent-worktree-lifecycle.md) | Agent worktrees removed only after integration, with Vero's approval, plain `git worktree remove`, never forced; uncertain → preserve; session start reports only; docs-only agents install nothing |
 | [0050](0050-bright-look-details.md) | Bright look: ink text on coral buttons; allergy colour is berry; "What changed" box is mint |
 | [0051](0051-refining-meal-ideas-in-chat.md) | Refining an idea in chat: card shows latest recipe; change with a recipe edits the recipe; without one edits only the card (`meal_ideas.notes`); others' cards and older batches untouched |
+| [0052](0052-undo-for-recipe-changed-in-chat.md) | Chat edit to a saved recipe shows "What changed" + Undo (button only); card follows; typed "undo" not added |
