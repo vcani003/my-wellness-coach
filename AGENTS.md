@@ -23,3 +23,5 @@ Instructions for any AI agent working in this repo.
 - **An answer becomes a decision record** in `docs/decisions/`, gets added to the index, and the question moves to the "Answered" table.
 - **Scope:** don't add features because they'd be useful eventually (spec §12). The out-of-scope list is in spec §10.
 - **No pushing or deploying** without Vero's go-ahead.
+- **Docs-only tasks don't install anything** ([0049](docs/decisions/0049-agent-worktree-lifecycle.md)). If a task is limited to documentation, architecture plans or mockups and doesn't need the app to run, don't install dependencies, run builds or run tests in your worktree. The orchestrator handles any checks later.
+- **Agent worktrees are cleaned up only with Vero's approval** ([0049](docs/decisions/0049-agent-worktree-lifecycle.md), procedure in [`docs/runbooks/agent-worktrees.md`](docs/runbooks/agent-worktrees.md)). At session start, the orchestrator only reports worktree status. Never force-remove, and if in doubt, preserve.
