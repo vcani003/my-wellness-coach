@@ -118,6 +118,6 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | KOS17–KOS18 | App name; chips per place | [0047](decisions/0047-app-name-and-place-chips.md): both Recs |
 | BRT1–BRT3 | Bright look details | [0050](decisions/0050-bright-look-details.md): all Recs |
 | IR1–IR4 | Refining a meal idea in chat | [0051](decisions/0051-refining-meal-ideas-in-chat.md): all Recs |
-| IR5 | Undo for a recipe changed in chat | [0052](decisions/0052-undo-for-recipe-changed-in-chat.md): add the Undo box, button only |
+| IR5–IR6 | Undo for a recipe changed in chat; mixed messages | [0052](decisions/0052-undo-for-recipe-changed-in-chat.md): add the Undo box, button only; mixed messages keep one receipt (Rec) |
 | P4 | Kitchen OS build order | [0053](decisions/0053-kitchen-os-build-order.md): Rec |
 | SS1–SS7 | Smart staples | [0054](decisions/0054-smart-staples.md): all Recs |
