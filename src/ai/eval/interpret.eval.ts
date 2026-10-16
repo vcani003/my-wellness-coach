@@ -510,6 +510,26 @@ const cases: Case[] = [
     },
   },
   {
+    name: "idea refine (0051 IR2): on Meal ideas, the curry card already has your recipe → 'remove the yogurt from the curry' edits that recipe",
+    text: "remove the yogurt from the curry",
+    req: ideasViewRequest("remove the yogurt from the curry", [{ ...mealInProgress("meal-curry", SHOWN_IDEAS[0].name), ideaId: "idea-curry" }]),
+    check: (r, ops) => {
+      expect(only(ops, "meal.choose")).toHaveLength(0);
+      expect(r.followUps).toEqual([{ kind: "recipe", meal: { mealId: "meal-curry" }, refine: "remove the yogurt from the curry" }]);
+    },
+  },
+  {
+    name: "idea refine (0051 IR4): the curry card was chosen by another member → only this card changes, never their recipe",
+    text: "remove the yogurt from the curry",
+    req: ideasViewRequest("remove the yogurt from the curry", [
+      { ...mealInProgress("meal-curry", SHOWN_IDEAS[0].name), ideaId: "idea-curry", createdBy: { id: "u-ben", name: "Ben" } },
+    ]),
+    check: (r, ops) => {
+      expect(only(ops, "meal.choose")).toHaveLength(0);
+      expect(r.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: "remove the yogurt from the curry" }]);
+    },
+  },
+  {
     name: "a named dish 'or something else?' → ideas, nothing chosen",
     text: "i was thinking a chicken curry, or something else?",
     items: CURRY_KITCHEN,

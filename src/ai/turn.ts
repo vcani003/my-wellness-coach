@@ -23,7 +23,7 @@ import { applyProposedChange, chooseMealTap } from "@/domains/kitchen/commands";
 import { getKitchenState, getLatestIdeaSet, getRecipe } from "@/domains/kitchen/queries";
 import type { KitchenScope } from "@/shared/membership";
 import { msg } from "@/shared/messages";
-import { foldMealSteps, recipeParts, recipeStep, runFollowUps, withoutIdeaRefineDraft, withoutRecipeAnnouncement } from "./follow-ups";
+import { cardsFollowRecipes, foldMealSteps, recipeParts, recipeStep, runFollowUps, withoutIdeaRefineDraft, withoutRecipeAnnouncement } from "./follow-ups";
 import type { InterpretRequest, Interpreter } from "./interpreter";
 import { notConfiguredMealAI, type MealAI } from "./meals";
 import { replyFromReceipt } from "./receipt-reply";
@@ -108,6 +108,10 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
       result = outcome.result;
       yield { type: "applied", result };
       appliedSent = true;
+      // An Undo can put back an older recipe: its idea card follows it (0051 IR1, IR2).
+      if (proposal.operations.some((op) => op.type === "changeset.revert")) {
+        yield* cardsFollowRecipes({ db, scope, meals: deps.meals ?? notConfiguredMealAI }, result);
+      }
     }
 
     if (proposal?.clarification) yield { type: "clarification", ...proposal.clarification };

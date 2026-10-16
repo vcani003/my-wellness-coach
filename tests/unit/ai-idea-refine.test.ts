@@ -56,9 +56,8 @@ const output = (partial: Partial<ModelOutput>): ModelOutput => ({
 });
 
 /** A meal chosen from the curry card, with or without a recipe. */
-function curryMeal(recipe: boolean) {
+function curryMeal(recipe: boolean, actor = { id: "u-vero", name: "Vero" }) {
   const at = new Date(NOW.getTime() - 600_000).toISOString();
-  const actor = { id: "u-vero", name: "Vero" };
   return {
     id: "meal-curry",
     title: SHOWN_IDEAS[0].name,
@@ -74,8 +73,8 @@ function curryMeal(recipe: boolean) {
   };
 }
 
-function withMeal(req: InterpretRequest, recipe: boolean): InterpretRequest {
-  const state = KitchenState.parse({ ...req.state, meals: [curryMeal(recipe)] });
+function withMeal(req: InterpretRequest, recipe: boolean, actor?: { id: string; name: string }): InterpretRequest {
+  const state = KitchenState.parse({ ...req.state, meals: [curryMeal(recipe, actor)] });
   return { ...req, state };
 }
 
@@ -166,6 +165,52 @@ describe("routing a change to an idea card (code decides)", () => {
     const f = [{ kind: "idea-refine" as const, ideaId: "x", request: "r" }];
     expect(withoutIdeaRefineDraft("Good choice. Here's the recipe.", f, null)).toBe("");
     expect(withoutIdeaRefineDraft("Sure.", [], null)).toBe("Sure.");
+  });
+});
+
+describe("0051: which change a card gets (IR2, IR3, IR4)", () => {
+  /** Another member of the kitchen (a fictional persona). */
+  const BEN = { id: "u-ben", name: "Ben" };
+
+  it("IR2: the model only picked a card whose meal has your recipe, with change words → the recipe is edited, nothing re-chosen", () => {
+    const text = "remove the yogurt from the curry";
+    const req = withMeal(ideasViewRequest(text), true);
+    const m = mealOperations(output({ kind: "change", operations: [mealOp("meal_choose", "d1", text)] }), req, NOW);
+    expect(m.operations).toEqual([]);
+    expect(m.followUps).toEqual([{ kind: "recipe", meal: { mealId: "meal-curry" }, refine: text }]);
+  });
+
+  it("IR2: 'make the curry without yogurt' once it has your recipe edits that recipe (no second meal, no rewrite from scratch)", () => {
+    const text = "make the curry without yogurt";
+    const req = withMeal(ideasViewRequest(text), true);
+    const out = output({ kind: "change", operations: [mealOp("meal_choose", "d1", text)], generate: { what: "recipe_change", meal: "d1" } });
+    const m = mealOperations(out, req, NOW);
+    expect(m.operations).toEqual([]);
+    expect(m.followUps).toEqual([{ kind: "recipe", meal: { mealId: "meal-curry" }, refine: text }]);
+  });
+
+  it("IR2: a plain pick of a card that has your recipe stays a pick (no edit)", () => {
+    const req = withMeal(ideasViewRequest("the first one"), true);
+    const m = mealOperations(output({ kind: "change", operations: [mealOp("meal_choose", "d1", "the first one")] }), req, NOW);
+    expect(m.operations).toMatchObject([{ type: "meal.choose", target: { ideaId: "idea-curry" } }]);
+    expect(m.followUps).toEqual([]);
+  });
+
+  it("IR4: a card another member chose (their meal has a recipe) → only this card changes, never their recipe", () => {
+    const text = "remove the yogurt from the curry";
+    const req = withMeal(ideasViewRequest(text), true, BEN);
+    const viaRoute = mealOperations(output({ generate: { what: "recipe_change", meal: "d1" } }), req, NOW);
+    expect(viaRoute.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: text }]);
+    const viaPick = mealOperations(output({ kind: "change", operations: [mealOp("meal_choose", "d1", text)] }), req, NOW);
+    expect(viaPick.operations).toEqual([]);
+    expect(viaPick.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: text }]);
+  });
+
+  it("IR4: the model isn't told another member's meal is this card's ('chosen as mN' is only for your own)", () => {
+    const req = withMeal(ideasViewRequest("x"), true, BEN);
+    expect(renderIdeas(req).split("\n")[0]).toBe(
+      "d1: Lemongrass chicken potato coconut curry · uses chicken thighs, potatoes, coconut milk, Greek yogurt · missing lemongrass",
+    );
   });
 });
 
@@ -338,6 +383,23 @@ describe("the fake (repeatable e2e)", () => {
     const r = await createFakeMealAI(() => NOW).refineIdea(refineInput("remove the cheese from the curry"));
     expect(r).toMatchObject({ ok: true, unchanged: true });
     expect(fakeIdeaChange("remove the cheese", refineInput("x").idea, refineInput("x")).reply).toBe("");
+  });
+
+  it("the fake follows 0051 like the eval cases: Vero's message → card; your recipe → recipe edit; another member's meal → card", async () => {
+    const fake = createFakeInterpreter();
+    const exact = await fake.interpret(ideasViewRequest(IDEA_REFINE_MESSAGE));
+    expect(exact.proposal).toBeNull();
+    expect(exact.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: IDEA_REFINE_MESSAGE }]);
+    const text = "remove the yogurt from the curry";
+    const mine = await fake.interpret(withMeal(ideasViewRequest(text), true));
+    expect(mine.proposal).toBeNull();
+    expect(mine.followUps).toEqual([{ kind: "recipe", meal: { mealId: "meal-curry" }, refine: text }]);
+    const make = await fake.interpret(withMeal(ideasViewRequest("make the curry without yogurt"), true));
+    expect(make.proposal).toBeNull();
+    expect(make.followUps).toEqual([{ kind: "recipe", meal: { mealId: "meal-curry" }, refine: "make the curry without yogurt" }]);
+    const theirs = await fake.interpret(withMeal(ideasViewRequest(text), true, { id: "u-ben", name: "Ben" }));
+    expect(theirs.proposal).toBeNull();
+    expect(theirs.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: text }]);
   });
 
   it("the fake interpreter routes edits to the card and 'make … without' to choose + recipe", async () => {

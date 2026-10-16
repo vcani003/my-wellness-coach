@@ -189,6 +189,16 @@ async function* ideaFollowsRecipe(deps: FollowUpDeps, mealId: string, ideaId: st
   }
 }
 
+/**
+ * After an Undo in chat (0051 IR2: Undo still applies to a recipe change): each live card-chosen
+ * meal's card follows its latest saved recipe again. A no-op for cards that already match.
+ */
+export async function* cardsFollowRecipes(deps: FollowUpDeps, result: ApplyResult): AsyncGenerator<StreamEvent, void> {
+  for (const m of result.state.meals) {
+    if (m.ideaId && m.recipe && m.status !== "done" && m.status !== "cancelled") yield* ideaFollowsRecipe(deps, m.id, m.ideaId);
+  }
+}
+
 // ─── Recipe ─────────────────────────────────────────────────────────────────────────────
 
 const group = (i: RecipeView["ingredients"][number]): RecipeIngredientOut["group"] =>

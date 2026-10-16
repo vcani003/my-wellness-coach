@@ -294,8 +294,8 @@ export function neutralize(text: string): string {
 
 /**
  * d1, d2… in card order (meal-ops.ts resolves them), with what each card uses and is missing, and
- * the meal it became when chosen ("chosen as m2 · has recipe"), so a change to "the curry" can be
- * routed to the card or to its recipe (ai.md §5 "Refining an idea").
+ * the meal it became when this user chose it ("chosen as m2 · has recipe"), so a change to "the
+ * curry" can be routed to the card or to its recipe (ai.md §5 "Refining an idea", 0051).
  */
 export function renderIdeas(req: InterpretRequest): string {
   const ideas = req.ideas ?? [];
@@ -306,7 +306,10 @@ export function renderIdeas(req: InterpretRequest): string {
       const parts = [`d${i + 1}: ${idea.name}`];
       if (idea.uses?.length) parts.push(`uses ${idea.uses.join(", ")}`);
       if (idea.missing?.length) parts.push(`missing ${idea.missing.join(", ")}`);
-      const meal = req.state.meals.find((m) => m.ideaId === idea.ideaId && ["chosen", "planned", "cooking"].includes(m.status));
+      // Only a meal the asker chose: a card another member chose changes only this card (0051 IR4).
+      const meal = req.state.meals.find(
+        (m) => m.ideaId === idea.ideaId && ["chosen", "planned", "cooking"].includes(m.status) && !("missing" in m.createdBy) && m.createdBy.id === req.userId,
+      );
       if (meal) parts.push(`chosen as ${mealLabel.get(meal.id)}${meal.recipe ? " · has recipe" : ""}`);
       return parts.join(" · ");
     })

@@ -20,7 +20,7 @@ import { StreamEvent, type MealIdea } from "@/contracts/stream";
 import { createFakeInterpreter } from "@/ai/fake";
 import { createFakeMealAI } from "@/ai/fake/meals";
 import { handleChatTurn, handleChooseMeal } from "@/ai/turn";
-import { getKitchenState, getRecipe } from "@/domains/kitchen/queries";
+import { getChangesSince, getKitchenState, getRecipe } from "@/domains/kitchen/queries";
 import type { KitchenScope } from "@/shared/membership";
 import { newKitchen, openLocalDb } from "../support/db";
 
@@ -48,7 +48,16 @@ async function collect(gen: AsyncGenerator<StreamEvent>) {
     reply: events.flatMap((e) => (e.type === "text" ? [e.delta] : [])).join(""),
   };
 }
-const deps = (scope: KitchenScope) => ({ db, scope, interpreter: createFakeInterpreter(), meals: createFakeMealAI() });
+/** The fake as the app wires it, so "undo" finds the speaker's own latest change set. */
+const deps = (scope: KitchenScope) => ({
+  db,
+  scope,
+  interpreter: createFakeInterpreter(async (req) => {
+    const recent = await getChangesSince(db, scope, Math.max(0, req.version - 30));
+    return recent.filter((c) => !("missing" in c.actor) && c.actor.id === req.userId).reverse();
+  }),
+  meals: createFakeMealAI(),
+});
 const turn = (scope: KitchenScope, text: string) => collect(handleChatTurn(deps(scope), { clientMessageId: `idea-${++n}`, text }));
 const choose = (scope: KitchenScope, ideaId: string) =>
   collect(handleChooseMeal({ db, scope, meals: createFakeMealAI() }, { clientMessageId: `tap-${++n}`, target: { ideaId } }));
@@ -134,6 +143,20 @@ describe("the card follows its meal's latest recipe (A, C)", () => {
     expect(row.uses).toEqual(card.uses);
   });
 
+  it("0051 IR2: Undo of that recipe change puts the recipe back, and the card follows it again", async () => {
+    const { ana, curry, names } = await anaWithCurryIdea();
+    await choose(ana, curry.ideaId);
+    await turn(ana, "no potatoes");
+    const mealId = (await getKitchenState(db, ana)).meals[0].id;
+    const t = await turn(ana, "undo");
+    expect(t.types).toContain("applied");
+    const recipe = await getRecipe(db, ana, mealId);
+    expect(recipe?.ingredients.map((i) => i.name)).toContain("potatoes");
+    const [row] = await db.select().from(mealIdeas).where(eq(mealIdeas.id, curry.ideaId));
+    expect(await names(row.uses)).toEqual(["chicken thighs", "potatoes", "greek yogurt"]);
+    expect(t.updates.map((u) => u.ideaId)).toEqual([curry.ideaId]);
+  });
+
   it("'make the chicken curry without yogurt' chooses it, writes the recipe without yogurt, and the card follows", async () => {
     const { ana, curry, names } = await anaWithCurryIdea();
     const t = await turn(ana, "make the chicken curry without yogurt");
@@ -144,6 +167,65 @@ describe("the card follows its meal's latest recipe (A, C)", () => {
     const recipe = await getRecipe(db, ana, meal.id);
     expect(recipe?.ingredients.map((i) => i.name)).not.toContain("greek yogurt");
     expect(await names(t.updates[0].uses)).toEqual(["chicken thighs", "potatoes"]);
+  });
+});
+
+describe("0051 IR1: the card shows the latest recipe, display only", () => {
+  it("name and why stay; Uses / Missing follow; following writes nothing to the recipe", async () => {
+    const { ana, curry } = await anaWithCurryIdea();
+    await choose(ana, curry.ideaId);
+    const mealId = (await getKitchenState(db, ana)).meals[0].id;
+    const t = await turn(ana, "no potatoes");
+    const saved = t.events.flatMap((e) => (e.type === "recipe.saved" ? [e] : []));
+    expect(saved).toHaveLength(1);
+    const card = t.updates[0];
+    expect(card.name).toBe(curry.name);
+    expect(card.why).toBe(curry.why);
+    // The recipe is exactly the version the turn saved: the card following it saved nothing more.
+    expect((await getKitchenState(db, ana)).meals[0].recipe?.version).toBe(saved[0].version);
+    expect((await getRecipe(db, ana, mealId))?.version).toBe(saved[0].version);
+  });
+
+  it("choosing a card that was changed in chat: the card follows its first recipe in the same stream", async () => {
+    const { ana, curry, names } = await anaWithCurryIdea();
+    await turn(ana, "remove the yogurt from the chicken curry");
+    const c = await choose(ana, curry.ideaId);
+    // The fake recipe adds nothing beyond the card, so the card already matches: no update needed.
+    expect(c.types).toContain("recipe.saved");
+    const [row] = await db.select().from(mealIdeas).where(eq(mealIdeas.id, curry.ideaId));
+    expect(await names(row.uses)).toEqual(["chicken thighs", "potatoes"]);
+    expect(row.missing).toEqual(["lemongrass"]);
+  });
+});
+
+describe("0051 IR4: shared kitchen and older idea sets", () => {
+  it("a card another member chose: a change edits only the card, their recipe stays; when their recipe changes, the card follows it", async () => {
+    const { k, ana, curry, names } = await anaWithCurryIdea();
+    const ben = await k.scope("Ben");
+    await choose(ben, curry.ideaId);
+    const meal = (await getKitchenState(db, ana)).meals[0];
+    expect(meal.ideaId).toBe(curry.ideaId);
+    const before = await getRecipe(db, ana, meal.id);
+
+    const t = await turn(ana, "remove the yogurt from the chicken curry");
+    expect(t.types).not.toContain("recipe.saved");
+    expect(await names(t.updates[0].uses)).toEqual(["chicken thighs", "potatoes"]);
+    expect((await getRecipe(db, ana, meal.id))?.version).toBe(before?.version);
+    expect((await getRecipe(db, ana, meal.id))?.ingredients.map((i) => i.name)).toContain("greek yogurt");
+
+    // Ben changes his meal's recipe: Ana's card follows that recipe again (yogurt back, potatoes out).
+    await turn(ben, "no potatoes");
+    const [row] = await db.select().from(mealIdeas).where(eq(mealIdeas.id, curry.ideaId));
+    expect(await names(row.uses)).toEqual(["chicken thighs", "greek yogurt"]);
+  });
+
+  it("an idea from an older set can't be refined in chat: only the latest set shown counts", async () => {
+    const { ana, curry } = await anaWithCurryIdea();
+    await turn(ana, "what can I make? a tofu stir fry with tofu and greens");
+    const t = await turn(ana, "remove the yogurt from the chicken curry");
+    expect(t.updates.map((u) => u.ideaId)).not.toContain(curry.ideaId);
+    const [row] = await db.select().from(mealIdeas).where(eq(mealIdeas.id, curry.ideaId));
+    expect(row.notes).toBeNull();
   });
 });
 

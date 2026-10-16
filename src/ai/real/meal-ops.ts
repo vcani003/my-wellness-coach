@@ -118,6 +118,17 @@ export function guardDishIngredients(ops: Operation[], out: ModelOutput, req: In
 }
 
 /**
+ * The meal chosen from this idea card whose recipe a change to the card edits (0051 IR2): live,
+ * with a recipe, and chosen by the asker. A card another member chose changes only the asker's
+ * own card until their meal's recipe changes (0051 IR4), so their meal is never found here.
+ */
+export function cardMealWithRecipe(req: InterpretRequest, ideaId: string) {
+  return req.state.meals.find(
+    (m) => m.ideaId === ideaId && ACTIVE.has(m.status) && m.recipe && !("missing" in m.createdBy) && m.createdBy.id === req.userId,
+  );
+}
+
+/**
  * The idea card a named dish means: the same name, or else the ONE card whose name has every word
  * of the dish ("the curry" → "Lemongrass chicken potato coconut curry"). Two such cards → none.
  */
@@ -171,7 +182,7 @@ function settleIdeaChanges(req: InterpretRequest, refined: string | null, ops: O
   const changes = CHANGES_A_DISH.test(text);
   let operations = ops;
   let follows = followUps;
-  const hasRecipe = (ideaId: string) => req.state.meals.some((m) => m.ideaId === ideaId && ACTIVE.has(m.status) && m.recipe);
+  const hasRecipe = (ideaId: string) => Boolean(cardMealWithRecipe(req, ideaId));
   const refineIdeas = new Set<string>();
 
   for (const op of ops) {
@@ -179,7 +190,21 @@ function settleIdeaChanges(req: InterpretRequest, refined: string | null, ops: O
     const ideaId = op.target.ideaId;
     // A plain pick stays a pick. Without the model's recipe_change, it's a change only when the
     // message changes the dish AND names something on that card (not "I don't want the first one").
-    if (hasRecipe(ideaId) || (ideaId !== refined && !(changes && namesCardIngredient(req, ideaId)))) continue;
+    const changesCard = ideaId === refined || (changes && namesCardIngredient(req, ideaId));
+    const meal = cardMealWithRecipe(req, ideaId);
+    if (meal) {
+      // 0051 IR2: the card's meal has a recipe, so a change to the card is a change to that recipe
+      // (edit mode), even when the model only picked the card. A plain pick stays a pick, and a
+      // pick that also plans or starts cooking is left as the model sent it.
+      const tied = follows.some((f) => f.kind === "meal-step" && f.meal.chooseOpId === op.opId);
+      const refining = follows.some((f) => f.kind === "recipe" && "mealId" in f.meal && f.meal.mealId === meal.id && f.refine);
+      if (changesCard && !tied) {
+        operations = operations.filter((o) => o.opId !== op.opId && !o.opId.startsWith(`${op.opId}:`));
+        if (!refining) follows = [...follows, { kind: "recipe", meal: { mealId: meal.id }, refine: text }];
+      }
+      continue;
+    }
+    if (!changesCard) continue;
     if (wantsRecipe) {
       follows = follows.map((f) =>
         f.kind === "recipe" && "chooseOpId" in f.meal && f.meal.chooseOpId === op.opId && !f.notes ? { ...f, notes: text.slice(0, 2000) } : f,
@@ -288,7 +313,7 @@ export function mealOperations(out: ModelOutput, req: InterpretRequest, now: Dat
     followUps.push({ kind: "ideas", request: req.message.text.trim() });
   } else if (changedIdea) {
     // A change to an idea card (ai.md §5): its meal's recipe when it has one (edit mode), else the card.
-    const meal = req.state.meals.find((m) => m.ideaId === changedIdea.ideaId && ACTIVE.has(m.status) && m.recipe);
+    const meal = cardMealWithRecipe(req, changedIdea.ideaId);
     if (meal) followUps.push({ kind: "recipe", meal: { mealId: meal.id }, refine: req.message.text.trim() });
     else refinedIdea = changedIdea.ideaId;
   } else if (g?.what === "recipe_change") {
