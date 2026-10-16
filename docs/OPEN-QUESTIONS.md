@@ -11,60 +11,7 @@
 
 ## Outstanding
 
-### P4. 🟡 Order of the Kitchen OS features (0043, 0045)
-None of the KOS features has its backend yet. Already done or not needed: KOS10 (Lumi), KOS15 (allergy colour) and KOS14 (reversed by 0048). KOS13 mostly works and needs only a restyle. You asked me (2026-10-16) to go with recs while you're away, so I'm building in the Rec order below, one at a time, each on its own branch, with nothing merged or deployed. Reorder any time.
-**Rec**, small and useful first, with each step building on the last:
-1. **KOS4** stock levels plenty / some / low / out (low and out already exist)
-2. **KOS16** ask before removing more than 5 things at once
-3. **KOS3** tap an item to edit it
-4. **KOS1** dated week plan, then **KOS12** add the week's missing ingredients
-5. **KOS6** History tab
-6. **KOS5** favorites in the recipe box
-7. **KOS11** rename yourself / leave the household
-8. **KOS13** cook-steps restyle
-9. **KOS2** food catalog + estimated use-by, then **KOS9** shopping list by aisle (large)
-10. **KOS8** the assistant moves the screen and suggests reply chips
-11. **KOS7** offline for all buttons (large)
-
-> Answer:
-
-### Smart staples (P3 #1, [plan](plans/smart-staples.md))
-Kitchen remembers your usual staples, offers to add them to the list when they run low or out, and a **Restock** button builds the list. Today staples exist only as one line of free text in your personal preferences, so the app can't act on them.
-
-### SS1. 🟡 Whose staples are they?
-**Rec:** **one list for the whole kitchen**, shared like the shopping list, so you and Levi see and edit the same staples. *Alternative:* each person keeps their own.
-
-> Answer:
-
-### SS2. 🟡 How does Kitchen learn your staples?
-**Rec:** **only from you.** That means saying it ("fish sauce is a staple"), saying yes when Lumi offers "Want me to remember these as your staples?", or adding one by tap. The staples you already told Lumi are offered back once, and move over only if you tap **Add them**. Kitchen never guesses from what you buy (0012). *Alternative:* after something is bought 3 times, Lumi asks once whether it's a staple.
-
-> Answer:
-
-### SS3. 🟡 What does Restock pick for you?
-**Rec:** it **pre-selects** staples that are Out, Running low or not in the kitchen. Ones you have Some or Plenty of are shown but not selected, so you can add extras. Ones already on the list are shown muted and skipped. *Alternative:* also pre-select "Some".
-
-> Answer:
-
-### SS4. ⚪ When a staple runs low or out, offer or add automatically?
-**Rec:** **offer, as SL3 already says.** The receipt shows a one-tap **Add fish sauce to my list** button (designed earlier, but never built in the Kitchen OS look). It shows for every Out/Low item, not just staples. *Alternative:* staples go straight onto the list, with Undo.
-
-> Answer:
-
-### SS5. ⚪ Should a staple remember its usual store?
-**Rec:** **yes, but only when you say it or pick it** ("fish sauce from MD Oriental"). Restock then puts it under that store, and anything without a store goes under Anywhere (or by aisle after KOS9). No usual amounts. *Alternative:* no stores, so everything goes under Anywhere.
-
-> Answer:
-
-### SS6. ⚪ "What staples do I need?" once you have saved staples
-**Rec:** Lumi **answers from your saved staples** (the ones Out, Low or missing, worked out by code) with an **Add these to my list** button. Her general pantry guess is used only while you have no staples yet. *Alternative:* your staples plus a few of her own suggestions.
-
-> Answer:
-
-### SS7. ⚪ Where does Smart staples go in the build order (P4)?
-**Rec:** **right after KOS4** (stock levels), before KOS16. You ranked it first in P3, it uses KOS4's levels directly, and it speeds up the grocery trip. It doesn't need any other KOS feature first. The item "Staple" switch comes with KOS3. Size: about M (backend S–M, AI S, screens M).
-
-> Answer:
+*Nothing outstanding.*
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
@@ -172,3 +119,5 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | BRT1–BRT3 | Bright look details | [0050](decisions/0050-bright-look-details.md): all Recs |
 | IR1–IR4 | Refining a meal idea in chat | [0051](decisions/0051-refining-meal-ideas-in-chat.md): all Recs |
 | IR5 | Undo for a recipe changed in chat | [0052](decisions/0052-undo-for-recipe-changed-in-chat.md): add the Undo box, button only |
+| P4 | Kitchen OS build order | [0053](decisions/0053-kitchen-os-build-order.md): Rec |
+| SS1–SS7 | Smart staples | [0054](decisions/0054-smart-staples.md): all Recs |

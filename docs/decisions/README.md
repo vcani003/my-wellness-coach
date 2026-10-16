@@ -56,3 +56,5 @@ One line per decision. Read the full record only when it's relevant to your task
 | [0050](0050-bright-look-details.md) | Bright look: ink text on coral buttons; allergy colour is berry; "What changed" box is mint |
 | [0051](0051-refining-meal-ideas-in-chat.md) | Refining an idea in chat: card shows latest recipe; change with a recipe edits the recipe; without one edits only the card (`meal_ideas.notes`); others' cards and older batches untouched |
 | [0052](0052-undo-for-recipe-changed-in-chat.md) | Chat edit to a saved recipe shows "What changed" + Undo (button only); card follows; typed "undo" not added |
+| [0053](0053-kitchen-os-build-order.md) | Build order: KOS4 → Smart staples → KOS16 → KOS3 (+ Epic A backend) → KOS1/12 → KOS6 → KOS5 → KOS11 → KOS13 → KOS2/9 → KOS8 → KOS7 |
+| [0054](0054-smart-staples.md) | Smart staples: one shared list; explicit only; Restock pre-selects Out/Low/missing; offer, never auto-add; store optional, no amounts; answer from saved staples |
