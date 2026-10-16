@@ -122,3 +122,4 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | P4 | Kitchen OS build order | [0053](decisions/0053-kitchen-os-build-order.md): Rec |
 | SS1–SS14 | Smart staples | [0054](decisions/0054-smart-staples.md): all Recs |
 | KOS4-a–e | Stock level details | [0055](decisions/0055-stock-level-details.md): all Recs |
+| KOS16-a–c | Asking before >5 removals | [0056](decisions/0056-bulk-remove-confirm.md): all Recs |
