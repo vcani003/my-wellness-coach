@@ -1,7 +1,8 @@
 /**
  * One chat turn (backend-data.md §6, ai.md §1): interpret → apply → reply, streamed as the
  * canonical turn events. The order is fixed: `ack` first, `applied` before any `text`, and
- * `done` or `error` last. The interpreter only proposes; `applyProposedChange` decides.
+ * `done` or `error` last. A turn whose only change is a recipe edit (0052) gets its `applied`
+ * from the recipe step, so its reply waits until after the follow-ups to keep that order. The interpreter only proposes; `applyProposedChange` decides.
  * The draft reply is sent only if every operation applied; otherwise `reword`, or a reply built
  * from the receipt.
  *
@@ -19,11 +20,11 @@ import type { ApplyResult } from "@/contracts/apply-result";
 import type { StreamEvent } from "@/contracts/stream";
 import { saveAssistantMessage, saveUserMessage } from "@/domains/chat/commands";
 import { getRecentTurns } from "@/domains/chat/queries";
-import { applyProposedChange, chooseMealTap } from "@/domains/kitchen/commands";
+import { applyProposedChange, chooseMealTap, undo } from "@/domains/kitchen/commands";
 import { getKitchenState, getLatestIdeaSet, getRecipe } from "@/domains/kitchen/queries";
 import type { KitchenScope } from "@/shared/membership";
 import { msg } from "@/shared/messages";
-import { cardsFollowRecipes, foldMealSteps, recipeParts, recipeStep, runFollowUps, withoutIdeaRefineDraft, withoutRecipeAnnouncement } from "./follow-ups";
+import { afterUndo, foldMealSteps, recipeParts, recipeStep, runFollowUps, withoutIdeaRefineDraft, withoutRecipeAnnouncement } from "./follow-ups";
 import type { InterpretRequest, Interpreter } from "./interpreter";
 import { notConfiguredMealAI, type MealAI } from "./meals";
 import { replyFromReceipt } from "./receipt-reply";
@@ -108,9 +109,9 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
       result = outcome.result;
       yield { type: "applied", result };
       appliedSent = true;
-      // An Undo can put back an older recipe: its idea card follows it (0051 IR1, IR2).
+      // An Undo can put back an older recipe: it's shown again and its idea card follows it (0051 IR1, IR2; 0052).
       if (proposal.operations.some((op) => op.type === "changeset.revert")) {
-        yield* cardsFollowRecipes({ db, scope, meals: deps.meals ?? notConfiguredMealAI }, result);
+        yield* afterUndo({ db, scope, meals: deps.meals ?? notConfiguredMealAI }, result);
       }
     }
 
@@ -121,13 +122,18 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
       reply = interpreter.reword ? await interpreter.reword(req, interpretation, result) : replyFromReceipt(result);
     }
     reply = withoutIdeaRefineDraft(withoutRecipeAnnouncement(reply, folded.followUps), folded.followUps, result);
-    if (reply) yield { type: "text", delta: reply };
+    // 0052: a recipe edit with nothing else saved brings this turn's receipt (`applied`), which
+    // must come before any text: the reply waits for it.
+    const hasRecipe = (mealId: string) => state.meals.some((m) => m.id === mealId && m.recipe);
+    const waitForReceipt = !result && folded.followUps.some((f) => f.kind === "recipe" && "mealId" in f.meal && hasRecipe(f.meal.mealId));
+    if (reply && !waitForReceipt) yield { type: "text", delta: reply };
 
     // Meals: generated after the save, never before (§6).
     const newId = randomUUID();
-    let fullReply = reply;
+    let fullReply = waitForReceipt ? "" : reply;
+    const pending = waitForReceipt ? reply : "";
     if (folded.followUps.length > 0) {
-      const lines = yield* runFollowUps(
+      const lines = yield* receiptOf(runFollowUps(
         { db, scope, meals: deps.meals ?? notConfiguredMealAI },
         {
           id: input.clientMessageId,
@@ -138,7 +144,10 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
         },
         folded.followUps,
         result,
-      );
+      ), (r) => {
+        result = r;
+      });
+      if (pending) lines.unshift(pending);
       for (const line of lines) {
         const delta = fullReply ? `\n\n${line}` : line;
         fullReply += delta;
@@ -154,6 +163,17 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
     console.error("chat.turn: failed", { turnId, error });
     yield { type: "error", reason: msg("SAVE_FAILED"), changed: appliedSent, retryable: true };
   }
+}
+
+/** Pass a generator's events through, handing any `applied` result to `onApplied` (0052). */
+async function* receiptOf<R>(gen: AsyncGenerator<StreamEvent, R>, onApplied: (result: ApplyResult) => void): AsyncGenerator<StreamEvent, R> {
+  let next = await gen.next();
+  while (!next.done) {
+    if (next.value.type === "applied") onApplied(next.value.result);
+    yield next.value;
+    next = await gen.next();
+  }
+  return next.value;
 }
 
 /** Run a chat-history step; on failure log it and use the fallback, so the turn goes on (0018). */
@@ -222,4 +242,21 @@ export async function* handleChooseMeal(
     console.error("meals.choose: failed", { turnId, error });
     yield { type: "error", reason: msg("SAVE_FAILED"), changed: appliedSent, retryable: true };
   }
+}
+
+/**
+ * The receipt's Undo button (`undoChange` server action, 0007, 0052): undo the change set (only
+ * your own, H3/0017), then what the chat Undo also does (`afterUndo`): a recipe the Undo put back
+ * replaces the one shown, and idea cards follow their recipes. Those events come back with the
+ * result so the UI applies them like a stream's. A failure there is logged; the Undo stands (0018).
+ */
+export async function undoWithFollow(
+  deps: { db: Db; scope: KitchenScope },
+  args: { changeSetId: string; tapId: string; basedOnVersion: number },
+): Promise<{ outcome: Awaited<ReturnType<typeof undo>>; events: StreamEvent[] }> {
+  const outcome = await undo(deps.db, deps.scope, args);
+  const events: StreamEvent[] = [];
+  if (!outcome.ok || outcome.result.applied.length === 0) return { outcome, events };
+  for await (const e of afterUndo({ ...deps, meals: notConfiguredMealAI }, outcome.result)) events.push(e);
+  return { outcome, events };
 }

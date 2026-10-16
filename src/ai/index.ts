@@ -15,7 +15,7 @@ import { getMealAI } from "./meals";
 import type { MealAI } from "./meals";
 import { createRealInterpreter } from "./real";
 
-export { handleChatTurn, handleChooseMeal, type ChatTurnInput, type ChooseMealInput } from "./turn";
+export { handleChatTurn, handleChooseMeal, undoWithFollow, type ChatTurnInput, type ChooseMealInput } from "./turn";
 export type { Interpreter, InterpretRequest, InterpretResult } from "./interpreter";
 
 export const NOT_CONFIGURED_REPLY =

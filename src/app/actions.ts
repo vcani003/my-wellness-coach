@@ -8,8 +8,8 @@ import { z } from "zod";
 import type { ApplyResult } from "@/contracts/apply-result";
 import type { Msg } from "@/contracts/common";
 import type { RecipeView } from "@/contracts/kitchen-state";
-import type { UpdateKitchenPrompt } from "@/contracts/stream";
-import { getMeals, handleChooseMeal } from "@/ai";
+import type { StreamEvent, UpdateKitchenPrompt } from "@/contracts/stream";
+import { getMeals, handleChooseMeal, undoWithFollow } from "@/ai";
 import { getRecipe } from "@/domains/kitchen/queries";
 import { checkChatRateLimit } from "@/lib/rate-limit";
 import { Id, Quantity, ShoppingSource } from "@/contracts/common";
@@ -39,14 +39,21 @@ export type ActionResult = { ok: true; result: ApplyResult } | { ok: false; reas
 
 const UndoInput = z.object({ kitchenId: Id, changeSetId: Id, tapId: Id, basedOnVersion: z.number().int().nonnegative() });
 
+/**
+ * `events`: what an Undo shows besides the receipt (0052): a recipe it put back (its `recipe`
+ * parts and `recipe.saved`) and idea cards that follow it (`idea.updated`). The UI applies them
+ * as it would a stream's.
+ */
+export type UndoActionResult = { ok: true; result: ApplyResult; events: StreamEvent[] } | { ok: false; reason: Msg; retryable: boolean };
+
 /** Undo one of your own change sets (H3, 0017). `tapId` makes a double tap harmless. */
-export async function undoChange(input: z.input<typeof UndoInput>): Promise<ActionResult> {
+export async function undoChange(input: z.input<typeof UndoInput>): Promise<UndoActionResult> {
   const parsed = UndoInput.safeParse(input);
   if (!parsed.success) return { ok: false, reason: msg("INVALID_PROPOSAL"), retryable: false };
   const ctx = await getScope(parsed.data.kitchenId);
   if (!ctx) return { ok: false, reason: msg("NOT_ALLOWED"), retryable: false };
-  const outcome = await undo(ctx.db, ctx.scope, parsed.data);
-  return outcome.ok ? { ok: true, result: outcome.result } : { ok: false, ...outcome.error };
+  const { outcome, events } = await undoWithFollow(ctx, parsed.data);
+  return outcome.ok ? { ok: true, result: outcome.result, events } : { ok: false, ...outcome.error };
 }
 
 // ─── Shopping list (0027) ─────────────────────────────────────────────────────────────

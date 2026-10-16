@@ -199,6 +199,31 @@ export async function* cardsFollowRecipes(deps: FollowUpDeps, result: ApplyResul
   }
 }
 
+/**
+ * After any Undo, in chat or by the receipt's button (0052): a recipe version the Undo took away
+ * is replaced on screen by the one it brought back (its parts and `recipe.saved`, as for a saved
+ * recipe opened again), then idea cards follow their recipes (`cardsFollowRecipes`). Isolated
+ * (0018): a failure is logged and the Undo stands.
+ */
+export async function* afterUndo(deps: FollowUpDeps, result: ApplyResult): AsyncGenerator<StreamEvent, void> {
+  try {
+    const refs = result.applied.flatMap((a) => a.refs);
+    const undoneRecipe = refs.some((r) => r.kind === "recipe" && r.change === "removed");
+    for (const r of undoneRecipe ? refs : []) {
+      if (r.kind !== "meal") continue;
+      const meal = result.state.meals.find((m) => m.id === r.id);
+      if (!meal?.recipe) continue;
+      const view = await getRecipe(deps.db, deps.scope, meal.id);
+      if (!view) continue;
+      for (const p of recipeParts(view, meal.title)) yield { type: "recipe", mealId: meal.id, part: p.part, data: p.data };
+      yield { type: "recipe.saved", mealId: meal.id, recipeId: view.id, version: view.version, newVersion: result.newVersion };
+    }
+    yield* cardsFollowRecipes(deps, result);
+  } catch (error) {
+    console.error("undo: couldn't show the restored recipe", { error });
+  }
+}
+
 // ─── Recipe ─────────────────────────────────────────────────────────────────────────────
 
 const group = (i: RecipeView["ingredients"][number]): RecipeIngredientOut["group"] =>
@@ -258,6 +283,8 @@ export async function* recipeStep(
   mealId: string,
   refine?: string,
   notes?: string,
+  /** 0052: the turn's one receipt slot, still free while `open`; the recipe edit that takes it closes it. */
+  opts: { receipt?: { open: boolean } } = {},
 ): Step {
   const proposalId = `${origin.id}:recipe:${mealId}`;
   const state = await getKitchenState(deps.db, deps.scope);
@@ -316,6 +343,12 @@ export async function* recipeStep(
       return "Sorry, I couldn't save that recipe, so nothing changed.";
     }
     const version = Number(saved.summary.params.version ?? 1);
+    // 0052: a chat edit of a recipe the meal already had gets the "What changed" receipt and its
+    // Undo. A first recipe doesn't, so the chat stays quiet.
+    if (opts.receipt?.open && meal.recipe) {
+      opts.receipt.open = false;
+      yield { type: "applied", result: outcome.result };
+    }
     yield { type: "recipe.saved", mealId, recipeId, version, newVersion: outcome.result.newVersion };
     yield* ideaFollowsRecipe(deps, mealId, meal.ideaId);
     if (result.notes.length) yield { type: "notes", notes: result.notes };
@@ -361,6 +394,8 @@ export async function* runFollowUps(
   result: ApplyResult | null,
 ): AsyncGenerator<StreamEvent, string[]> {
   const replies: string[] = [];
+  // 0052: one receipt per message, so a recipe edit gets it only when the turn saved nothing else.
+  const receipt = { open: !result };
   for (const f of followUps) {
     try {
       let reply = "";
@@ -373,7 +408,7 @@ export async function* runFollowUps(
           break;
         case "recipe": {
           const mealId = mealIdOf(f.meal, result);
-          if (mealId) reply = yield* recipeStep(deps, origin, mealId, f.refine, f.notes);
+          if (mealId) reply = yield* recipeStep(deps, origin, mealId, f.refine, f.notes, { receipt });
           break;
         }
         case "after-cooking": {
