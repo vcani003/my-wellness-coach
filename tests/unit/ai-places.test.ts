@@ -86,13 +86,13 @@ describe("adds get the usual place (0041)", () => {
       op({ action: "add", evidence: "nước mắm", name: name("nước mắm (fish sauce)"), location: usual("pantry") }),
       op({ action: "add", evidence: "a bunch of rau răm", name: name("rau răm (Vietnamese coriander)"), location: usual("fridge") }),
       op({ action: "add", evidence: "frozen peas", name: name("frozen peas"), location: implied("freezer") }),
-      op({ action: "add", evidence: "bananas", name: name("bananas") }), // genuinely depends: null
+      op({ action: "add", evidence: "bananas", name: name("bananas") }), // the model left it: the code places it
     ]);
     expect(adds(operations).map((o) => o.fields.location)).toEqual([usual("fridge"), usual("pantry"), usual("fridge"), implied("freezer"), undefined]);
     expect(placeOf(k, "milk")).toEqual(usual("fridge"));
     expect(placeOf(k, "nước mắm (fish sauce)")).toEqual(usual("pantry"));
     expect(placeOf(k, "frozen peas")).toEqual(implied("freezer")); // "frozen" is a place word
-    expect(placeOf(k, "bananas")).toBeUndefined(); // stays "Not sure where"
+    expect(placeOf(k, "bananas")).toEqual(usual("counter")); // the code's guess (0057 KOS3-a)
     expect(k.kitchen.locationPrefs).toEqual({}); // guesses are never remembered
   });
 
@@ -178,19 +178,20 @@ describe("corrections and habits are remembered (0041)", () => {
   });
 });
 
-describe("the prompt (interpret-2026-10-16.5)", () => {
+describe("the prompt (interpret-2026-10-16.6)", () => {
   it("asks for the usual place on adds instead of leaving it unknown", () => {
-    expect(PROMPT_VERSION).toBe("interpret-2026-10-16.5");
+    expect(PROMPT_VERSION).toBe("interpret-2026-10-16.6");
     expect(SYSTEM_PROMPT).toContain("# Places (location)");
     expect(SYSTEM_PROMPT).not.toContain("Don't guess where groceries go");
     expect(SYSTEM_PROMPT).toContain('"onions go in the pantry"');
   });
 });
 
-describe("Counter (0030, KOS3): said or picked, never guessed", () => {
-  it("the prompt names Counter as a place, only when said", () => {
+describe("Counter (0030; 0057 KOS3-a): counter food is guessed there, a said place wins", () => {
+  it("the prompt names Counter as a place and asks for it on counter food", () => {
     expect(SYSTEM_PROMPT).toContain("Places are fridge, freezer, pantry and counter.");
-    expect(SYSTEM_PROMPT).not.toContain("there is no counter");
+    expect(SYSTEM_PROMPT).toContain("- Counter: fruit that ripens at room temperature");
+    expect(SYSTEM_PROMPT).not.toContain("never guess counter");
   });
 
   it("'the bananas are on the counter' keeps the said Counter", async () => {
@@ -200,11 +201,19 @@ describe("Counter (0030, KOS3): said or picked, never guessed", () => {
     expect(placeOf(k, "bananas")).toEqual(told("counter"));
   });
 
-  it("a guessed Counter is dropped: the banana stays 'Not sure where'", async () => {
+  it("the model's usual-place Counter is kept, as inferred", async () => {
     const k = kitchen();
-    const text = "I bought bananas";
-    await interpretAndApply(k, text, [op({ action: "add", name: name("bananas"), location: usual("counter"), evidence: text })]);
-    expect(placeOf(k, "bananas")).toBeUndefined();
+    const text = "I bought avocados";
+    await interpretAndApply(k, text, [op({ action: "add", name: name("avocados"), location: usual("counter"), evidence: text })]);
+    expect(placeOf(k, "avocados")).toEqual(usual("counter"));
+    expect(k.kitchen.locationPrefs).toEqual({});
+  });
+
+  it("bananas said to be in the fridge stay in the fridge", async () => {
+    const k = kitchen();
+    const text = "I bought bananas, they're in the fridge";
+    await interpretAndApply(k, text, [op({ action: "add", name: name("bananas"), location: told("fridge"), evidence: text })]);
+    expect(placeOf(k, "bananas")).toEqual(told("fridge"));
   });
 });
 
@@ -217,6 +226,17 @@ describe("the fake interpreter (0041)", () => {
     expect(r.reply).toBe("Done: I'll put the onions in the pantry from now on.");
     const plan = k.say("onions go in the pantry", ProposedChange.parse(r.proposal).operations, { actor: "ana" });
     expect(plan.applied.map((a) => a.summary.code)).toEqual(["PLACE_REMEMBERED"]);
+  });
+
+  it("'I bought bananas' lands on the Counter; 'tomatoes go on the counter' is a said place (0057 KOS3-a)", async () => {
+    const k = kitchen();
+    const bought = await fake.interpret(requestFor(k, "I bought bananas"));
+    k.say("I bought bananas", ProposedChange.parse(bought.proposal).operations, { actor: "ana" });
+    expect(placeOf(k, "bananas")).toEqual(usual("counter"));
+    const habit = await fake.interpret(requestFor(k, "tomatoes go on the counter"));
+    const plan = k.say("tomatoes go on the counter", ProposedChange.parse(habit.proposal).operations, { actor: "ana" });
+    expect(plan.applied.map((a) => a.summary.code)).toEqual(["PLACE_REMEMBERED"]);
+    expect(k.kitchen.locationPrefs["tomato"]).toMatchObject({ location: "counter" });
   });
 
   it("'I froze the chicken' is implied (high), not remembered; adds get their place from the backend", async () => {

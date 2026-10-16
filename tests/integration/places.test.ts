@@ -66,7 +66,7 @@ describe("places on Postgres (0041)", () => {
     const t = await newKitchen(db, ["Ana", "Ben"]);
     const ana = await t.scope("Ana");
     const ben = await t.scope("Ben");
-    await ok(db, ana, ["milk", "jasmine rice", "nước mắm", "bananas"].map((n) => ({ type: "item.add" as const, fields: { name: said(n) } })), { text: "bought milk, jasmine rice, nước mắm and bananas" });
+    await ok(db, ana, ["milk", "jasmine rice", "nước mắm", "sparkling water"].map((n) => ({ type: "item.add" as const, fields: { name: said(n) } })), { text: "bought milk, jasmine rice, nước mắm and sparkling water" });
     await ok(db, ana, [{ type: "item.add", fields: { name: said("eggs"), location: said("pantry") } }], { text: "eggs, in the pantry" });
     // Before 0041 nothing was placed: clear the inferred places to get back to that.
     await ok(db, ana, ["milk", "jasmine rice", "nước mắm"].map((name) => ({ type: "item.update" as const, target: { name }, fields: {}, clear: ["location" as const] })));
@@ -98,7 +98,7 @@ describe("places on Postgres (0041)", () => {
 
   it("sorts 'Not sure where' once: one change set, a receipt for Ana, nothing for Ben, never again", async () => {
     const { t, ana, ben } = await legacyKitchen();
-    expect(await places(ana)).toMatchObject({ milk: null, "jasmine rice": null, "nước mắm": null, bananas: null, eggs: said("pantry") });
+    expect(await places(ana)).toMatchObject({ milk: null, "jasmine rice": null, "nước mắm": null, "sparkling water": null, eggs: said("pantry") });
 
     const first = await sortUnplacedOnce(db, ana);
     if (!first.ran) throw new Error("expected the sort to run");
@@ -114,7 +114,7 @@ describe("places on Postgres (0041)", () => {
       milk: medium("fridge"),
       "jasmine rice": medium("pantry"),
       "nước mắm": medium("pantry"),
-      bananas: null, // genuinely depends: stays "Not sure where"
+      "sparkling water": null, // genuinely depends: stays "Not sure where"
       eggs: said("pantry"), // a place already set is never touched
     });
 
@@ -167,7 +167,7 @@ describe("places on Postgres (0041)", () => {
   it("only ambiguous things unplaced: marks the kitchen done with an empty change set and says nothing", async () => {
     const t = await newKitchen(db, ["Ana"]);
     const ana = await t.scope("Ana");
-    await ok(db, ana, [{ type: "item.add", fields: { name: said("bananas") } }], { text: "bought bananas" });
+    await ok(db, ana, [{ type: "item.add", fields: { name: said("sparkling water") } }], { text: "bought sparkling water" });
     const out = await sortUnplacedOnce(db, ana);
     expect(out).toMatchObject({ ran: true, moves: [], messageSaved: false });
     expect(await sortUnplacedOnce(db, ana)).toEqual({ ran: false });

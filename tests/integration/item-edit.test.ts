@@ -215,6 +215,22 @@ describe("setItemStaple: the item's Staple switch (0054 plan)", () => {
     expect(sauceOff.state.staples.map((s) => s.id)).toEqual(["rice"]);
   });
 
+  it("renaming the item renames its staple, store kept, and one Undo reverts both (0057 KOS3-b)", async () => {
+    const { vero, itemId } = await fishSauce();
+    const staple = await ok(db, vero, [{ type: "staple.add", fields: { name: said("fish sauce"), store: said("MD Oriental") } }]);
+    const r = result(await editItem(db, vero, { tapId: tapId(), basedOnVersion: staple.newVersion, itemId, edit: { name: "nước mắm" } }));
+    expect(r.rejected).toEqual([]);
+    expect(r.state.staples.map((s) => [s.id, s.name.value, s.store?.value])).toEqual([["nước mắm", "nước mắm", "MD Oriental"]]);
+    expect(r.state.items.find((i) => i.id === itemId)?.stapleId).toBe("nước mắm");
+    await sameAsReplay(vero);
+
+    const back = result(await undo(db, vero, { changeSetId: r.changeSetId, tapId: tapId(), basedOnVersion: r.newVersion }));
+    expect(back.rejected).toEqual([]);
+    expect(back.state.items.find((i) => i.id === itemId)?.name.value).toBe("fish sauce");
+    expect(back.state.staples.map((s) => [s.id, s.store?.value])).toEqual([["fish sauce", "MD Oriental"]]);
+    await sameAsReplay(vero);
+  });
+
   it("an item that's gone is refused", async () => {
     const { vero, itemId, version } = await fishSauce();
     const removed = result(await removeItem(db, vero, { tapId: tapId(), basedOnVersion: version, itemId }));

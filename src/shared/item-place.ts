@@ -11,10 +11,9 @@
  *    "green onion" (Fridge) beats "onion" (Pantry); a tie goes to the phrase that ends last.
  * 3. Otherwise the item's type (the 12 types from 0032) decides: produce, meat & seafood, dairy &
  *    eggs and leftovers → Fridge; grains, sauces, spices, canned, baking and snacks → Pantry.
- * 4. Drinks, Other and fruit that ripens on the counter (bananas, avocados, tomatoes) get **no
- *    place**: they stay "Not sure where" (0041: only what genuinely can't be placed). Counter is
- *    a place since KOS3 (0030), but only when said or picked: guessing Counter for counter fruit
- *    waits on Vero's answer (see `COUNTER_LATER`).
+ * 4. Fruit that ripens on the counter (bananas, avocados, tomatoes) → Counter (0057 KOS3-a).
+ *    Drinks and Other get **no place**: they stay "Not sure where" (0041: only what genuinely
+ *    can't be placed).
  *
  * Easy to extend: add a word to a list.
  */
@@ -40,7 +39,7 @@ export const PLACE_BY_CATEGORY: Record<ItemCategory, Location | null> = {
 /** Words that decide the place whatever else the name says. */
 const PRIORITY: Partial<Record<Location, string[]>> = {
   freezer: ["frozen", "đông lạnh"],
-  pantry: ["dried", "dry"],
+  pantry: ["dried", "dry", "canned", "tinned"],
 };
 
 /** Words whose usual place differs from their type's. */
@@ -53,6 +52,8 @@ const BY_NAME: Record<Location | "none", string[]> = {
     "hành|onion", "hành tây", "hành tím", "tỏi", "khoai tây", "khoai lang", "khoai môn", "bí đỏ",
     // drinks that keep in the cupboard
     "coffee", "tea", "green tea", "cà phê", "trà",
+    // made from counter food, but kept in the cupboard (beats the one-word counter phrases)
+    "tomato paste", "tomato sauce", "avocado oil", "banana chips",
   ],
   fridge: [
     // produce that stays cold although "onion" / "garlic" are pantry words
@@ -63,15 +64,12 @@ const BY_NAME: Record<Location | "none", string[]> = {
     // drinks kept cold
     "juice", "orange juice", "kombucha", "milk tea", "nước cam",
   ],
-  // Never guessed: Counter is only said or picked (KOS3). See COUNTER_LATER.
-  counter: [],
-  // Counter fruit: no place yet, so they stay "Not sure where".
-  none: ["banana", "avocado", "tomato", "cherry tomato", "mango", "papaya", "pineapple", "peach", "persimmon",
+  // Counter food (0057 KOS3-a): fruit that ripens at room temperature.
+  counter: ["banana", "avocado", "tomato", "cherry tomato", "mango", "papaya", "pineapple", "peach", "persimmon",
     "chuối", "bơ trái", "cà chua", "xoài", "đu đủ", "dứa"],
+  // Words that mean "it depends" whatever their type would say. None yet.
+  none: [],
 };
-
-/** The counter-fruit words: the ones to map to Counter if Vero says it should be guessed too. */
-export const COUNTER_LATER = BY_NAME.none;
 
 interface Phrase {
   tokens: string[];

@@ -620,11 +620,20 @@ const cases: Case[] = [
   },
   {
     name: "places: genuinely ambiguous things stay unsorted",
+    text: "I bought sparkling water and beer",
+    check: (r, ops) => {
+      expect(r.kind).toBe("change");
+      expect(addNamed(ops, "sparkling water")?.fields.location ?? null).toBeNull();
+      expect(addNamed(ops, "beer")?.fields.location ?? null).toBeNull();
+    },
+  },
+  {
+    name: "places: counter food goes on the Counter (0057 KOS3-a)",
     text: "I bought bananas and avocados",
     check: (r, ops) => {
       expect(r.kind).toBe("change");
-      expect(addNamed(ops, "banana")?.fields.location ?? null).toBeNull();
-      expect(addNamed(ops, "avocado")?.fields.location ?? null).toBeNull();
+      expect(addNamed(ops, "banana")?.fields.location).toMatchObject({ value: "counter", basis: "inferred" });
+      expect(addNamed(ops, "avocado")?.fields.location).toMatchObject({ value: "counter", basis: "inferred" });
     },
   },
   {

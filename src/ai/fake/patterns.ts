@@ -125,8 +125,8 @@ function segments(list: string): Segment[] {
  * the milk in the fridge" isn't one.
  */
 const CATEGORY_MOVE = [
-  new RegExp(String.raw`^\s*(?:the\s+)?(.+?)\s+(?:goes|go|belongs?|should go)\s+(?:under|in|into|with)\s+(.+?)` + END, "i"),
-  new RegExp(String.raw`^\s*(?:please\s+)?(?:put|file|move)\s+(.+?)\s+(?:under|in|into)\s+(.+?)` + END, "i"),
+  new RegExp(String.raw`^\s*(?:the\s+)?(.+?)\s+(?:goes|go|belongs?|should go)\s+(?:under|in|into|with|on)\s+(.+?)` + END, "i"),
+  new RegExp(String.raw`^\s*(?:please\s+)?(?:put|file|move)\s+(.+?)\s+(?:under|in|into|on)\s+(.+?)` + END, "i"),
 ];
 
 /** First word of a category's everyday names → its ID (folded: no accents, lower case). */

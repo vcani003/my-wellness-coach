@@ -438,6 +438,8 @@ function goneOps(itemId: string, item: Item | undefined): GoneOp[] {
     : [{ opId: "gone", type: "item.update", target: { itemId }, fields: {} }];
 }
 
+const frozeIt = { value: "freezer" as const, basis: "inferred" as const, confidence: "high" as const };
+
 /** The operations for one move (IA5): skipped for a batch already there. */
 function moveOps(item: Item, batches: Batch[], to: Location): Operation[] {
   return batches.flatMap((b, n): Operation[] => {
@@ -446,7 +448,10 @@ function moveOps(item: Item, batches: Batch[], to: Location): Operation[] {
     const inFreezer = b.location?.value === "freezer";
     if (to === "freezer") {
       if (inFreezer && b.frozen?.value === true) return [];
-      return [{ opId, type: "item.update", target, fields: { location: said(to), frozen: said(true) } }];
+      // 0057 KOS3-d: freezing is usually a one-off, so it isn't remembered as the name's usual
+      // place. Same facts as saying "I froze it" in chat: frozen said, the Freezer follows from it
+      // (inferred, high), and only a said place is remembered (0041).
+      return [{ opId, type: "item.update", target, fields: { location: frozeIt, frozen: said(true) } }];
     }
     if (inFreezer || b.frozen?.value === true) {
       return [{ opId, type: "item.defrost", target, fields: { location: said(to) } }];

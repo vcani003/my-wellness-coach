@@ -121,6 +121,72 @@ describe("itemEditOperations: the edit sheet (KOS3)", () => {
   });
 });
 
+describe("0057 KOS3-d: a move into the Freezer isn't remembered", () => {
+  it("freezing is the 'froze it' facts and leaves the name's usual place alone; other picked places are remembered", () => {
+    const k = kitchen();
+    edit(k, "fish sauce", { place: "freezer" });
+    const b = batches(k, "fish sauce")[0];
+    expect([b.location, b.frozen]).toEqual([{ value: "freezer", basis: "inferred", confidence: "high" }, said(true)]);
+    // Still the Fridge it was said to go in when it was added, not the Freezer.
+    expect(k.kitchen.locationPrefs?.[standardName("fish sauce")]?.location).toBe("fridge");
+    // Out of the Freezer is a defrost (IA5), a one-off too: not remembered either.
+    edit(k, "fish sauce", { place: "counter" });
+    expect(k.kitchen.locationPrefs?.[standardName("fish sauce")]?.location).toBe("fridge");
+    // Any other picked place is remembered (0041).
+    edit(k, "fish sauce", { place: "pantry" });
+    expect(k.kitchen.locationPrefs?.[standardName("fish sauce")]?.location).toBe("pantry");
+  });
+});
+
+describe("0057 KOS3-b: renaming an item that's a staple renames the staple", () => {
+  const staples = (k: MemoryKitchen) => k.state().staples.map((s) => [s.id, s.name.value, s.store?.value ?? null]);
+
+  it("in the same change set, keeping its store; the row's switch stays on", () => {
+    const k = kitchen();
+    k.tap([{ type: "staple.add", fields: { name: said("fish sauce"), store: said("MD Oriental") } }]);
+    const { plan } = edit(k, "fish sauce", { name: "nước mắm" });
+    expect(plan!.applied.map((a) => a.summary.code)).toEqual(["ITEM_RENAMED"]);
+    expect(plan!.applied[0].refs.filter((r) => r.kind === "staple").map((r) => [r.id, r.change])).toEqual([
+      ["fish sauce", "removed"],
+      ["nước mắm", "added"],
+    ]);
+    expect(new Set(plan!.events.map((e) => e.changeSetId)).size).toBe(1);
+    expect(staples(k)).toEqual([["nước mắm", "nước mắm", "MD Oriental"]]);
+    expect(k.state().items.find((i) => i.name.value === "nước mắm")!.stapleId).toBe("nước mắm");
+    k.history.forEach((h) => expect(k.replayKitchen(h.events)).toEqual(h.kitchen));
+  });
+
+  it("from chat too; a staple the new name still matches stays as it is; an unrelated one is untouched", () => {
+    const k = kitchen();
+    k.tap([
+      { type: "staple.add", fields: { name: said("fish sauce") } },
+      { type: "staple.add", fields: { name: said("eggs") } },
+    ]);
+    const id = k.item("fish sauce")!.id;
+    k.say("it's nước mắm (fish sauce)", [{ type: "item.update", target: { itemId: id }, fields: { name: said("nước mắm (fish sauce)") } }]);
+    expect(staples(k)).toEqual([
+      ["egg", "eggs", null],
+      ["fish sauce", "fish sauce", null],
+    ]);
+  });
+
+  it("renaming onto a name that's already a staple keeps that one; the old staple goes", () => {
+    const k = kitchen();
+    k.tap([
+      { type: "staple.add", fields: { name: said("fish sauce") } },
+      { type: "staple.add", fields: { name: said("nước mắm"), store: said("Publix") } },
+    ]);
+    edit(k, "fish sauce", { name: "nước mắm" });
+    expect(staples(k)).toEqual([["nước mắm", "nước mắm", "Publix"]]);
+  });
+
+  it("an item that isn't a staple renames without touching staples", () => {
+    const k = kitchen();
+    const { plan } = edit(k, "fish sauce", { name: "nước mắm" });
+    expect(plan!.events.map((e) => e.type)).toEqual(["item.updated"]);
+  });
+});
+
 describe("ITEM_RENAMED from chat too (IA6)", () => {
   it("a rename alone reads 'Renamed …'; a rename with other fields stays 'Updated'", () => {
     const k = kitchen();

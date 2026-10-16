@@ -142,8 +142,6 @@ function locationOf(location: Fact<Location> | undefined, action: "add" | "updat
   if (!location) return undefined;
   if (PLACE_WORDS.test(text)) return location;
   if (action === "update") return undefined;
-  // Counter is only ever said or picked, never guessed (KOS3; guessing it is a question for Vero).
-  if (location.value === "counter") return undefined;
   return { value: location.value, basis: "inferred", confidence: "medium" };
 }
 

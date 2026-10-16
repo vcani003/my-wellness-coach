@@ -82,7 +82,7 @@ import {
   type StapleUpdatedPayload,
   type StockSetPayload,
 } from "./state";
-import { matchStaple } from "@/shared/staples";
+import { matchStaple, stapleIdsForItem } from "@/shared/staples";
 import { getProfileEntity } from "@/shared/profile/state";
 
 /** Messages longer than this with no `pastedRanges` count as pasted (backend-data.md §6). */
@@ -574,11 +574,44 @@ function itemUpdate(op: OperationOf<"item.update">, env: OpEnv): OpOutcome {
       : set.category && Object.keys(set).length === 1 && clear.length === 0
         ? msg("ITEM_CATEGORY", categoryParams(displayName, set.category.value))
         : msg("ITEM_UPDATED", { name: displayName });
+  const staples = set.name ? renameStaples(item, set.name, env) : { events: [], refs: [] };
   return ok(
-    [emit(env, k, KITCHEN_EVENT.itemUpdated, payload, set.occurredAt?.value), ...remember],
+    [emit(env, k, KITCHEN_EVENT.itemUpdated, payload, set.occurredAt?.value), ...remember, ...staples.events],
     summary,
-    [compact({ kind: "item" as const, id: item.id, change: "updated" as const, batchId: batch?.id })],
+    [compact({ kind: "item" as const, id: item.id, change: "updated" as const, batchId: batch?.id }), ...staples.refs],
   );
+}
+
+/**
+ * 0057 KOS3-b: renaming an item that's a staple renames the staple too, in the same change set
+ * (one Undo reverts both), keeping its store. "The staple" = one that is exactly the item's old
+ * name (`stapleIdsForItem`, as the Staple switch reads it); one the new name still matches stays
+ * as it is. A staple is keyed by its standard name, so the rename is a remove + an add; when the
+ * new name already is a staple, that one is kept and the old one goes (they become one).
+ */
+function renameStaples(item: Item, newName: Fact<string>, env: OpEnv): { events: EventEnvelope[]; refs: ChangeRef[] } {
+  const all = stapleList(env.kitchen).map((s) => ({ id: s.standardName, name: s.name.value, standardName: s.standardName, staple: s }));
+  const newStd = standardName(newName.value);
+  const stillMatch = new Set(stapleIdsForItem({ name: newName.value, standardName: newStd }, all));
+  const renamed = stapleIdsForItem({ name: item.name.value, standardName: item.standardName }, all)
+    .filter((id) => !stillMatch.has(id))
+    .map((id) => env.kitchen.staples![id]);
+  if (renamed.length === 0 || !newStd) return { events: [], refs: [] };
+  const k = kitchenStream(env.ctx.kitchenId);
+  const events: EventEnvelope[] = [];
+  const refs: ChangeRef[] = [];
+  for (const s of renamed) {
+    const payload: StapleRemovedPayload = { standardName: s.standardName };
+    events.push(emit(env, k, KITCHEN_EVENT.stapleRemoved, payload));
+    refs.push(stapleRef(s.standardName, "removed"));
+  }
+  if (!env.kitchen.staples?.[newStd]) {
+    const store = renamed.find((s) => s.store)?.store;
+    const payload: StapleAddedPayload = compact({ standardName: newStd, name: newName, store });
+    events.push(emit(env, k, KITCHEN_EVENT.stapleAdded, payload));
+    refs.push(stapleRef(newStd, "added"));
+  }
+  return { events, refs };
 }
 
 function emit(env: OpEnv, stream: string, type: string, payload: unknown, occurredAt?: string): EventEnvelope {
