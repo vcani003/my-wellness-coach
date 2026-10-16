@@ -20,6 +20,7 @@ import type { StreamEvent } from "@/contracts/stream";
 import { undoChange } from "@/app/actions";
 import { chatReducer, initialChatState, type ChatState } from "./chat-reducer";
 import { readTurnStream } from "./stream";
+import { withTimeZone } from "@/ui/sync/time-zone";
 
 /** Messages per history page (the server's default, backend-data.md §6). */
 export const HISTORY_PAGE_SIZE = 30;
@@ -89,7 +90,8 @@ export function useChat(opts: {
         res = await fetch("/api/chat", {
           method: "POST",
           headers: { "content-type": "application/json", accept: "application/x-ndjson" },
-          body: JSON.stringify({ kitchenId, clientMessageId: id, text }),
+          // The device time zone: "today" and "Tuesday" are the person's own days (0045 KOS1).
+          body: JSON.stringify({ kitchenId, clientMessageId: id, text, ...withTimeZone() }),
         });
         if (!res.ok || !res.body) throw new Error(`chat: ${res.status}`);
       } catch {

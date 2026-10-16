@@ -8,10 +8,11 @@
  * - ONE checklist in two groups, **In your kitchen** and **Need**, with shared ticks that say who
  *   ticked (M6), then **Add Need items to shopping list** (0027), then the numbered steps.
  * - Parts stream in; parts never confirmed by `recipe.saved` are dropped (backend §6).
- * - **Add to plan** / **Start cooking** / **Done cooking**, by status.
+ * - **Add to plan** (or **Plan for a day**, 0045 KOS1, with its receipt and Undo here) /
+ *   **Start cooking** / **Done cooking**, by status.
  */
 import { useLocale, useTranslations } from "next-intl";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RecipeView } from "@/contracts/kitchen-state";
 import { Checkbox } from "@/ui/primitives/Checkbox";
 import { useAnnounce } from "@/ui/a11y/Announcer";
@@ -20,7 +21,14 @@ import { actorName, sentenceCase } from "@/ui/fallbacks";
 import { BackIcon, UndoIcon } from "@/ui/primitives/icons";
 import { useKitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { useKitchenData } from "@/ui/sync/KitchenDataContext";
+import { planWindow } from "@/shared/plan-dates";
+import { toReceipt, type Receipt as ReceiptModel } from "@/ui/chat/chat-reducer";
+import { Receipt } from "@/ui/chat/Receipt";
+import { useReceiptUndo } from "@/ui/chat/useReceiptUndo";
+import { usePlanToday } from "@/ui/sync/time-zone";
+import { useOnline } from "@/ui/sync/useOnline";
 import { AllergenBadge } from "./AllergenBadge";
+import { DayPicker } from "./DayPicker";
 import { useMeals } from "./MealsContext";
 import { checklistGroups, pickRecipe, tickKey, ticksFor, type RecipeRow } from "./recipe-model";
 import { useFinishCooking } from "./useFinishCooking";
@@ -48,6 +56,21 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
   const [failed, setFailed] = useState<string | null>(null);
   const [listNotice, setListNotice] = useState<{ text: string; changeSetId?: string; turn: number } | null>(null);
   const tickChain = useRef<Promise<unknown>>(Promise.resolve());
+  const [storedPlanNote, setPlanNote] = useState<{ receipt: ReceiptModel; turn: number } | null>(null);
+  const planNote = storedPlanNote && storedPlanNote.turn === turn ? storedPlanNote : null;
+  const planNoteRef = useRef<HTMLDivElement>(null);
+  const focusPlanNote = useRef(false);
+  const undoReceipt = useReceiptUndo();
+  const online = useOnline();
+  const today = usePlanToday(useKitchenData().now);
+  useEffect(() => {
+    if (!focusPlanNote.current || !planNote) return;
+    focusPlanNote.current = false;
+    const focus = () => planNoteRef.current?.focus();
+    focus();
+    const frame = requestAnimationFrame(focus);
+    return () => cancelAnimationFrame(frame);
+  }, [planNote]);
   const saved = recipe?.status === "saved";
   const writing = recipe?.status === "writing";
 
@@ -74,6 +97,28 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
         });
       }
     });
+  };
+
+  /** "Plan for a day" on a chosen meal (0045 KOS1): plans it for that day, with its receipt and Undo here. */
+  const planForDay = async (date: string) => {
+    if (busy || !meal) return;
+    setBusy("plan");
+    setFailed(null);
+    try {
+      const res = await actions.addToPlan(meal.id, date);
+      if (res.ok && (res.result.applied.length || res.result.rejected.length)) {
+        if (res.result.applied.length) actions.showSaved(res.result);
+        setPlanNote({ receipt: toReceipt(res.result), turn });
+        focusPlanNote.current = true;
+        announce([...res.result.applied.map((a) => formatMsg(a.summary, "plain")), ...res.result.rejected.map((r) => formatMsg(r.reason, "plain"))].join(" "));
+        return;
+      }
+      setFailed(t("failed"));
+    } catch {
+      setFailed(t("failed"));
+    } finally {
+      setBusy(null);
+    }
   };
 
   const step = async (kind: "plan" | "start" | "done") => {
@@ -328,7 +373,7 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
               {failed}
             </p>
           )}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {status === "chosen" && (
               <button
                 type="button"
@@ -338,6 +383,16 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
               >
                 {t("addToPlan")}
               </button>
+            )}
+            {status === "chosen" && (
+              <DayPicker
+                title={meal.title}
+                today={today}
+                window={planWindow(today)}
+                mode="plan"
+                disabled={busy !== null || !online}
+                onPick={(date) => date && void planForDay(date)}
+              />
             )}
             {(status === "chosen" || status === "planned") && (
               <button
@@ -360,6 +415,14 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
               </button>
             )}
           </div>
+          {planNote && (
+            <div ref={planNoteRef} tabIndex={-1} data-plan-note={planNote.receipt.changeSetId} className="outline-none">
+              <Receipt
+                receipt={planNote.receipt}
+                onUndo={() => void undoReceipt(planNote.receipt, (undo) => setPlanNote({ ...planNote, receipt: { ...planNote.receipt, undo } }))}
+              />
+            </div>
+          )}
         </div>
       )}
     </article>

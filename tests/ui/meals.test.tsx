@@ -23,6 +23,7 @@ import { fromDraft } from "@/ui/widgets/meals/recipe-model";
 import { initialMealsSession, mealsReducer, type MealsSession } from "@/ui/widgets/meals/session";
 import { UpdateKitchenSheet } from "@/ui/widgets/meals/UpdateKitchenSheet";
 import { fakeActions, saved } from "../support/fake-actions";
+import { fakeMealActions } from "../support/fake-meal-actions";
 import { renderWithIntl } from "../support/intl";
 import { item, kitchen, LEVI, T0, VERO } from "../support/kitchen-rows";
 
@@ -46,28 +47,6 @@ const meal = (id: string, title: string, status: MealRow["status"], extra: Parti
 });
 
 const ok = (state: KitchenState, code = "NO_CHANGE") => vi.fn(async (): Promise<ActionResult> => saved(state, code));
-
-function fakeMealActions(overrides: Partial<MealActions> = {}): MealActions {
-  const refused = async (): Promise<ActionResult> => ({ ok: false, reason: { code: "SAVE_FAILED", params: {}, text: "x" }, retryable: true });
-  return {
-    choose: vi.fn(async () => true),
-    retryRecipe: vi.fn(async () => true),
-    addToPlan: vi.fn(refused),
-    startCooking: vi.fn(refused),
-    cancel: vi.fn(refused),
-    finishCooking: vi.fn(async () => ({ ok: false as const, reason: { code: "SAVE_FAILED", params: {}, text: "x" }, retryable: true })),
-    submitUpdateKitchen: vi.fn(refused),
-    updateKitchenLater: vi.fn(refused),
-    skipUpdateKitchen: vi.fn(refused),
-    tick: vi.fn(refused),
-    addNeedsToList: vi.fn(refused),
-    openRecipe: vi.fn(),
-    closeRecipe: vi.fn(),
-    useOwnRecipe: vi.fn(),
-    showSaved: vi.fn(),
-    ...overrides,
-  };
-}
 
 /** Renders `children` with real reducers for the meal session and fakes for every server call. */
 function Harness({

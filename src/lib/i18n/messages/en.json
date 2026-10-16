@@ -642,7 +642,9 @@
       "doneCooking": "Done cooking",
       "planned": "Added {title} to your plan.",
       "started": "Cooking {title}.",
-      "failed": "Couldn't save that, so nothing changed. Try again."
+      "failed": "Couldn't save that, so nothing changed. Try again.",
+      "planForDay": "Plan for a day",
+      "planForDayLabel": "Plan {title} for a day"
     },
     "plan": {
       "title": "Meal plan",
@@ -665,7 +667,26 @@
       "started": "Cooking {title}.",
       "doneNothingToUpdate": "{title} is done.",
       "failed": "Couldn't save that, so nothing changed. Try again.",
-      "emptyHint": "Choose a meal in Meals, then add it to your plan."
+      "emptyHint": "Choose a meal in Meals, then add it to your plan.",
+      "weekLabel": "The next 7 days",
+      "today": "Today",
+      "tomorrow": "Tomorrow",
+      "yesterday": "Yesterday",
+      "dayName": "{name}, {date}",
+      "dayCount": "{count, plural, =0 {nothing planned} one {# meal} other {# meals}}",
+      "nothingPlanned": "Nothing planned",
+      "earlier": "Earlier",
+      "later": "Later",
+      "undated": "No day yet",
+      "undatedHint": "Pick a day on a meal to put it in the week.",
+      "dayPick": "Pick a day",
+      "dayPickLabel": "Pick a day for {title}",
+      "dayChangeLabel": "Day for {title}: {day}. Change it",
+      "whichDay": "Which day?",
+      "noDay": "No day",
+      "dayOption": "{name} · {date}",
+      "dayFailed": "Couldn't change the day, so nothing changed. Try again.",
+      "offline": "Back online to change days"
     },
     "update": {
       "title": "Update your kitchen",
@@ -713,6 +734,33 @@
       "openRecipe": "Open recipe",
       "openRecipeLabel": "Open recipe: {title}",
       "failed": "Couldn't save that, so nothing changed. Try again."
+    },
+    "weekNeeds": {
+      "open": "Add this week's missing ingredients",
+      "offline": "Back online to add ingredients",
+      "title": "This week's missing ingredients",
+      "descriptionAll": "From meals planned for the next 7 days, and ones with no day yet.",
+      "descriptionDated": "From meals planned for the next 7 days.",
+      "close": "Close",
+      "datedOnly": "Dated only",
+      "datedOnlyHint": "Leave out meals with no day yet.",
+      "need": "Missing",
+      "onList": "On your list",
+      "forMeals": "For {meals}",
+      "checkLabel": "{name}, for {meals}, add to list",
+      "noRecipe": "{titles} {count, plural, one {has} other {have}} no recipe yet, so {count, plural, one {its} other {their}} ingredients aren't here.",
+      "noMeals": "No meals planned for the next 7 days.",
+      "noDatedMeals": "No meals have a day in the next 7 days.",
+      "allHave": "You have what these meals need.",
+      "allOnList": "Everything missing is already on your list.",
+      "noneLeft": "Nothing left to add: it's all on your list or in your kitchen.",
+      "add": "{count, plural, =0 {Add to my list} other {Add # to my list}}",
+      "adding": "Adding…",
+      "addFailed": "Couldn't add those, so nothing changed.",
+      "tryAgain": "Try again",
+      "loading": "Checking your recipes…",
+      "error": "Couldn't check what's missing.",
+      "retry": "Retry"
     }
   },
   "settings": {

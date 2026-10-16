@@ -9,6 +9,8 @@
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback } from "react";
 import type { Msg } from "@/contracts/common";
+import { isIsoDay } from "@/shared/plan-dates";
+import { formatPlanDay } from "@/ui/plan-day-format";
 import { sentenceCase } from "../fallbacks";
 
 type Translate = ReturnType<typeof useTranslations>;
@@ -16,9 +18,14 @@ type Translate = ReturnType<typeof useTranslations>;
 /**
  * Params the backend sends as IDs are shown in the user's language: `location` ("freezer") and,
  * for CAT1's ITEM_CATEGORY / CATEGORY_REMEMBERED, `categoryName` from the `category` ID (the
- * backend's `categoryName` is only the English fallback).
+ * backend's `categoryName` is only the English fallback). A plan day's `day` is formatted from its
+ * `date` in the reader's language (0015, KOS1 receipts and DATE_OUT_OF_WINDOW).
  */
-export function localizeParams(params: Record<string, string | number>, t: Translate) {
+export function localizeParams(params: Record<string, string | number>, t: Translate, locale?: string) {
+  // A plan day (0045 KOS1): the backend's `day` is the English label; `date` is the calendar date.
+  if (locale && typeof params.date === "string" && isIsoDay(params.date)) {
+    params.day = formatPlanDay(params.date, locale, "short");
+  }
   if (typeof params.location === "string" && t.has(`location.${params.location}`)) {
     params.location = t(`location.${params.location}`);
   }
@@ -34,7 +41,7 @@ export function useFormatMsg() {
     (m: Msg, mode: "display" | "plain" = "display"): string => {
       const params: Record<string, string | number> = {};
       for (const [k, v] of Object.entries(m.params)) params[k] = typeof v === "boolean" ? String(v) : v;
-      localizeParams(params, t);
+      localizeParams(params, t, locale);
       const keys = mode === "plain" ? [`msgPlain.${m.code}`, `msgIcu.${m.code}`, `msg.${m.code}`] : [`msgIcu.${m.code}`, `msg.${m.code}`];
       for (const key of keys) if (t.has(key)) return sentenceCase(t(key, params), locale);
       return sentenceCase(m.text || m.code, locale);

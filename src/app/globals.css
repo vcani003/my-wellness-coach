@@ -491,6 +491,12 @@
     text-transform: uppercase;
     color: var(--color-text-muted);
   }
+  /* Today's date tile in the week plan (KOS1): the primary gradient, ink text (AA), the coral glow. */
+  .day-tile-today {
+    background: var(--gradient-accent);
+    color: var(--color-text-on-accent);
+    box-shadow: var(--shadow-fab);
+  }
   /* Place / food tile (prototype `.tile`): a soft square, tinted by place, holding an icon or emoji. */
   .place-tile {
     display: grid;

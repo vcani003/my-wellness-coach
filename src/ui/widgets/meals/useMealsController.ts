@@ -12,6 +12,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   addMealToPlan,
+  addWeekNeedsToList,
+  loadWeekNeeds,
+  setMealDate,
   addRecipeNeedsToList,
   cancelMeal,
   finishCooking,
@@ -24,6 +27,7 @@ import {
 import type { ApplyResult } from "@/contracts/apply-result";
 import type { StreamEvent } from "@/contracts/stream";
 import type { KitchenSync } from "@/ui/sync/kitchen-sync";
+import { withTimeZone } from "@/ui/sync/time-zone";
 import { streamChoose } from "./choose-stream";
 import { MEAL_IDEAS_WIDGET_ID } from "./MealIdeasWidget";
 import type { MealActions, MealNotice, MealsContextValue } from "./MealsContext";
@@ -240,7 +244,18 @@ export function useMealsController(deps: {
     () => ({
       choose: (ideaId) => runChoose({ ideaId }, true),
       retryRecipe: (mealId) => runChoose({ mealId }, false),
-      addToPlan: (mealId) => withFresh((t) => addMealToPlan({ ...t, mealId }))(),
+      // Every plan call carries the device time zone: "today" and the window are the person's (KOS1).
+      addToPlan: (mealId, date) => withFresh((t) => addMealToPlan({ ...t, mealId, ...(date ? { date } : {}), ...withTimeZone() }))(),
+      setMealDate: (mealId, date) => withFresh((t) => setMealDate({ ...t, mealId, date, ...withTimeZone() }))(),
+      loadWeekNeeds: async ({ includeUndated }) => {
+        try {
+          return await loadWeekNeeds({ kitchenId, includeUndated, ...withTimeZone() });
+        } catch {
+          return null; // the sheet shows its fallback (0018)
+        }
+      },
+      addWeekNeedsToList: ({ includeUndated, names }) =>
+        withFresh((t) => addWeekNeedsToList({ ...t, includeUndated, names, ...withTimeZone() }))(),
       startCooking: (mealId) => withFresh((t) => startCooking({ ...t, mealId }))(),
       cancel: (mealId) => withFresh((t) => cancelMeal({ ...t, mealId }))(),
       finishCooking: (mealId) => withFresh((t) => finishCooking({ ...t, mealId }))(),
@@ -254,7 +269,7 @@ export function useMealsController(deps: {
       useOwnRecipe: (title) => depsRef.current.fillComposer(depsRef.current.ownRecipeText(title)),
       showSaved: (result, opts) => depsRef.current.showSaved(result, opts),
     }),
-    [runChoose, withFresh, openRecipe, closeRecipe],
+    [runChoose, withFresh, openRecipe, closeRecipe, kitchenId],
   );
 
   const openUpdateKitchen = useCallback((request: UpdateKitchenRequest) => dispatch({ type: "openUpdateKitchen", request }), []);

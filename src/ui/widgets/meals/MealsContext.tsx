@@ -7,6 +7,7 @@
 import { createContext, useContext, type Dispatch } from "react";
 import type { ActionResult, FinishCookingResult } from "@/app/actions";
 import type { ApplyResult } from "@/contracts/apply-result";
+import type { WeekNeeds } from "@/contracts/week-plan";
 import type { MealsEvent, MealsSession, UpdateKitchenRequest } from "./session";
 
 export type AfterCookingStock = "have" | "low" | "out";
@@ -16,7 +17,14 @@ export interface MealActions {
   choose(ideaId: string): Promise<boolean>;
   /** Write the recipe again for a meal whose recipe didn't save ("Try again"). */
   retryRecipe(mealId: string): Promise<boolean>;
-  addToPlan(mealId: string): Promise<ActionResult>;
+  /** Add to plan, optionally for a day (0045 KOS1: "YYYY-MM-DD", yesterday to 21 days ahead). */
+  addToPlan(mealId: string, date?: string): Promise<ActionResult>;
+  /** The day control on a planned meal (KOS1): set or move its day; `null` = No day. One Undo. */
+  setMealDate(mealId: string, date: string | null): Promise<ActionResult>;
+  /** The preview for "Add this week's missing ingredients" (KOS12); null = couldn't load (fallback). */
+  loadWeekNeeds(opts: { includeUndated: boolean }): Promise<WeekNeeds | null>;
+  /** Add the chosen ones: one change set, source `week-plan`; WEEK_NEEDS_NONE when nothing is left. */
+  addWeekNeedsToList(opts: { includeUndated: boolean; names: string[] }): Promise<ActionResult>;
   startCooking(mealId: string): Promise<ActionResult>;
   cancel(mealId: string): Promise<ActionResult>;
   finishCooking(mealId: string): Promise<FinishCookingResult>;
