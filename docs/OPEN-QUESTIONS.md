@@ -11,12 +11,7 @@
 
 ## Outstanding
 
-### BRT1–BRT3. 🟡 Bright look details (from the reskin, 0048)
-- **BRT1. Button text.** White text on the prototype's coral fails contrast (2.55:1), so main buttons use dark ink text on the coral gradient instead (5.58:1). The alternative is darker, brick-red buttons with white text. **Rec:** keep the ink text, which keeps your colours.
-- **BRT2. The allergy-only colour (KOS15)** moved from plum to **berry**, because plum looked like the lavender freezer tint. **Rec:** keep berry.
-- **BRT3. The "What changed" box** is now soft mint (it reads as "saved"). **Rec:** keep mint rather than plain white.
-
-> Answer:
+*Nothing outstanding.*
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
@@ -121,3 +116,5 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | KOS1–KOS16 | Kitchen OS features | [0045](decisions/0045-kitchen-os-features.md): all Recs, except KOS10: the assistant is Lumi |
 | V-KOS1–V-KOS2 | Cream style details | [0046](decisions/0046-cream-style-details.md): both Recs |
 | KOS17–KOS18 | App name; chips per place | [0047](decisions/0047-app-name-and-place-chips.md): both Recs |
+| BRT1–BRT3 | Bright look details | [0050](decisions/0050-bright-look-details.md): all Recs |
+| IR1–IR4 | Refining a meal idea in chat | [0051](decisions/0051-refining-meal-ideas-in-chat.md): all Recs |

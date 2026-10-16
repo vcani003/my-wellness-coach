@@ -1,0 +1,8 @@
+# 0051: Refining a meal idea in chat
+
+**Status:** Accepted · 2026-10-16 · Decided by Vero (IR1–IR4, all Recs). Comes from Vero's feedback on 2026-10-15: "It should always update in both if it's shown in both places." Work in progress is on `ai/idea-refine` @ `0c4417c` (unverified, not merged).
+
+- **IR1. The card shows the latest recipe (display only).** Once a meal chosen from an idea card has a recipe, the card's Uses and Missing lines show that recipe's latest saved version, updated in the same turn. The card's name and "why" stay as they were. Nothing is written to the recipe.
+- **IR2. A chat change to a card whose meal already has a recipe changes the recipe.** "Remove the yogurt from the curry" saves a new version of the existing recipe, like editing it, and the card then follows it (IR1). This is the only case where a saved recipe changes. Undo still applies.
+- **IR3. A chat change to a card with no recipe yet edits only the card.** Only the changed lines change, and they're highlighted. No recipe is written and nothing navigates. The user's words are kept on the card, and the recipe written when the card is later chosen respects them ("never add back the yogurt"). "*Make* the curry without yogurt" counts as choosing it and writes the recipe with the change. This adds one column, `meal_ideas.notes`, which is additive ([0028](0028-deploy-authority.md)).
+- **IR4. Another member's chosen card (shared kitchen).** Changing a card someone else in the kitchen chose changes only your copy, until their meal's recipe changes. Ideas from an older batch (not the latest shown) can't be refined in chat. Both stay this way for MVP 1.

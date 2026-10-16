@@ -53,3 +53,5 @@ One line per decision. Read the full record only when it's relevant to your task
 | [0047](0047-app-name-and-place-chips.md) | App stays "Kitchen", assistant is Lumi; no fixed chips per place until KOS8 |
 | [0048](0048-bright-look.md) | Bright prototype look (white floating cards, coral gradient, emoji tiles, line-drawn Lumi); light only; cream art removed |
 | [0049](0049-agent-worktree-lifecycle.md) | Agent worktrees removed only after integration, with Vero's approval, plain `git worktree remove`, never forced; uncertain → preserve; session start reports only; docs-only agents install nothing |
+| [0050](0050-bright-look-details.md) | Bright look: ink text on coral buttons; allergy colour is berry; "What changed" box is mint |
+| [0051](0051-refining-meal-ideas-in-chat.md) | Refining an idea in chat: card shows latest recipe; change with a recipe edits the recipe; without one edits only the card (`meal_ideas.notes`); others' cards and older batches untouched |
