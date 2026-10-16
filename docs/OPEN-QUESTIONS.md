@@ -11,7 +11,22 @@
 
 ## Outstanding
 
-*Nothing outstanding.*
+### P4. 🟡 Order of the Kitchen OS features (0043, 0045)
+None of the KOS features has its backend yet. Already done or not needed: KOS10 (Lumi), KOS15 (allergy colour) and KOS14 (reversed by 0048). KOS13 mostly works and needs only a restyle. You asked me (2026-10-16) to go with recs while you're away, so I'm building in the Rec order below, one at a time, each on its own branch, with nothing merged or deployed. Reorder any time.
+**Rec**, small and useful first, with each step building on the last:
+1. **KOS4** stock levels plenty / some / low / out (low and out already exist)
+2. **KOS16** ask before removing more than 5 things at once
+3. **KOS3** tap an item to edit it
+4. **KOS1** dated week plan, then **KOS12** add the week's missing ingredients
+5. **KOS6** History tab
+6. **KOS5** favorites in the recipe box
+7. **KOS11** rename yourself / leave the household
+8. **KOS13** cook-steps restyle
+9. **KOS2** food catalog + estimated use-by, then **KOS9** shopping list by aisle (large)
+10. **KOS8** the assistant moves the screen and suggests reply chips
+11. **KOS7** offline for all buttons (large)
+
+> Answer:
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
