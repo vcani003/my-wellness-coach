@@ -564,8 +564,12 @@ function itemUpdate(op: OperationOf<"item.update">, env: OpEnv): OpOutcome {
   }
   const payload: ItemUpdatedPayload = compact({ itemId: item.id, batchId: batch?.id, set, clear });
   const displayName = set.name?.value ?? item.name.value;
-  const summary =
-    set.location && set.location.value !== (batch ?? item).location?.value
+  // IA6 (0036): a rename on its own gets its own line, "Renamed fish sauce → nước mắm" (the
+  // automatic re-sort of an unsorted item's type rides along with it).
+  const renameOnly = !!set.name && set.name.value !== item.name.value && !hasBatchFields && !f.category;
+  const summary = renameOnly
+    ? msg("ITEM_RENAMED", { from: item.name.value, name: displayName })
+    : set.location && set.location.value !== (batch ?? item).location?.value
       ? msg("ITEM_MOVED", { name: displayName, location: set.location.value })
       : set.category && Object.keys(set).length === 1 && clear.length === 0
         ? msg("ITEM_CATEGORY", categoryParams(displayName, set.category.value))

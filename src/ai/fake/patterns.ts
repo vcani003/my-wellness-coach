@@ -152,7 +152,7 @@ export function categoryFromWords(text: string): ItemCategory | null {
 
 /** "the fridge" / "pantry" → its place (0041), else null. */
 export function placeFromWords(text: string): Location | null {
-  const m = /^(?:the\s+|my\s+|our\s+)?(fridge|freezer|pantry)\b/.exec(foldText(text));
+  const m = /^(?:the\s+|my\s+|our\s+)?(fridge|freezer|pantry|counter)\b/.exec(foldText(text));
   return (m?.[1] as Location | undefined) ?? null;
 }
 
@@ -184,7 +184,7 @@ const STAPLE_NOT = [
   new RegExp(String.raw`^\s*(?:please\s+)?(?:take|remove)\s+(.+?)\s+(?:off|from)\s+(?:my|our|the)\s+staples` + END, "i"),
 ];
 const STAPLES_QUESTION = /\b(what|which) staples\b|^\s*restock\b|\bbuild (my|our|the) (shopping )?list\b/i;
-const PLACE_WORD = /\b(fridge|freezer|pantry)\b/i;
+const PLACE_WORD = /\b(fridge|freezer|pantry|counter)\b/i;
 const YES = /^\s*(yes|yeah|yep|sure|ok(ay)?|please do|go ahead)\b/i;
 
 function stapleIntent(text: string): FakeIntent | null {

@@ -12,7 +12,7 @@ import type { UpdateKitchenPrompt } from "@/contracts/stream";
 import { getMeals, handleChooseMeal } from "@/ai";
 import { getRecipe } from "@/domains/kitchen/queries";
 import { checkChatRateLimit } from "@/lib/rate-limit";
-import { Id, Quantity, ShoppingSource, StockLevel } from "@/contracts/common";
+import { Id, ItemCategory, Location, Quantity, ShoppingSource, StockLevel } from "@/contracts/common";
 import { ShoppingDoneFields } from "@/contracts/operations";
 import {
   addRecipeNeedsToShoppingList,
@@ -24,6 +24,9 @@ import {
   restockFromStaples,
   updateStapleStore,
   doneShopping,
+  editItem as editItemCommand,
+  removeItem as removeItemCommand,
+  setItemStaple as setItemStapleCommand,
   makeMealAgain,
   moveMeal,
   planMeal,
@@ -145,6 +148,44 @@ const StockLevelInput = z.object({ ...Tap, itemId: Id, batchId: Id.optional(), l
  */
 export async function setItemStockLevel(input: z.input<typeof StockLevelInput>): Promise<ActionResult> {
   return run(StockLevelInput, input, (ctx, d) => setStockLevel(ctx.db, ctx.scope, d));
+}
+
+// ─── Tap an item to edit it (0045 KOS3; 0030 / 0036) ──────────────────────────────────
+// Used up / Out and Running low are `setItemStockLevel` above. Send the `basedOnVersion` the
+// person saw when the sheet opened: a change someone else made to the item since comes back as a
+// STALE_TARGET rejection with nothing saved. Anyone in the kitchen may edit any item (0017).
+
+/** Sheet limits (item-actions.md §2): name ≤ 60, amount ≤ 40. */
+const ItemEditFields = z
+  .strictObject({
+    name: z.string().trim().min(1).max(60).optional(),
+    /** As typed; "" or null clears it to unknown. */
+    amount: z.string().trim().max(40).nullable().optional(),
+    place: Location.optional(),
+    category: ItemCategory.optional(),
+  })
+  .refine((e) => Object.values(e).some((v) => v !== undefined), { message: "nothing to change" });
+const EditItemInput = z.object({ ...Tap, itemId: Id, batchId: Id.optional(), edit: ItemEditFields });
+const ItemInput = z.object({ ...Tap, itemId: Id });
+const ItemStapleInput = z.object({ ...Tap, itemId: Id, staple: z.boolean() });
+
+/**
+ * Save the edit sheet: name, amount, place and/or type, as one change set with one Undo and one
+ * receipt line per part. With `batchId`, the amount and place apply to that batch only (KOS4-e,
+ * 0036); without, the amount goes on the oldest open batch (IA4) and the place on every open batch.
+ */
+export async function editItem(input: z.input<typeof EditItemInput>): Promise<ActionResult> {
+  return run(EditItemInput, input, (ctx, d) => editItemCommand(ctx.db, ctx.scope, d));
+}
+
+/** "Remove (added by mistake)" (0030): asks once in the UI; Undo brings it back. */
+export async function removeItem(input: z.input<typeof ItemInput>): Promise<ActionResult> {
+  return run(ItemInput, input, (ctx, d) => removeItemCommand(ctx.db, ctx.scope, d));
+}
+
+/** The item's "Staple" switch (0054 plan): on adds this item's name as a staple, off removes it. */
+export async function setItemStaple(input: z.input<typeof ItemStapleInput>): Promise<ActionResult> {
+  return run(ItemStapleInput, input, (ctx, d) => setItemStapleCommand(ctx.db, ctx.scope, d));
 }
 
 // ─── Staples (0054) ───────────────────────────────────────────────────────────────────

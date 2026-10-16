@@ -17,7 +17,7 @@ import {
   StapleRow,
   TickRow,
 } from "@/contracts/kitchen-state";
-import { stapleNeed, type NeedContext } from "@/shared/staples";
+import { stapleIdsForItem, stapleNeed, type NeedContext } from "@/shared/staples";
 import { actorRef, type NameDirectory } from "@/shared/identity";
 import { computeAllergenFlags } from "@/shared/profile/allergens";
 import type { Restriction } from "@/shared/profile/state";
@@ -86,19 +86,25 @@ function safeMap<T, R>(values: T[], fn: (v: T) => R, what: string): unknown[] {
 
 export function buildKitchenState(kitchen: KitchenEntities, ctx: ReadContext): KitchenState {
   const { names } = ctx;
+  const stapleNames = Object.values(kitchen.staples ?? {}).map((s) => ({ id: s.standardName, name: s.name.value, standardName: s.standardName }));
 
   const items = checked(
     ItemRow,
     safeMap(
       Object.values(kitchen.items).filter((i) => i.stock?.value !== "out"),
       // Open batches only, oldest first (0025); closed ones stay in history.
-      (i) => ({
-        ...i,
-        // CAT1: items saved before categories read as the kitchen's guess (never written back).
-        category: effectiveCategory(i, kitchen),
-        batches: openBatches(i).map((b) => ({ ...b, ...audit(b, names) })),
-        ...audit(i, names),
-      }),
+      (i) => {
+        // KOS3: the item's Staple switch reads this.
+        const [stapleId] = stapleIdsForItem({ name: i.name.value, standardName: i.standardName }, stapleNames);
+        return {
+          ...i,
+          // CAT1: items saved before categories read as the kitchen's guess (never written back).
+          category: effectiveCategory(i, kitchen),
+          batches: openBatches(i).map((b) => ({ ...b, ...audit(b, names) })),
+          ...(stapleId ? { stapleId } : {}),
+          ...audit(i, names),
+        };
+      },
       "item",
     ),
     "item",

@@ -46,6 +46,16 @@ export function matchStaple<T extends Named>(staple: Named, candidates: T[]): T[
   });
 }
 
+/**
+ * The staples that are **this item's name** (0045 KOS3, the item's Staple switch): only exact
+ * matches (a name key in common, so "nước mắm (fish sauce)" is the staple "fish sauce"), never the
+ * looser all-the-words match, so switching "jasmine rice" off can't remove the staple "rice".
+ */
+export function stapleIdsForItem<T extends Named & { id: string }>(item: Named, staples: T[]): string[] {
+  const keys = new Set([item.standardName, ...nameKeys(item.name)]);
+  return staples.filter((s) => [s.standardName, ...nameKeys(s.name)].some((k) => keys.has(k))).map((s) => s.id);
+}
+
 export interface NeedContext {
   /** Items in the kitchen now (at least one open batch), with the row's level when known. */
   current: Array<Named & { id: string; stock?: StockLevel }>;

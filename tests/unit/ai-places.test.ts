@@ -178,12 +178,33 @@ describe("corrections and habits are remembered (0041)", () => {
   });
 });
 
-describe("the prompt (interpret-2026-10-16.4)", () => {
+describe("the prompt (interpret-2026-10-16.5)", () => {
   it("asks for the usual place on adds instead of leaving it unknown", () => {
-    expect(PROMPT_VERSION).toBe("interpret-2026-10-16.4");
+    expect(PROMPT_VERSION).toBe("interpret-2026-10-16.5");
     expect(SYSTEM_PROMPT).toContain("# Places (location)");
     expect(SYSTEM_PROMPT).not.toContain("Don't guess where groceries go");
     expect(SYSTEM_PROMPT).toContain('"onions go in the pantry"');
+  });
+});
+
+describe("Counter (0030, KOS3): said or picked, never guessed", () => {
+  it("the prompt names Counter as a place, only when said", () => {
+    expect(SYSTEM_PROMPT).toContain("Places are fridge, freezer, pantry and counter.");
+    expect(SYSTEM_PROMPT).not.toContain("there is no counter");
+  });
+
+  it("'the bananas are on the counter' keeps the said Counter", async () => {
+    const k = kitchen();
+    const text = "I bought bananas, they're on the counter";
+    await interpretAndApply(k, text, [op({ action: "add", name: name("bananas"), location: told("counter"), evidence: text })]);
+    expect(placeOf(k, "bananas")).toEqual(told("counter"));
+  });
+
+  it("a guessed Counter is dropped: the banana stays 'Not sure where'", async () => {
+    const k = kitchen();
+    const text = "I bought bananas";
+    await interpretAndApply(k, text, [op({ action: "add", name: name("bananas"), location: usual("counter"), evidence: text })]);
+    expect(placeOf(k, "bananas")).toBeUndefined();
   });
 });
 

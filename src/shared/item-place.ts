@@ -12,8 +12,9 @@
  * 3. Otherwise the item's type (the 12 types from 0032) decides: produce, meat & seafood, dairy &
  *    eggs and leftovers → Fridge; grains, sauces, spices, canned, baking and snacks → Pantry.
  * 4. Drinks, Other and fruit that ripens on the counter (bananas, avocados, tomatoes) get **no
- *    place**: they stay "Not sure where" (0041: only what genuinely can't be placed). Counter
- *    isn't a place yet (0030); when it ships, the `COUNTER_LATER` words are the ones to map to it.
+ *    place**: they stay "Not sure where" (0041: only what genuinely can't be placed). Counter is
+ *    a place since KOS3 (0030), but only when said or picked: guessing Counter for counter fruit
+ *    waits on Vero's answer (see `COUNTER_LATER`).
  *
  * Easy to extend: add a word to a list.
  */
@@ -62,12 +63,14 @@ const BY_NAME: Record<Location | "none", string[]> = {
     // drinks kept cold
     "juice", "orange juice", "kombucha", "milk tea", "nước cam",
   ],
-  // Counter fruit (0030 Counter isn't a place yet): no place, so they stay "Not sure where".
+  // Never guessed: Counter is only said or picked (KOS3). See COUNTER_LATER.
+  counter: [],
+  // Counter fruit: no place yet, so they stay "Not sure where".
   none: ["banana", "avocado", "tomato", "cherry tomato", "mango", "papaya", "pineapple", "peach", "persimmon",
     "chuối", "bơ trái", "cà chua", "xoài", "đu đủ", "dứa"],
 };
 
-/** The counter-fruit words, for when Counter ships (0030). */
+/** The counter-fruit words: the ones to map to Counter if Vero says it should be guessed too. */
 export const COUNTER_LATER = BY_NAME.none;
 
 interface Phrase {

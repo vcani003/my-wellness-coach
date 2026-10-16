@@ -7,7 +7,7 @@
  */
 export const FALLBACK_FOOD_EMOJI = "🍽️";
 
-export type TilePlace = "fridge" | "freezer" | "pantry" | "unknown";
+export type TilePlace = "fridge" | "freezer" | "pantry" | "counter" | "unknown";
 
 export function FoodTile({ emoji, place }: { emoji?: string | null; place?: TilePlace | null }) {
   return (

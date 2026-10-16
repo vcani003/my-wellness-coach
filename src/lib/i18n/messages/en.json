@@ -38,6 +38,7 @@
       "fridge": "Fridge",
       "freezer": "Freezer",
       "pantry": "Pantry",
+      "counter": "Counter",
       "unknown": "Not sure where"
     },
     "empty": "Your kitchen is empty. Tell me what you've got.",
@@ -87,6 +88,7 @@
         "ITEM_RECORDED": "added {name}",
         "ITEM_BATCH_ADDED": "added more {name}",
         "ITEM_UPDATED": "updated the {name}",
+        "ITEM_RENAMED": "renamed {from} to {name}",
         "ITEM_MOVED": "moved the {name} to the {location}",
         "ITEM_CATEGORY": "put the {name} under {categoryName}",
         "CATEGORY_REMEMBERED": "filed {name} under {categoryName} for next time",
@@ -246,12 +248,14 @@
   "location": {
     "fridge": "fridge",
     "freezer": "freezer",
-    "pantry": "pantry"
+    "pantry": "pantry",
+    "counter": "counter"
   },
   "msg": {
     "ITEM_ADDED": "Added {name}",
     "ITEM_RESTOCKED": "Added {name} (back in stock)",
     "ITEM_UPDATED": "Updated {name}",
+    "ITEM_RENAMED": "Renamed {from} → {name}",
     "ITEM_MOVED": "{name} → {location}",
     "ITEM_CATEGORY": "{name} → {categoryName}",
     "CATEGORY_REMEMBERED": "I'll put {name} under {categoryName} from now on",
@@ -325,6 +329,7 @@
     "FORMER_MEMBER_PROFILE": "Changed a former member's profile"
   },
   "msgPlain": {
+    "ITEM_RENAMED": "Renamed {from} to {name}",
     "ITEM_MOVED": "{name} moved to the {location}",
     "SHOPPING_STORE": "{name} moved to {store} on your list",
     "ITEM_CATEGORY": "{name} now under {categoryName}"

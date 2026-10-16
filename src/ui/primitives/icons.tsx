@@ -30,6 +30,8 @@ export { ListChecks as ListIcon } from "@phosphor-icons/react/dist/csr/ListCheck
 export { Leaf as FridgeIcon } from "@phosphor-icons/react/dist/csr/Leaf";
 export { Snowflake as FreezerIcon } from "@phosphor-icons/react/dist/csr/Snowflake";
 export { Jar as PantryIcon } from "@phosphor-icons/react/dist/csr/Jar";
+// Counter (0030, KOS3): a fruit basket. A placeholder until UX picks the tile art.
+export { Basket as CounterIcon } from "@phosphor-icons/react/dist/csr/Basket";
 export { Question as UnknownPlaceIcon } from "@phosphor-icons/react/dist/csr/Question";
 export { Sparkle as SparkleIcon } from "@phosphor-icons/react/dist/csr/Sparkle";
 export { Repeat as MakeAgainIcon } from "@phosphor-icons/react/dist/csr/Repeat";

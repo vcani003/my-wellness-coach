@@ -17,7 +17,7 @@ import { LumiHalo } from "@/ui/lumi/Lumi";
 import { FoodTile } from "@/ui/primitives/FoodTile";
 import { actorName, byOther as byOtherActor, itemName, sentenceCase } from "@/ui/fallbacks";
 import { Collapsible } from "@/ui/primitives/Collapsible";
-import { CaretDownIcon, CloseIcon, FreezerIcon, FridgeIcon, PantryIcon, SearchIcon, UnknownPlaceIcon } from "@/ui/primitives/icons";
+import { CaretDownIcon, CloseIcon, CounterIcon, FreezerIcon, FridgeIcon, PantryIcon, SearchIcon, UnknownPlaceIcon } from "@/ui/primitives/icons";
 import { useKitchenData, type ChangeMark } from "@/ui/sync/KitchenDataContext";
 import { useOnline } from "@/ui/sync/useOnline";
 import type { PlaceProps } from "@/ui/places/types";
@@ -30,7 +30,7 @@ import { useKitchenView, type KitchenView } from "./view-pref";
 /** How long typing must pause before the result count is spoken. */
 const ANNOUNCE_DELAY_MS = 700;
 
-const PLACE_ICON = { fridge: FridgeIcon, freezer: FreezerIcon, pantry: PantryIcon, unknown: UnknownPlaceIcon } as const;
+const PLACE_ICON = { fridge: FridgeIcon, freezer: FreezerIcon, pantry: PantryIcon, counter: CounterIcon, unknown: UnknownPlaceIcon } as const;
 
 /** A place's tile (Kitchen OS): the place colour and its icon. Decorative; the words say where. */
 export function PlaceTile({ place, small = false }: { place: GroupKey; small?: boolean }) {

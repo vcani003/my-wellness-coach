@@ -15,19 +15,21 @@ import { randomUUID } from "node:crypto";
 import { changeSets, itemBatches, kitchens, mealIdeas, meals, staples, users } from "@/db/schema";
 import type { Db, Queryable } from "@/db/client";
 import { ApplyResult, type ApplyResult as ApplyResultT } from "@/contracts/apply-result";
-import type { Msg, Quantity, ShoppingSource, StockLevel } from "@/contracts/common";
+import type { ItemCategory, Location, Msg, Quantity, ShoppingSource, StockLevel } from "@/contracts/common";
 import type { Operation } from "@/contracts/operations";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { MealIdea, UpdateKitchenPrompt } from "@/contracts/stream";
 import { standardName } from "@/shared/text";
-import { legacyStapleNames } from "@/shared/staples";
+import { legacyStapleNames, stapleIdsForItem } from "@/shared/staples";
+import { quantityFromText } from "@/shared/quantity";
 import { msg } from "@/shared/messages";
 import { listMembers, type KitchenScope } from "@/shared/membership";
 import { appendEvents, eventExistsInStreams, loadChangeSetEvents, loadStream } from "@/shared/events/store";
 import { kitchenStream, streamKind, userStream } from "@/shared/events/types";
 import { loadProfiles, persistProfileEntities, replaceProfiles } from "@/shared/profile/store";
 import { emptyProfileState, getProfileEntity, replayProfile } from "@/shared/profile/state";
-import { getKitchenEntity, replay } from "./state";
+import { getKitchenEntity, replay, type Item } from "./state";
+import { openBatches, type Batch } from "./batches";
 import { loadKitchenEntities, persistKitchenEntities, replaceKitchenProjections } from "./store";
 import { SOFT_SUMMARY_CODES, planProposal, touchedKeys, type RevertPlan } from "./validate";
 import { getRecipe, ideaFlags, itemNames, readKitchenState } from "./queries";
@@ -398,6 +400,142 @@ export function setStockLevel(
       fields: { stock: said(args.level) },
     },
   ]);
+}
+
+// ─── Tap an item to edit it (0045 KOS3; the item actions of 0030 / 0036) ────────────────
+// Used up / Out and Running low are `setStockLevel` (whole item, or one batch with `batchId`).
+// The rest are below. Each builds ordinary operations from the item as the server sees it now and
+// goes through the same validate → apply path as chat: one change set, one Undo, recorded as the
+// person who tapped (anyone in the kitchen may edit any item, 0017; Undo stays your own). A change
+// someone made to the item since `basedOnVersion` is refused whole as STALE_TARGET.
+
+/**
+ * What the edit sheet saves. Only what changed needs sending; each part is its own receipt line.
+ * - `name`: the item's name (IA6: "Renamed fish sauce → nước mắm"). Renaming onto another item's
+ *   name is allowed and nothing merges (item-actions.md §2, 0036).
+ * - `amount`: as typed ("half a bag", "2 lbs"); `""` or `null` clears it to unknown (0011). Goes on
+ *   the batch given, else the oldest open one (IA4).
+ * - `place`: Fridge / Freezer / Pantry / Counter, on the batch given, else every open batch. Into
+ *   the Freezer is the chat "froze it" path; out of it counts as defrosting (IA5).
+ * - `category`: the item's type, as said (remembered for the name, CAT1).
+ */
+export interface ItemEdit {
+  name?: string;
+  amount?: string | null;
+  place?: Location;
+  category?: ItemCategory;
+}
+
+type GoneOp = Operation;
+
+/**
+ * An item that can't be edited: the validator gives the usual rejection, so the answer has the
+ * same shape as any other (removed → UNKNOWN_ITEM; Out → ALREADY_OUT; nothing saved).
+ */
+function goneOps(itemId: string, item: Item | undefined): GoneOp[] {
+  return item
+    ? [{ opId: "gone", type: "item.use", target: { itemId }, fields: {} }]
+    : [{ opId: "gone", type: "item.update", target: { itemId }, fields: {} }];
+}
+
+/** The operations for one move (IA5): skipped for a batch already there. */
+function moveOps(item: Item, batches: Batch[], to: Location): Operation[] {
+  return batches.flatMap((b, n): Operation[] => {
+    const target = { itemId: item.id, batchId: b.id };
+    const opId = `place-${n + 1}`;
+    const inFreezer = b.location?.value === "freezer";
+    if (to === "freezer") {
+      if (inFreezer && b.frozen?.value === true) return [];
+      return [{ opId, type: "item.update", target, fields: { location: said(to), frozen: said(true) } }];
+    }
+    if (inFreezer || b.frozen?.value === true) {
+      return [{ opId, type: "item.defrost", target, fields: { location: said(to) } }];
+    }
+    if (b.location?.value === to) return [];
+    return [{ opId, type: "item.update", target, fields: { location: said(to) } }];
+  });
+}
+
+/** The edit sheet's operations, in receipt order: rename, amount, place, type. Pure. */
+export function itemEditOperations(item: Item, edit: ItemEdit, batchId?: string): Operation[] {
+  const open = openBatches(item);
+  const picked = batchId ? open.filter((b) => b.id === batchId) : undefined;
+  if (batchId && picked?.length === 0) {
+    // Gone since the sheet opened: the validator says so (closed → ALREADY_OUT, unknown → UNKNOWN_TARGET).
+    return [{ opId: "batch", type: "item.update", target: { itemId: item.id, batchId }, fields: {}, clear: ["quantity"] }];
+  }
+  const ops: Operation[] = [];
+  const name = edit.name?.trim();
+  if (name && name !== item.name.value) ops.push({ opId: "name", type: "item.update", target: { itemId: item.id }, fields: { name: said(name) } });
+
+  if (edit.amount !== undefined) {
+    const batch = picked?.[0] ?? open[0];
+    const target = batch ? { itemId: item.id, batchId: batch.id } : { itemId: item.id };
+    const quantity = quantityFromText(edit.amount ?? "");
+    if (!quantity) {
+      if (batch?.quantity) ops.push({ opId: "amount", type: "item.update", target, fields: {}, clear: ["quantity"] });
+    } else if (quantity.asSaid !== batch?.quantity?.value.asSaid) {
+      ops.push({ opId: "amount", type: "item.update", target, fields: { quantity: said(quantity) } });
+    }
+  }
+
+  if (edit.place) ops.push(...moveOps(item, picked ?? open, edit.place));
+
+  if (edit.category && !(item.category?.value === edit.category && item.category.basis === "said")) {
+    ops.push({ opId: "type", type: "item.update", target: { itemId: item.id }, fields: { category: said(edit.category) } });
+  }
+  return ops;
+}
+
+/** Save the edit sheet: one change set with one Undo; nothing changed → an empty change. */
+export async function editItem(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { itemId: string; batchId?: string; edit: ItemEdit },
+): Promise<ApplyOutcome> {
+  try {
+    const item = (await loadKitchenEntities(db, scope.kitchenId)).items[args.itemId];
+    const ops = item && openBatches(item).length > 0 ? itemEditOperations(item, args.edit, args.batchId) : goneOps(args.itemId, item);
+    return tap(db, scope, args, "item.edit", ops);
+  } catch (error) {
+    console.error("kitchen.apply: couldn't edit the item", { error });
+    return { ok: false, error: { reason: msg("SAVE_FAILED"), retryable: true } };
+  }
+}
+
+/** "Remove (added by mistake)" (0030): the whole item leaves the list; history keeps it. Undo brings it back. */
+export function removeItem(db: Db, scope: KitchenScope, args: TapArgs & { itemId: string }) {
+  return tap(db, scope, args, "item.remove", [{ opId: "remove", type: "item.remove", target: { itemId: args.itemId } }]);
+}
+
+/**
+ * The item's "Staple" switch (0054 plan, KOS3). On: this item's name becomes a staple (already one
+ * → STAPLE_ALREADY, no change). Off: every staple that is exactly this item's name is removed
+ * (`stapleIdsForItem`), so the switch reads off afterwards. One change set, one Undo.
+ */
+export async function setItemStaple(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { itemId: string; staple: boolean },
+): Promise<ApplyOutcome> {
+  try {
+    const entities = await loadKitchenEntities(db, scope.kitchenId);
+    const item = entities.items[args.itemId];
+    if (!item || openBatches(item).length === 0) return tap(db, scope, args, "item.staple", goneOps(args.itemId, item));
+    if (args.staple) return addStapleItems(db, scope, { ...args, items: [{ name: item.name.value }] });
+    const staples = Object.values(entities.staples ?? {}).map((s) => ({ id: s.standardName, name: s.name.value, standardName: s.standardName }));
+    const ids = stapleIdsForItem({ name: item.name.value, standardName: item.standardName }, staples);
+    return tap(
+      db,
+      scope,
+      args,
+      "staple.remove",
+      ids.map((stapleId, n) => ({ opId: `staple-${n + 1}`, type: "staple.remove", target: { stapleId } })),
+    );
+  } catch (error) {
+    console.error("kitchen.apply: couldn't set the item's staple", { error });
+    return { ok: false, error: { reason: msg("SAVE_FAILED"), retryable: true } };
+  }
 }
 
 /** "Still have them": the older batches stay, and the choice is dismissed (a soft change). */

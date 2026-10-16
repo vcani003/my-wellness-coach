@@ -85,6 +85,12 @@ export const ItemRow = z.object({
    * older build (offline cache) still parses (0018). Absent = one batch, described by the row.
    */
   batches: z.array(BatchRow).optional(),
+  /**
+   * Set when this item's name is one of the kitchen's staples (0045 KOS3, the item's "Staple"
+   * switch; 0054): that staple's ID. Computed on every read, never stored. Exact name matches
+   * only (`stapleIdsForItem`). Absent = not a staple.
+   */
+  stapleId: Id.optional(),
   ...Audit,
 });
 export type ItemRow = z.infer<typeof ItemRow>;

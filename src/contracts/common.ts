@@ -44,7 +44,8 @@ export const Quantity = z.object({
 });
 export type Quantity = z.infer<typeof Quantity>;
 
-export const Location = z.enum(["fridge", "freezer", "pantry"]);
+/** Where something is kept. Counter added by 0030 (IA1), shipped with KOS3; stored in jsonb facts, so no migration. */
+export const Location = z.enum(["fridge", "freezer", "pantry", "counter"]);
 export type Location = z.infer<typeof Location>;
 
 /**

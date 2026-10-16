@@ -13,6 +13,8 @@ const TEMPLATES: Record<string, string> = {
   ITEM_ADDED_FROM_LIST: "Added {name} and took it off the shopping list",
   ITEM_RESTOCKED_FROM_LIST: "Added {name} (back in stock) and took it off the shopping list",
   ITEM_UPDATED: "Updated {name}",
+  // IA6 (0036): a rename's own line. `from` is the old name, `name` the new one.
+  ITEM_RENAMED: "Renamed {from} → {name}",
   ITEM_MOVED: "{name} → {location}",
   // categories (CAT1). `category` is the ID; `categoryName` the English name.
   ITEM_CATEGORY: "{name} → {categoryName}",
