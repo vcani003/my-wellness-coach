@@ -198,7 +198,12 @@
     "earlierError": "Couldn't load earlier messages. Try again.",
     "earlierShown": "{count, plural, one {# earlier message shown.} other {# earlier messages shown.}}",
     "startOfChat": "That's the start of your chat.",
-    "offline": "You're offline. Chat comes back when you are; ticks and buttons still work."
+    "offline": "You're offline. Chat comes back when you are; ticks and buttons still work.",
+    "confirm": {
+      "label": "Remove {count} things?",
+      "yes": "Yes, remove them",
+      "no": "No, keep them"
+    }
   },
   "receipt": {
     "title": "What changed",

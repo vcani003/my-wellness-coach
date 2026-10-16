@@ -127,6 +127,11 @@ export function useChat(opts: {
             case "staples":
               dispatch({ type: "staples", id, items: event.items });
               break;
+            case "confirm": {
+              const { kind, count, names } = event;
+              dispatch({ type: "confirm", id, confirm: { kind, count, names } });
+              break;
+            }
             case "done":
               ended = true;
               dispatch({ type: "done", id });

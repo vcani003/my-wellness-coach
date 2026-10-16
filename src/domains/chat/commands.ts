@@ -43,7 +43,12 @@ export async function saveUserMessage(db: Queryable, scope: KitchenScope, args: 
 export async function saveAssistantMessage(
   db: Queryable,
   scope: KitchenScope,
-  args: SaveMessageArgs & { id: string; result: ApplyResult | null },
+  args: SaveMessageArgs & {
+    id: string;
+    result: ApplyResult | null;
+    /** A held bulk removal this reply asks about (0045 KOS16); stored as given, read by the AI turn. */
+    pendingConfirm?: unknown;
+  },
 ): Promise<string> {
   const receipt: StoredReceipt | null = args.result ? withoutState(args.result) : null;
   const inserted = await db
@@ -57,6 +62,7 @@ export async function saveAssistantMessage(
       clientMessageId: args.clientMessageId,
       changeSetId: receipt?.changeSetId ?? null,
       receipt,
+      pendingConfirm: args.pendingConfirm ?? null,
       createdAt: args.now ?? new Date(),
     })
     .onConflictDoNothing()

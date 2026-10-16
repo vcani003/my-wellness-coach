@@ -564,6 +564,11 @@ export const chatMessages = pgTable(
     changeSetId: text("change_set_id"),
     /** The ApplyResult without `state`, so a reloaded receipt can show "What changed". */
     receipt: jsonb("receipt"),
+    /**
+     * A held bulk removal this reply asked about (0045 KOS16): the change a yes applies, exactly.
+     * Assistant rows only; null for every other reply. Shape owned by `src/ai/bulk-remove.ts`.
+     */
+    pendingConfirm: jsonb("pending_confirm"),
     createdAt: ts("created_at").notNull(),
   },
   (t) => [

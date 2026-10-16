@@ -17,6 +17,9 @@ export type FakeIntent =
   | { kind: "defrosted"; targets: Segment[] }
   | { kind: "undo" }
   | { kind: "toList"; items: Segment[]; store?: string }
+  | { kind: "offList"; targets: Segment[] }
+  | { kind: "clearList" }
+  | { kind: "throwOut"; targets: Segment[] }
   | { kind: "mealIdeas" }
   | { kind: "meal"; action: "meal_choose" | "meal_plan" | "meal_start_cooking" | "meal_done"; label: string }
   | { kind: "dish"; title: string; evidence: string; notes: string; have: Segment[] }
@@ -68,6 +71,20 @@ const DEFROSTED = new RegExp(String.raw`\b(?:just\s+)?(?:defrosted|thawed)\s+(.+
 /** "add garlic and ginger to the list" · "put oatmilk on my shopping list for Publix" (0027). */
 const TO_LIST = new RegExp(
   String.raw`^\s*(?:please\s+)?(?:add|put)\s+(.+?)\s+(?:to|on)\s+(?:the|my|our)\s+(?:shopping\s+)?list(?:\s+(?:for|at|from)\s+(.+?))?` + END,
+  "i",
+);
+
+/**
+ * Removals (0045 KOS16 tests): "take oat milk and eggs off the list" · "clear the list" · "throw out
+ * the milk, eggs and bread" / "remove X from the kitchen". More than 5 at once makes Lumi ask first.
+ */
+const OFF_LIST = new RegExp(
+  String.raw`^\s*(?:please\s+)?(?:take|remove|delete)\s+(.+?)\s+(?:off|from)\s+(?:the|my|our)\s+(?:shopping\s+)?list` + END,
+  "i",
+);
+const CLEAR_LIST = new RegExp(String.raw`^\s*(?:please\s+)?(?:clear|empty)\s+(?:out\s+)?(?:the|my|our)\s+(?:shopping\s+)?list` + END, "i");
+const THROW_OUT = new RegExp(
+  String.raw`^\s*(?:(?:i|we)\s+)?(?:please\s+)?(?:threw out|throw out|tossed|toss|got rid of|remove)\s+(.+?)(?:\s+from\s+(?:the|my|our)\s+kitchen)?` + END,
   "i",
 );
 
@@ -232,6 +249,11 @@ export function matchIntent(text: string): FakeIntent {
   if (some) return { kind: "level", level: "some", targets: segments(some[1]) };
   const toList = TO_LIST.exec(text);
   if (toList) return { kind: "toList", items: segments(toList[1]), ...(toList[2] ? { store: toList[2].trim() } : {}) };
+  if (CLEAR_LIST.test(text)) return { kind: "clearList" };
+  const offList = OFF_LIST.exec(text);
+  if (offList) return { kind: "offList", targets: segments(offList[1]) };
+  const throwOut = THROW_OUT.exec(text);
+  if (throwOut) return { kind: "throwOut", targets: segments(throwOut[1]) };
   const bought = BOUGHT.exec(text);
   if (bought) return { kind: "bought", items: segments(bought[1]) };
   const oldGone = OLD_GONE.exec(text);

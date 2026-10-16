@@ -19,6 +19,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "re
 import { useAnnounce } from "@/ui/a11y/Announcer";
 import { LumiHalo, type LumiState } from "@/ui/lumi/Lumi";
 import type { AssistantMessage, ChatState, UserMessage } from "./chat-reducer";
+import { BulkRemoveConfirm } from "./BulkRemoveConfirm";
 import { useFormatMsg } from "./format-msg";
 import { Receipt } from "./Receipt";
 import { StaplesAnswerAdd } from "./StaplesAnswerAdd";
@@ -124,6 +125,7 @@ export function MessageList({
             onRetry={() => onRetry(m.replyTo)}
             onUndo={onUndo}
             onView={onView}
+            last={m === last}
           />
         ),
       )}
@@ -184,12 +186,15 @@ function AssistantBubble({
   onRetry,
   onUndo,
   onView,
+  last,
 }: {
   message: AssistantMessage;
   peek: boolean;
   onRetry: () => void;
   onUndo: (changeSetId: string) => void;
   onView?: () => void;
+  /** The newest message in the chat: only then can "Remove them all?" still be answered (KOS16). */
+  last: boolean;
 }) {
   const t = useTranslations("chat");
   const formatMsg = useFormatMsg();
@@ -209,6 +214,7 @@ function AssistantBubble({
         </p>
       )}
       {message.staples && message.status !== "error" && <StaplesAnswerAdd items={message.staples} />}
+      {message.confirm && last && message.status === "done" && <BulkRemoveConfirm confirm={message.confirm} />}
       {message.receipt && (
         <div className="w-full">
           <Receipt receipt={message.receipt} onUndo={onUndo} onView={onView} />

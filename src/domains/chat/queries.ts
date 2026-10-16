@@ -7,6 +7,7 @@ import { and, desc, eq, lt } from "drizzle-orm";
 import type { Queryable } from "@/db/client";
 import { chatMessages } from "@/db/schema";
 import { ChatHistoryMessage, StoredReceipt, type BatchAnswer, type ChatHistoryPage, type ChatReceipt } from "@/contracts/chat-history";
+import { BulkConfirm } from "@/contracts/stream";
 import {
   getBatchAnswers,
   getUndoStatus,
@@ -175,6 +176,8 @@ function toMessage(r: Row, undo: Map<string, UndoStatus>, unanswered: Set<string
       console.error("chat.read: unreadable receipt", { id: r.id, issues: parsed.error.issues });
     }
   }
+  // A held bulk removal (0045 KOS16): only what was asked (kind, count, names), never the held change.
+  const confirm = r.pendingConfirm ? BulkConfirm.safeParse(r.pendingConfirm) : null;
   return {
     id: r.id,
     clientMessageId: r.clientMessageId,
@@ -182,6 +185,7 @@ function toMessage(r: Row, undo: Map<string, UndoStatus>, unanswered: Set<string
     text: r.text,
     createdAt: r.createdAt.toISOString(),
     receipt,
+    ...(confirm?.success ? { confirm: confirm.data } : {}),
   };
 }
 
@@ -206,4 +210,26 @@ export async function getRecentTurns(
     .slice(0, limit)
     .reverse()
     .flatMap((r): RecentTurn[] => (r.role === "user" || r.role === "assistant" ? [{ role: r.role, text: r.text }] : []));
+}
+
+/**
+ * The held bulk removal (0045 KOS16) that a message from this user would answer: only when the
+ * newest message in your chat (leaving out the turn being handled, so a retry still finds it) is a
+ * reply that asked one. Anything said after it means it was passed over. Raw stored JSON; the AI
+ * turn checks its shape. Your own chat only, so in a household only the asker can answer (0017).
+ */
+export async function getPendingConfirm(
+  db: Queryable,
+  scope: KitchenScope,
+  opts: { excludeClientMessageId?: string } = {},
+): Promise<{ clientMessageId: string; pending: unknown } | null> {
+  const rows = await db
+    .select({ role: chatMessages.role, clientMessageId: chatMessages.clientMessageId, pendingConfirm: chatMessages.pendingConfirm })
+    .from(chatMessages)
+    .where(mine(scope))
+    .orderBy(desc(chatMessages.seq))
+    .limit(3);
+  const latest = rows.find((r) => r.clientMessageId !== opts.excludeClientMessageId);
+  if (!latest || latest.role !== "assistant" || latest.pendingConfirm == null) return null;
+  return { clientMessageId: latest.clientMessageId, pending: latest.pendingConfirm };
 }

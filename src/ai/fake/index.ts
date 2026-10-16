@@ -5,7 +5,9 @@
  * repeatable (backend-data.md §8). It understands only:
  *   "I bought X, Y and Z" · "I froze the X" · "I used the rest of the X" · "X is running low" ·
  *   "we have plenty of X" · "there's some X left" (KOS4) ·
- *   "add X and Y to the list [for Store]" · "the old X are gone" · "I defrosted the X" · "undo" ·
+ *   "add X and Y to the list [for Store]" · "take X off the list" · "clear the list" ·
+ *   "throw out X, Y and Z" (KOS16: more than 5 removals and the turn asks first) ·
+ *   "the old X are gone" · "I defrosted the X" · "undo" ·
  *   "X goes under <category>" (CAT1; adds also get the shared keyword guess) ·
  *   "X goes in the pantry" / "put X in the fridge" (0041; adds get their place from the backend) ·
  *   "I was thinking a <dish>, with … I have X" / "I want to make <dish>" (MI1) ·
@@ -170,6 +172,23 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
             },
           }));
           reply = `On your list: ${names(intent.items)}.`;
+          break;
+        case "offList":
+          operations = intent.targets.map((s) => ({ opId: "", type: "shopping.remove", evidence: s.raw, target: { name: s.name } }));
+          reply = `Done: took ${names(intent.targets)} off your list.`;
+          break;
+        case "clearList": {
+          // Every open entry, by ID. More than 5 makes the turn ask first (0045 KOS16).
+          const open = req.state.shoppingList ?? [];
+          if (open.length === 0) return { kind: "answer", proposal: null, reply: "Your list is already empty." };
+          const evidence = req.message.text.trim();
+          operations = open.map((e) => ({ opId: "", type: "shopping.remove", evidence, target: { shoppingItemId: e.id } }));
+          reply = "Done: your list is clear.";
+          break;
+        }
+        case "throwOut":
+          operations = intent.targets.map((s) => ({ opId: "", type: "item.remove", evidence: s.raw, target: { name: s.name } }));
+          reply = `Done: removed ${names(intent.targets)}.`;
           break;
         case "undo": {
           // Your own latest change that isn't undone and isn't itself an Undo (H3, 0017).

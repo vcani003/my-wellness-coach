@@ -25,6 +25,20 @@ export const StaplesAnswer = z.object({
 });
 export type StaplesAnswer = z.infer<typeof StaplesAnswer>;
 
+/**
+ * "That would remove 7 things: … Remove them all?" (0045 KOS16). One chat message that would
+ * remove, use up or mark Out **more than 5** things (kitchen items, list entries, staples) is held,
+ * not saved. `names` is every thing it would remove, as shown to the user. Under the reply the UI
+ * shows **Yes, remove them** / **No, keep them**, which send those words as a chat message. The
+ * held change is server-side only (never sent to the client); a yes applies exactly it.
+ */
+export const BulkConfirm = z.object({
+  kind: z.literal("bulk-remove"),
+  count: z.number().int().positive(),
+  names: z.array(z.string()),
+});
+export type BulkConfirm = z.infer<typeof BulkConfirm>;
+
 export const StreamPhase = z.enum(["interpreting", "saving", "writing", "ideas", "recipe"]);
 
 export const MealIdea = z.object({
@@ -82,6 +96,8 @@ export const StreamEvent = z.discriminatedUnion("type", [
   }),
   /** A staples answer from the saved staples (0054 SS6), after its `text`. Only when some are needed. */
   z.object({ type: z.literal("staples"), ...StaplesAnswer.shape }),
+  /** A held bulk removal (0045 KOS16), after its `text`; nothing was saved. */
+  z.object({ type: z.literal("confirm"), ...BulkConfirm.shape }),
   /** Open "Update your kitchen" for a meal just marked done (0013). */
   z.object({ type: z.literal("update-kitchen"), ...UpdateKitchenPrompt.shape }),
   z.object({ type: z.literal("done"), turnId: Id, assistantMessageId: Id }),

@@ -7,6 +7,7 @@
  */
 import { afterAll, describe, expect, it } from "vitest";
 import { STAPLE_CASES, stapleCaseRequest } from "./staples-cases";
+import { BULK_REMOVE_CASES, bulkCaseRequest, checkBulkCase } from "./bulk-remove-cases";
 import type { Operation, OperationOf, OperationType } from "@/contracts/operations";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult } from "../interpreter";
@@ -665,6 +666,16 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("interpreter eval (real model)",
       const result = await interpreter.interpret(stapleCaseRequest(c));
       console.info(`[${c.name}] ${result.kind}: ${result.reply}`);
       c.check(result, opsOf(result));
+    });
+  }
+
+  // Ask before removing more than 5 (0045 KOS16): the same cases the fake passes in tests/unit/bulk-remove.test.ts.
+  for (const c of BULK_REMOVE_CASES) {
+    it(c.name, async () => {
+      const req = bulkCaseRequest(c);
+      const result = await interpreter.interpret(req);
+      console.info(`[${c.name}] ${result.kind}: ${result.reply}`);
+      checkBulkCase(c, req, result);
     });
   }
 

@@ -12,17 +12,38 @@
  * Chat is saved (P2 a): the user's message on arrival, the reply and its receipt at `done`. The
  * interpreter's recent turns come from those saved messages, never from the client. Saving and
  * loading are best-effort: a failure is logged and the turn carries on (0018).
+ *
+ * More than 5 removals in one message (0045 KOS16, `./bulk-remove.ts`) are held, not applied: the
+ * reply asks "Remove them all?" and keeps the change with it. A plain yes as the next message
+ * applies exactly that change (one change set, one Undo), a plain no changes nothing, and both skip
+ * the interpreter (no model call). Anything else is read as a new message.
  */
 import { randomUUID } from "node:crypto";
 import type { Db } from "@/db/client";
 import type { ApplyResult } from "@/contracts/apply-result";
 import type { StreamEvent } from "@/contracts/stream";
 import { saveAssistantMessage, saveUserMessage } from "@/domains/chat/commands";
-import { getRecentTurns } from "@/domains/chat/queries";
+import { getPendingConfirm, getRecentTurns } from "@/domains/chat/queries";
 import { applyProposedChange, chooseMealTap } from "@/domains/kitchen/commands";
-import { getKitchenState, getLatestIdeaSet, getMealProfileContext, getRecipe } from "@/domains/kitchen/queries";
+import {
+  getKitchenState,
+  getKitchenVersion,
+  getLatestIdeaSet,
+  getMealProfileContext,
+  getRecipe,
+  wasApplied,
+} from "@/domains/kitchen/queries";
 import type { KitchenScope } from "@/shared/membership";
 import { msg } from "@/shared/messages";
+import {
+  KEPT_REPLY,
+  STALE_REPLY,
+  bulkConfirmFor,
+  readConfirmAnswer,
+  readPending,
+  toPending,
+  type PendingBulkRemove,
+} from "./bulk-remove";
 import { foldMealSteps, recipeParts, recipeStep, runFollowUps, withoutRecipeAnnouncement } from "./follow-ups";
 import type { InterpretRequest, Interpreter } from "./interpreter";
 import { notConfiguredMealAI, type MealAI } from "./meals";
@@ -50,15 +71,26 @@ export interface ChatTurnDeps {
 export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput): AsyncGenerator<StreamEvent> {
   const { db, scope, interpreter } = deps;
   const turnId = randomUUID();
-  let appliedSent = false;
+  const progress = { applied: false };
   try {
     const history = await bestEffort("load recent turns", [], () =>
       getRecentTurns(db, scope, { excludeClientMessageId: input.clientMessageId }),
     );
+    // KOS16: was your last reply "Remove them all?" (a retry leaves itself out, so it still finds it).
+    const held = await bestEffort("load held change", null, async () => {
+      const found = await getPendingConfirm(db, scope, { excludeClientMessageId: input.clientMessageId });
+      return found ? readPending(found.pending) : null;
+    });
     await bestEffort("save user message", undefined, () =>
       saveUserMessage(db, scope, { clientMessageId: input.clientMessageId, text: input.text }),
     );
     yield { type: "ack", turnId, messageId: input.clientMessageId };
+
+    const answer = held ? readConfirmAnswer(input.text) : null;
+    if (held && answer) {
+      yield* answerHeld(deps, input, { turnId, held, answer, history, progress });
+      return;
+    }
     yield { type: "status", phase: "interpreting" };
 
     const state = await getKitchenState(db, scope);
@@ -86,6 +118,33 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
     const folded = foldMealSteps(interpretation.proposal?.operations ?? [], interpretation.followUps ?? [], input.text);
     const proposal = interpretation.proposal ? { ...interpretation.proposal, operations: folded.operations } : null;
 
+    // KOS16: more than 5 removals are held and asked about, never applied here.
+    const bulk = proposal && proposal.operations.length > 0 ? bulkConfirmFor(proposal.operations, state) : null;
+    if (proposal && bulk) {
+      const { reply: question, ...confirm } = bulk;
+      const newId = randomUUID();
+      // Not best-effort: without the held change a yes couldn't apply it, so a failed save is an
+      // error that says nothing changed (the outer catch), and Try again asks again.
+      const assistantMessageId = await saveAssistantMessage(db, scope, {
+        id: newId,
+        clientMessageId: input.clientMessageId,
+        text: question,
+        result: null,
+        pendingConfirm: toPending(confirm, {
+          version: state.version,
+          sourceMessageId: input.clientMessageId,
+          messageText: input.text,
+          operations: proposal.operations,
+          followUps: folded.followUps,
+        }),
+      });
+      yield { type: "status", phase: "writing" };
+      yield { type: "text", delta: question };
+      yield { type: "confirm", ...confirm };
+      yield { type: "done", turnId, assistantMessageId };
+      return;
+    }
+
     let result: ApplyResult | null = null;
     if (proposal && proposal.operations.length > 0) {
       yield { type: "status", phase: "saving" };
@@ -107,7 +166,7 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
       }
       result = outcome.result;
       yield { type: "applied", result };
-      appliedSent = true;
+      progress.applied = true;
     }
 
     if (proposal?.clarification) yield { type: "clarification", ...proposal.clarification };
@@ -150,8 +209,90 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
     yield { type: "done", turnId, assistantMessageId };
   } catch (error) {
     console.error("chat.turn: failed", { turnId, error });
-    yield { type: "error", reason: msg("SAVE_FAILED"), changed: appliedSent, retryable: true };
+    yield { type: "error", reason: msg("SAVE_FAILED"), changed: progress.applied, retryable: true };
   }
+}
+
+/**
+ * The answer to "Remove them all?" (0045 KOS16). No model call either way.
+ * - no: nothing changes.
+ * - yes: exactly the held change, as one change set (one receipt, one Undo, 0007), then its
+ *   follow-ups. If the kitchen changed since Lumi asked (anyone, any change), nothing is removed
+ *   and she says so, so a yes never removes something added or changed in the meantime. A retried
+ *   yes that already applied gets the same result back (this message is the idempotency key).
+ */
+async function* answerHeld(
+  deps: ChatTurnDeps,
+  input: ChatTurnInput,
+  ctx: {
+    turnId: string;
+    held: PendingBulkRemove;
+    answer: "yes" | "no";
+    history: InterpretRequest["history"];
+    progress: { applied: boolean };
+  },
+): AsyncGenerator<StreamEvent> {
+  const { db, scope } = deps;
+  const { held } = ctx;
+  let result: ApplyResult | null = null;
+  let reply = KEPT_REPLY;
+  if (ctx.answer === "yes") {
+    const version = await getKitchenVersion(db, scope);
+    const fresh = version === held.version || (await wasApplied(db, scope, input.clientMessageId));
+    reply = STALE_REPLY;
+    if (fresh) {
+      yield { type: "status", phase: "saving" };
+      const outcome = await applyProposedChange(
+        db,
+        scope,
+        {
+          proposalId: input.clientMessageId,
+          kitchenId: scope.kitchenId,
+          // The version Lumi asked at: a change racing this yes is refused (STALE_TARGET), never applied blind.
+          basedOnVersion: held.version,
+          source: { via: "chat", messageId: held.sourceMessageId },
+          operations: held.operations,
+        },
+        { messageText: held.messageText },
+      );
+      if (!outcome.ok) {
+        yield { type: "error", reason: outcome.error.reason, changed: false, retryable: outcome.error.retryable };
+        return;
+      }
+      result = outcome.result;
+      yield { type: "applied", result };
+      ctx.progress.applied = true;
+      reply = replyFromReceipt(result);
+    }
+  }
+  yield { type: "status", phase: "writing" };
+  yield { type: "text", delta: reply };
+
+  const newId = randomUUID();
+  let fullReply = reply;
+  if (result && held.followUps.length > 0) {
+    const lines = yield* runFollowUps(
+      { db, scope, meals: deps.meals ?? notConfiguredMealAI },
+      {
+        id: input.clientMessageId,
+        source: { via: "chat", messageId: held.sourceMessageId },
+        text: held.messageText,
+        history: [...ctx.history, { role: "user", text: input.text }],
+        assistantMessageId: newId,
+      },
+      held.followUps,
+      result,
+    );
+    for (const line of lines) {
+      const delta = `\n\n${line}`;
+      fullReply += delta;
+      yield { type: "text", delta };
+    }
+  }
+  const assistantMessageId = await bestEffort("save reply", newId, () =>
+    saveAssistantMessage(db, scope, { id: newId, clientMessageId: input.clientMessageId, text: fullReply, result }),
+  );
+  yield { type: "done", turnId: ctx.turnId, assistantMessageId };
 }
 
 /** Run a chat-history step; on failure log it and use the fallback, so the turn goes on (0018). */
