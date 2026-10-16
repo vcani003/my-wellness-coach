@@ -9,3 +9,8 @@
 - **SS5. A staple remembers its usual store** only when said or picked. Otherwise it's Anywhere, or grouped by aisle after KOS9. No amounts are stored.
 - **SS6. "What staples do I need?"** is answered from the saved staples (computed by code), with an Add button. Lumi's general guess is used only when there are no saved staples yet, and it still leaves out members' allergens.
 - **SS7. Built right after KOS4** ([0053](0053-kitchen-os-build-order.md)).
+- **SS8. "Offered once"** means the old "Staples:" line is offered until you tap Add them or Not now. After that it's never shown again, even after an Undo of Add them.
+- **SS9. The "Add these to my list" button under a staples answer** isn't kept when the chat reloads, but typing "yes" still works. Saving it with chat history would be a later follow-up.
+- **SS10. Out/Low in chat offers once.** When the receipt shows the "Add X to my list" button, Lumi no longer asks the same thing in her reply. This is a prompt change that ships with the staples UI.
+
+SS8–SS10: Vero, "go with recs", 2026-10-16.
