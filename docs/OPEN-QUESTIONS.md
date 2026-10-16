@@ -28,6 +28,44 @@ None of the KOS features has its backend yet. Already done or not needed: KOS10 
 
 > Answer:
 
+### Smart staples (P3 #1, [plan](plans/smart-staples.md))
+Kitchen remembers your usual staples, offers to add them to the list when they run low or out, and a **Restock** button builds the list. Today staples exist only as one line of free text in your personal preferences, so the app can't act on them.
+
+### SS1. 🟡 Whose staples are they?
+**Rec:** **one list for the whole kitchen**, shared like the shopping list, so you and Levi see and edit the same staples. *Alternative:* each person keeps their own.
+
+> Answer:
+
+### SS2. 🟡 How does Kitchen learn your staples?
+**Rec:** **only from you.** That means saying it ("fish sauce is a staple"), saying yes when Lumi offers "Want me to remember these as your staples?", or adding one by tap. The staples you already told Lumi are offered back once, and move over only if you tap **Add them**. Kitchen never guesses from what you buy (0012). *Alternative:* after something is bought 3 times, Lumi asks once whether it's a staple.
+
+> Answer:
+
+### SS3. 🟡 What does Restock pick for you?
+**Rec:** it **pre-selects** staples that are Out, Running low or not in the kitchen. Ones you have Some or Plenty of are shown but not selected, so you can add extras. Ones already on the list are shown muted and skipped. *Alternative:* also pre-select "Some".
+
+> Answer:
+
+### SS4. ⚪ When a staple runs low or out, offer or add automatically?
+**Rec:** **offer, as SL3 already says.** The receipt shows a one-tap **Add fish sauce to my list** button (designed earlier, but never built in the Kitchen OS look). It shows for every Out/Low item, not just staples. *Alternative:* staples go straight onto the list, with Undo.
+
+> Answer:
+
+### SS5. ⚪ Should a staple remember its usual store?
+**Rec:** **yes, but only when you say it or pick it** ("fish sauce from MD Oriental"). Restock then puts it under that store, and anything without a store goes under Anywhere (or by aisle after KOS9). No usual amounts. *Alternative:* no stores, so everything goes under Anywhere.
+
+> Answer:
+
+### SS6. ⚪ "What staples do I need?" once you have saved staples
+**Rec:** Lumi **answers from your saved staples** (the ones Out, Low or missing, worked out by code) with an **Add these to my list** button. Her general pantry guess is used only while you have no staples yet. *Alternative:* your staples plus a few of her own suggestions.
+
+> Answer:
+
+### SS7. ⚪ Where does Smart staples go in the build order (P4)?
+**Rec:** **right after KOS4** (stock levels), before KOS16. You ranked it first in P3, it uses KOS4's levels directly, and it speeds up the grocery trip. It doesn't need any other KOS feature first. The item "Staple" switch comes with KOS3. Size: about M (backend S–M, AI S, screens M).
+
+> Answer:
+
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
 
