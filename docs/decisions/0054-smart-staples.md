@@ -14,3 +14,9 @@
 - **SS10. Out/Low in chat offers once.** When the receipt shows the "Add X to my list" button, Lumi no longer asks the same thing in her reply. This is a prompt change that ships with the staples UI.
 
 SS8–SS10: Vero, "go with recs", 2026-10-16.
+- **SS11. The "You told me these before" offer** shows at the top of the Restock sheet whenever there are names to offer, not only when the list is empty. It still shows only until Add them or Not now.
+- **SS12. With no staples yet,** the sheet opens on the Edit view ("Edit staples"), with the empty message and the Add field.
+- **SS13. The Restock receipt groups by store** ("On your list, Anywhere: eggs, jasmine rice"), matching the list itself.
+- **SS14. Out/Low from the after-cooking sheet gets its "Add X to my list" button** when KOS13 restyles the cook steps and adds a receipt there.
+
+SS11–SS14: Vero, "go with recs", 2026-10-16.
