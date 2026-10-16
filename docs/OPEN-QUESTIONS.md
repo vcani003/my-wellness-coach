@@ -121,3 +121,4 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | IR5–IR6 | Undo for a recipe changed in chat; mixed messages | [0052](decisions/0052-undo-for-recipe-changed-in-chat.md): add the Undo box, button only; mixed messages keep one receipt (Rec) |
 | P4 | Kitchen OS build order | [0053](decisions/0053-kitchen-os-build-order.md): Rec |
 | SS1–SS7 | Smart staples | [0054](decisions/0054-smart-staples.md): all Recs |
+| KOS4-a–c | Stock level details | [0055](decisions/0055-stock-level-details.md): all Recs |
