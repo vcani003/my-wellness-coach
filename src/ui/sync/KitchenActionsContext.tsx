@@ -25,8 +25,20 @@ export interface KitchenActions {
   keepOlderBatch(itemId: string, batchIds: string[]): Promise<ActionResult>;
   /** Plenty · Some · Low · Out (KOS4). Without `batchId` it sets the whole item. One change set with Undo. */
   setStockLevel(itemId: string, level: StockLevel, batchId?: string): Promise<ActionResult>;
-  /** One-tap adds to the shopping list, e.g. the Low/Out offer "Add rice to my list" (SL3). */
-  addToList(source: ShoppingSource, items: { name: string }[]): Promise<ActionResult>;
+  /** One-tap adds to the shopping list, e.g. the Low/Out offer "Add rice to my list" (SL3), under the staple's store. */
+  addToList(source: ShoppingSource, items: { name: string; store?: string }[]): Promise<ActionResult>;
+  /** Smart staples (0054): add one or more, with an optional usual store (SS5). */
+  addStaples(items: { name: string; store?: string }[]): Promise<ActionResult>;
+  /** Store… on a staple: a store name, or null for "Anywhere". */
+  updateStaple(stapleId: string, store: string | null): Promise<ActionResult>;
+  /** Remove a staple: no confirmation, it has Undo. */
+  removeStaple(stapleId: string): Promise<ActionResult>;
+  /** Restock, and "Add these to my list" under a staples answer: one change set, one Undo. */
+  restockStaples(stapleIds: string[]): Promise<ActionResult>;
+  /** The one-time "You told me these before" offer (SS2, SS8); null = nothing to offer. */
+  loadStaplesOffer(): Promise<{ names: string[] } | null>;
+  /** "Add them" (true) or "Not now" (false). Either way it's never offered again (SS8). */
+  answerStaplesOffer(accept: boolean): Promise<ActionResult>;
   /** Show a saved button change now; `highlight` marks its rows New / Updated. */
   showOwn(result: ApplyResult, opts?: { highlight?: boolean }): void;
   /** Remember that you used this widget, so a phone reopens with it on top (ux.md §10). */

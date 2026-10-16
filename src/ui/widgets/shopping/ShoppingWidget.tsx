@@ -21,6 +21,7 @@ import { useKitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { useKitchenData, type ChangeMark } from "@/ui/sync/KitchenDataContext";
 import type { PlaceProps } from "@/ui/places/types";
 import { DoneShoppingSheet } from "./DoneShoppingSheet";
+import { RestockStaples } from "./RestockStaples";
 import { ANYWHERE, groupShopping, shownTicked, withGhosts } from "./model";
 import type { PendingTick } from "./tick-queue";
 import { useAddFromList } from "./useAddFromList";
@@ -28,7 +29,7 @@ import { useTickQueue } from "./useTickQueue";
 
 export const SHOPPING_WIDGET_ID = "shopping.list";
 
-/** The List place: "6 · 2 got", then the list. */
+/** The List place: "6 · 2 got", Restock staples (0054), then the list. */
 export function ListPlace({ onRetry }: PlaceProps) {
   const { snapshot } = useKitchenData();
   return (
@@ -38,6 +39,7 @@ export function ListPlace({ onRetry }: PlaceProps) {
           <ShoppingSummary />
         </p>
       )}
+      <RestockStaples onRetry={onRetry} />
       <ShoppingWidget onRetry={onRetry} />
     </>
   );

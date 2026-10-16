@@ -55,7 +55,7 @@ export function KitchenWidget({ onRetry }: PlaceProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   // Item buttons need a connection until KOS7 (0044): the same test as the header's Offline pill.
   const online = useOnline();
-  const [levels, noteRef] = useStockLevelControl(state, !online || status === "stale" || status === "error");
+  const [levels, noteRef] = useStockLevelControl(!online || status === "stale" || status === "error");
 
   // An item set to Out has left the kitchen; it stays here, faded, while its receipt shows.
   const ghost = state ? ghostOf(levels.note, state) : null;
@@ -386,7 +386,7 @@ export function ItemRowView({
   const tile = <FoodTile place={item.location?.value ?? "unknown"} />;
   // ⋯ "More for rice" with How much is left? (KOS4); KOS3's tap-to-edit will take it over.
   const menu = gone ? null : <LevelMenu item={item} name={name} />;
-  const note = <LevelNoteView itemId={item.id} name={name} />;
+  const note = <LevelNoteView itemId={item.id} />;
   if (!several) {
     return (
       <li data-entity-id={item.id} data-change={gone ? "gone" : (mark ?? (remote ? "remote" : undefined))} className={rowClass}>

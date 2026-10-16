@@ -54,10 +54,7 @@
       "out": "Out",
       "more": "More for {name}",
       "menuTitle": "How much is left?",
-      "failed": "I couldn't save that, so nothing changed. Try again.",
-      "addToList": "Add {name} to my list",
-      "onList": "{name} is on your list.",
-      "addFailed": "I couldn't add that to your list. Try again."
+      "failed": "I couldn't save that, so nothing changed. Try again."
     },
     "opened": "Opened",
     "frozen": "Frozen",
@@ -224,6 +221,15 @@
       "goneLabel": "Those are gone: {which}",
       "saving": "Saving…",
       "failed": "I couldn't save that, so nothing changed. Try again."
+    },
+    "list": {
+      "addLabel": "Add {name} to my list",
+      "addShort": "Add to my list",
+      "staple": "{name} is one of your staples ·",
+      "adding": "Adding…",
+      "onList": "{name} is on your list.",
+      "failed": "I couldn't add that to your list. Try again.",
+      "announce": "You can add {name} to your list from What changed."
     }
   },
   "fallback": {
@@ -293,7 +299,7 @@
     "STAPLE_STORE_CLEARED": "{name}: from anywhere",
     "STAPLE_REMOVED": "{name} isn't a staple any more",
     "STAPLE_NOT_FOUND": "{name} isn't one of your staples",
-    "NOT_ON_LIST":"{name} isn't on the shopping list any more",
+    "NOT_ON_LIST": "{name} isn't on the shopping list any more",
     "NOT_TICKED": "{name} isn't ticked yet",
     "MEAL_CHOSEN": "Chose {title}",
     "MEAL_PLANNED": "Added {title} to the meal plan",
@@ -450,6 +456,67 @@
       "adding": "Adding…",
       "doLater": "Do later",
       "skip": "Skip"
+    }
+  },
+  "staples": {
+    "restock": "Restock staples",
+    "offline": "Back online to restock",
+    "title": "Restock staples",
+    "description": "Pick what to add to your list",
+    "close": "Close",
+    "need": "Need",
+    "have": "You have some",
+    "onList": "On your list",
+    "status": {
+      "out": "Out",
+      "low": "Running low",
+      "missing": "Not in yet",
+      "some": "Some left",
+      "plenty": "Plenty",
+      "have": "In your kitchen",
+      "onList": "On your list"
+    },
+    "checkLabel": "{name}, {status}, add to list",
+    "allStocked": "All your staples are stocked.",
+    "add": "{count, plural, =0 {Add to my list} other {Add # to my list}}",
+    "adding": "Adding…",
+    "addFailed": "Couldn't add those, so nothing changed.",
+    "tryAgain": "Try again",
+    "edit": "Edit staples",
+    "editTitle": "Edit staples",
+    "editDescription": "Your kitchen's usual things, shared by everyone in it.",
+    "backToRestock": "Back to restock",
+    "listLabel": "Your staples",
+    "empty": "No staples yet. Tell me “fish sauce is a staple”, or add one here.",
+    "loading": "Loading your staples…",
+    "error": "Couldn't load your staples.",
+    "retry": "Retry",
+    "anywhere": "Anywhere",
+    "addedBy": "added by",
+    "more": "More for {name}",
+    "store": "Store…",
+    "remove": "Remove",
+    "storeLabel": "Usual store for {name}",
+    "storePlaceholder": "e.g. MD Oriental",
+    "storeSave": "Save",
+    "storeClear": "Anywhere",
+    "storeCancel": "Cancel",
+    "addLabel": "Add a staple",
+    "addPlaceholder": "e.g. fish sauce",
+    "addButton": "Add",
+    "editFailed": "I couldn't save that, so nothing changed. Try again.",
+    "offer": {
+      "text": "You told me these before: {names}.",
+      "accept": "Add them",
+      "adding": "Adding…",
+      "dismiss": "Not now",
+      "failed": "I couldn't save that, so nothing changed. Try again."
+    },
+    "answer": {
+      "add": "Add these to my list",
+      "addLabel": "Add these to my list: {names}",
+      "adding": "Adding…",
+      "failed": "Couldn't add those, so nothing changed. Try again."
     }
   },
   "meals": {

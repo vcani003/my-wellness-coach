@@ -12,6 +12,7 @@ import { CheckIcon, UndoIcon } from "@/ui/primitives/icons";
 import { BatchOffers, offersOf, type OnUndoStep, type UndoStep } from "./BatchOffers";
 import type { Receipt as ReceiptModel } from "./chat-reducer";
 import { useFormatMsg } from "./format-msg";
+import { ListOffers, listOffersOf } from "./ListOffers";
 import { receiptLines, SHOPPING_GROUP } from "./receipt-lines";
 
 export function Receipt({
@@ -24,7 +25,7 @@ export function Receipt({
   onUndo?: (changeSetId: string) => void;
   /** Phone only: show the change in the workspace. */
   onView?: () => void;
-  /** A one-tap offer under the lines (e.g. "Add rice to my list", SL3); hidden once undone. */
+  /** Extra content under the lines; hidden once undone. */
   children?: ReactNode;
 }) {
   const t = useTranslations("receipt");
@@ -37,6 +38,7 @@ export function Receipt({
   const savedSomething = receipt.applied.some((a) => a.refs.length > 0);
   const plainChanges = lines.map((l) => formatMsg(l.summary, "plain")).join(", ");
   const offers = offersOf(receipt.applied);
+  const listOffers = listOffersOf(receipt.applied);
   const canUndo = Boolean(onUndo) && receipt.undoable && savedSomething && !undone && receipt.undo !== "refused";
 
   // Answers on this receipt that can be undone, oldest first; the newest is what Undo steps back.
@@ -109,6 +111,8 @@ export function Receipt({
 
       {/* "You also had eggs from Oct 2: Still have them · Those are gone" (0025); gone once the purchase is undone. */}
       {offers.length > 0 && !undone && <BatchOffers offers={offers} answers={receipt.batchAnswers} onUndoStep={onUndoStep} />}
+      {/* "Add fish sauce to my list" on every Out / Running low receipt (SL3, 0054 SS4). */}
+      {listOffers.length > 0 && !undone && <ListOffers offers={listOffers} />}
       {!undone && children}
 
       {(showUndo || undone || receipt.undo === "refused" || onView) && (

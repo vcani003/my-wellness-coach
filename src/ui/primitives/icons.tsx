@@ -34,4 +34,6 @@ export { Question as UnknownPlaceIcon } from "@phosphor-icons/react/dist/csr/Que
 export { Sparkle as SparkleIcon } from "@phosphor-icons/react/dist/csr/Sparkle";
 export { Repeat as MakeAgainIcon } from "@phosphor-icons/react/dist/csr/Repeat";
 export { ArrowRight as GoIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
+export { Basket as RestockIcon } from "@phosphor-icons/react/dist/csr/Basket";
+export { Plus as AddIcon } from "@phosphor-icons/react/dist/csr/Plus";
 export type { Icon as IconComponent } from "@phosphor-icons/react";

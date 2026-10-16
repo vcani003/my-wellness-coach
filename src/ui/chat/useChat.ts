@@ -124,6 +124,9 @@ export function useChat(opts: {
               reply += event.delta;
               dispatch({ type: "text", id, delta: event.delta });
               break;
+            case "staples":
+              dispatch({ type: "staples", id, items: event.items });
+              break;
             case "done":
               ended = true;
               dispatch({ type: "done", id });

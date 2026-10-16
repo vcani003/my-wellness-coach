@@ -53,7 +53,15 @@ function levelResult(state: KitchenState, level: StockLevel, id = "rice"): Apply
     changeSetId: `cs-${level}`,
     newVersion: next.version,
     undoable: true,
-    applied: [{ opId: "op", summary: { code: CODE[level], params: { name: id }, text: "" }, refs: [{ kind: "item", id, change: level === "out" ? "removed" : "updated" }] }],
+    applied: [
+      {
+        opId: "op",
+        summary: { code: CODE[level], params: { name: id }, text: "" },
+        refs: [{ kind: "item", id, change: level === "out" ? "removed" : "updated" }],
+        // Low and Out carry the "Add X to my list" offer as data (SL3, 0054 SS4).
+        ...(level === "low" || level === "out" ? { listOffers: [{ itemId: id, name: id, standardName: id, level }] } : {}),
+      },
+    ],
     rejected: [],
     state: next,
   };
@@ -157,7 +165,7 @@ describe("Setting a level from the row's ⋯ menu", () => {
 
     await userEvent.click(within(receipt).getByRole("button", { name: "Add rice to my list" }));
     expect(addToList).toHaveBeenCalledWith("stock-offer", [{ name: "rice" }]);
-    expect(await within(receipt).findByText("Rice is on your list.")).toBeInTheDocument();
+    expect(await within(receipt).findByText("Rice is on your list.")).toHaveFocus();
     expect(within(receipt).queryByRole("button", { name: "Add rice to my list" })).not.toBeInTheDocument();
   });
 

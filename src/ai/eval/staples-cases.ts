@@ -141,7 +141,7 @@ export const STAPLE_CASES: StapleCase[] = [
     },
   },
   {
-    name: "staples: running low only offers, never adds (SS4)",
+    name: "staples: running low only offers, never adds (SS4); the receipt button asks, not the reply (SS10)",
     text: "fish sauce is running low",
     items: [{ name: "fish sauce", location: "pantry" }],
     staples: [{ name: "fish sauce", store: "MD Oriental", need: "have" }],
@@ -149,6 +149,7 @@ export const STAPLE_CASES: StapleCase[] = [
       expect(only(ops, "item.use").length + only(ops, "item.stock.set").length).toBeGreaterThan(0);
       expect(only(ops, "shopping.add")).toHaveLength(0);
       expect(only(ops, "staple.add")).toHaveLength(0);
+      expect(r.reply).not.toMatch(/add\b[^.?!]*\bto (your|the) (shopping )?list\?/i);
     },
   },
 ];

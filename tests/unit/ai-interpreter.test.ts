@@ -717,8 +717,8 @@ describe("shopping list (0027)", () => {
     await b.interpreter.interpret(request("hi", VERO_PANTRY, [], VERO_LIST));
     const sys = (c: typeof a) => (c.calls[0].body.system as Anthropic.Beta.Messages.BetaTextBlockParam[])[0].text;
     expect(sys(a)).toBe(sys(b));
-    expect(PROMPT_VERSION).toBe("interpret-2026-10-16.2");
-    expect(a.logs[0]).toMatchObject({ promptVersion: "interpret-2026-10-16.2" });
+    expect(PROMPT_VERSION).toBe("interpret-2026-10-16.3");
+    expect(a.logs[0]).toMatchObject({ promptVersion: "interpret-2026-10-16.3" });
   });
 
   it("files 'MD Oriental Market' under 'MD Oriental' and keeps other stores as said", () => {

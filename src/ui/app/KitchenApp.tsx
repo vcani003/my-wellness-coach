@@ -18,19 +18,26 @@ import { usePathname, useRouter } from "next/navigation";
 import { useLocale, useNow, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  acceptStaplesOffer,
+  addStaples,
   addToShoppingList,
+  dismissStaplesOffer,
   finishShopping,
+  loadStaplesOffer,
   makeAgain,
   queueShoppingForLater,
   removeShoppingListItem,
+  removeStaple,
   resolveToReview,
+  restockStaples,
   setItemStockLevel,
   tickShoppingListItem,
   undoChange,
   untickShoppingListItem,
+  updateStaple,
 } from "@/app/actions";
 import { closeBatch, keepOlderBatch } from "@/app/batches/actions";
-import type { ChangeRef } from "@/contracts/apply-result";
+import { isListOfferOpen, type ChangeRef } from "@/contracts/apply-result";
 import type { ChatHistoryPage } from "@/contracts/chat-history";
 import type { KitchenState } from "@/contracts/kitchen-state";
 import { AnnouncerProvider, useAnnounce } from "@/ui/a11y/Announcer";
@@ -39,6 +46,7 @@ import { AskLumiProvider } from "@/ui/chat/AskLumi";
 import { Composer, type ComposerHandle } from "@/ui/chat/Composer";
 import { offersOf, openOlder, useBatchOfferWords } from "@/ui/chat/BatchOffers";
 import { useFormatMsg } from "@/ui/chat/format-msg";
+import { listOffersOf } from "@/ui/chat/ListOffers";
 import { LumiFace, MessageList } from "@/ui/chat/MessageList";
 import { useChat } from "@/ui/chat/useChat";
 import { cueTarget, parseLastPlace, placeForHost, placeForPath, resumePlace } from "@/ui/places/model";
@@ -252,6 +260,10 @@ function KitchenScreen({
             const older = openOlder(offer, result.state);
             if (older.length) parts.push(batchWords(offer, older).question);
           }
+          // So is "Add fish sauce to my list" (SL3, 0054 SS10: Lumi no longer asks it in words).
+          for (const offer of listOffersOf(result.applied)) {
+            if (isListOfferOpen(offer, result.state)) parts.push(t("receipt.list.announce", { name: offer.name }));
+          }
         }
         announce(parts.filter(Boolean).join(" "));
         if (dockNow.current === "minimized") setNewReply(true);
@@ -329,6 +341,15 @@ function KitchenScreen({
       keepOlderBatch: (itemId, batchIds) => keepOlderBatch({ ...tap(), itemId, batchIds }),
       setStockLevel: (itemId, level, batchId) => setItemStockLevel({ ...tap(), itemId, level, ...(batchId ? { batchId } : {}) }),
       addToList: (source, items) => addToShoppingList({ ...tap(), source, items }),
+      addStaples: (items) => addStaples({ ...tap(), items }),
+      updateStaple: (stapleId, store) => updateStaple({ ...tap(), stapleId, store }),
+      removeStaple: (stapleId) => removeStaple({ ...tap(), stapleId }),
+      restockStaples: (stapleIds) => restockStaples({ ...tap(), stapleIds }),
+      loadStaplesOffer: () => loadStaplesOffer({ kitchenId }),
+      answerStaplesOffer: (accept) => {
+        const { kitchenId: k, basedOnVersion } = tap();
+        return (accept ? acceptStaplesOffer : dismissStaplesOffer)({ kitchenId: k, basedOnVersion });
+      },
       showOwn(result, opts) {
         sync.applyOwn(result.state);
         if (opts?.highlight) setMarks(marksFrom(result));

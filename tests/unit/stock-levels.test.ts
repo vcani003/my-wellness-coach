@@ -308,7 +308,10 @@ describe("the interpreter maps level phrases (real, mocked model)", () => {
     expect(text).toMatch(/i2: rice · pantry · Plenty/);
     expect(text).toMatch(/i1: eggs · fridge · Some/);
     expect(SYSTEM_PROMPT).toMatch(/- level — how much is left/);
-    expect(SYSTEM_PROMPT).toMatch(/Never offer after plenty or some/);
+    // SS10 (0054): the receipt button offers the list, so the reply never asks, and Plenty / Some never need it.
+    expect(SYSTEM_PROMPT).toMatch(/don't offer it in your reply either/);
+    expect(SYSTEM_PROMPT).toMatch(/Plenty or some never need it/);
+    expect(SYSTEM_PROMPT).not.toMatch(/your reply may offer: "Want me to add fish sauce/);
   });
 });
 

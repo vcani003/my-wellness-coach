@@ -21,6 +21,7 @@ import { LumiHalo, type LumiState } from "@/ui/lumi/Lumi";
 import type { AssistantMessage, ChatState, UserMessage } from "./chat-reducer";
 import { useFormatMsg } from "./format-msg";
 import { Receipt } from "./Receipt";
+import { StaplesAnswerAdd } from "./StaplesAnswerAdd";
 
 export function MessageList({
   chat,
@@ -207,6 +208,7 @@ function AssistantBubble({
           {message.text}
         </p>
       )}
+      {message.staples && message.status !== "error" && <StaplesAnswerAdd items={message.staples} />}
       {message.receipt && (
         <div className="w-full">
           <Receipt receipt={message.receipt} onUndo={onUndo} onView={onView} />

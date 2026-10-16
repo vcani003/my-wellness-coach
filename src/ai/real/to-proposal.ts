@@ -342,7 +342,7 @@ function offeredToAddToList(req: InterpretRequest): string | undefined {
  * - an add whose name the user didn't say needs Kitchen's offer of that item in its last turn,
  *   and is tagged with the offer's source;
  * - an add for something the same message marks Out/Low is dropped unless the user asked for the
- *   list (the reply may offer it instead).
+ *   list (the receipt's "Add X to my list" button offers it instead, 0054 SS10).
  */
 function guardShopping(ops: Operation[], out: ModelOutput, req: InterpretRequest): Operation[] {
   const text = req.message.text;

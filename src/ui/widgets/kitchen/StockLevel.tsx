@@ -10,7 +10,7 @@
  * - **Result:** the normal "What changed" receipt with one Undo, in place under the row, and focus
  *   moves to it. Out removes the item from the kitchen, so its row stays as an "Out" ghost (like
  *   the List's "removed · Undo") until your next message. Low and Out offer "Add rice to my list"
- *   (SL3, `offersListAdd`): never added unless tapped, and hidden if it's already on the list.
+ *   (SL3): the receipt draws it from `listOffers` (`ui/chat/ListOffers`), the same as in chat.
  * - **Offline:** item buttons need a connection until KOS7 (0044), so ⋯ is off while offline; the
  *   header's Offline pill and the place's "Offline · showing your kitchen as of…" line say why.
  * - Lasts until your next message and survives moving between places (PlaceMemory). Never
@@ -18,7 +18,7 @@
  */
 import { useTranslations } from "next-intl";
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import { offersListAdd, type StockLevel } from "@/contracts/common";
+import type { StockLevel } from "@/contracts/common";
 import type { ItemRow, KitchenState } from "@/contracts/kitchen-state";
 import { useAnnounce } from "@/ui/a11y/Announcer";
 import { toReceipt, type Receipt as ReceiptModel } from "@/ui/chat/chat-reducer";
@@ -71,8 +71,6 @@ export interface LevelNote {
   turn: number;
   /** The receipt; absent when the save failed. */
   receipt?: ReceiptModel;
-  /** The "Add rice to my list" offer (SL3). */
-  list?: "pending" | "added" | "failed";
   /** New on each result that should take focus once. */
   key: string;
 }
@@ -83,8 +81,6 @@ export interface LevelControl {
   note: LevelNote | null;
   pick(item: ItemRow, level: StockLevel): void;
   undo(): void;
-  addToList(name: string): void;
-  onList(item: ItemRow): boolean;
 }
 
 const Ctx = createContext<LevelControl | null>(null);
@@ -107,7 +103,6 @@ export function ghostOf(note: LevelNote | null, state: KitchenState): ItemRow | 
 
 /** The Kitchen place's level state and actions (one per place), and the ref of the note shown. */
 export function useStockLevelControl(
-  state: KitchenState | null,
   offline: boolean,
 ): readonly [LevelControl, RefObject<HTMLDivElement | null>] {
   const t = useTranslations();
@@ -179,28 +174,6 @@ export function useStockLevelControl(
     withUndo("refused", true);
   }, [actions, announce, formatMsg, note, show, t]);
 
-  const addToList = useCallback(
-    async (name: string) => {
-      const current = note;
-      if (!current || current.list === "pending" || current.list === "added") return;
-      show({ ...current, list: "pending" }, false);
-      try {
-        const res = await actions.addToList("stock-offer", [{ name }]);
-        if (res.ok && res.result.applied.length) {
-          actions.showOwn(res.result);
-          show({ ...current, list: "added", key: crypto.randomUUID() });
-          return;
-        }
-      } catch {
-        // fall through
-      }
-      show({ ...current, list: "failed", key: crypto.randomUUID() });
-    },
-    [actions, note, show],
-  );
-
-  const onList = useCallback((item: ItemRow) => (state?.shoppingList ?? []).some((s) => s.standardName === item.standardName), [state]);
-
   const control = useMemo<LevelControl>(
     () => ({
       offline,
@@ -208,10 +181,8 @@ export function useStockLevelControl(
       note,
       pick: (item: ItemRow, level: StockLevel) => void pick(item, level),
       undo: () => void undo(),
-      addToList: (name: string) => void addToList(name),
-      onList,
     }),
-    [offline, busyId, note, pick, undo, addToList, onList],
+    [offline, busyId, note, pick, undo],
   );
   return [control, noteRef] as const;
 }
@@ -267,7 +238,7 @@ export function LevelMenu({ item, name }: { item: ItemRow; name: string }) {
 }
 
 /** The receipt (or the failure) under the row it changed. */
-export function LevelNoteView({ itemId, name }: { itemId: string; name: string }) {
+export function LevelNoteView({ itemId }: { itemId: string }) {
   const t = useTranslations("kitchen.level");
   const control = useContext(Ctx);
   const noteRef = useContext(NoteRefCtx);
@@ -281,30 +252,9 @@ export function LevelNoteView({ itemId, name }: { itemId: string; name: string }
       </div>
     );
   }
-  const listName = note.before.name.value;
-  const offer = offersListAdd(note.level) && receipt.applied.length > 0;
   return (
     <div ref={noteRef} tabIndex={-1} data-level-note={receipt.changeSetId} className="scroll-mt-(--topbar-height) px-3 pb-3 outline-none">
-      <Receipt receipt={receipt} onUndo={control.undo}>
-        {offer &&
-          (note.list === "added" ? (
-            <p className="mt-2 text-small font-medium">{t("onList", { name })}</p>
-          ) : (
-            !control.onList(note.before) && (
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => control.addToList(listName)}
-                  aria-disabled={note.list === "pending" || undefined}
-                  className="btn btn-small"
-                >
-                  {t("addToList", { name: listName })}
-                </button>
-                {note.list === "failed" && <span className="text-small text-error-text">{t("addFailed")}</span>}
-              </div>
-            )
-          ))}
-      </Receipt>
+      <Receipt receipt={receipt} onUndo={control.undo} />
     </div>
   );
 }
