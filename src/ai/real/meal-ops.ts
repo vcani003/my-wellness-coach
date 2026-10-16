@@ -226,7 +226,33 @@ function settleIdeaChanges(req: InterpretRequest, refined: string | null, ops: O
     }
   }
   for (const ideaId of refineIdeas) follows = [...follows, { kind: "idea-refine", ideaId, request: text }];
-  return { operations, followUps: follows };
+  return { operations, followUps: ownCardsOnly(req, follows) };
+}
+
+/**
+ * 0051 IR4, enforced in code whatever label the model used: a recipe change aimed at a live meal
+ * that came from one of the asker's shown idea cards, but that another member chose, becomes a
+ * change to the asker's card only. Their recipe is never edited from a card. Regression: the real
+ * model sent "remove the yogurt from the curry" to Ben's meal by its m-label, around
+ * `cardMealWithRecipe`. A recipe change on another member's meal with no card shown is left as it
+ * was (a shared kitchen), and the asker's own meal keeps IR2.
+ */
+function ownCardsOnly(req: InterpretRequest, followUps: TurnFollowUp[]): TurnFollowUp[] {
+  const shown = new Set((req.ideas ?? []).map((i) => i.ideaId));
+  const out: TurnFollowUp[] = [];
+  for (const f of followUps) {
+    const meal = f.kind === "recipe" && f.refine && "mealId" in f.meal ? req.state.meals.find((m) => m.id === (f.meal as { mealId: string }).mealId) : undefined;
+    const theirs = meal && ACTIVE.has(meal.status) && meal.ideaId && shown.has(meal.ideaId) && ("missing" in meal.createdBy || meal.createdBy.id !== req.userId);
+    if (!meal?.ideaId || !theirs) {
+      out.push(f);
+      continue;
+    }
+    const ideaId = meal.ideaId;
+    if (!out.some((o) => o.kind === "idea-refine" && o.ideaId === ideaId) && !followUps.some((o) => o.kind === "idea-refine" && o.ideaId === ideaId)) {
+      out.push({ kind: "idea-refine", ideaId, request: req.message.text.trim() });
+    }
+  }
+  return out;
 }
 
 /** The named dish (MI1): an idea or meal pick when it matches one, else a new chosen meal. */

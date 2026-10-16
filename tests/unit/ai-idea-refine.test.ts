@@ -206,6 +206,24 @@ describe("0051: which change a card gets (IR2, IR3, IR4)", () => {
     expect(viaPick.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: text }]);
   });
 
+  it("IR4 regression (real-model eval miss): the model aims the change at the other member's meal by its m-label → only this card changes", () => {
+    const text = "remove the yogurt from the curry";
+    const req = withMeal(ideasViewRequest(text), true, BEN);
+    // What the real model returned: recipe_change on m1 (Ben's meal from the curry card).
+    const viaMeal = mealOperations(output({ generate: { what: "recipe_change", meal: "m1" } }), req, NOW);
+    expect(viaMeal.operations).toEqual([]);
+    expect(viaMeal.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: text }]);
+  });
+
+  it("IR4 guard leaves the rest alone: your own meal still gets IR2's recipe edit; another member's meal with no card shown is edited as before", () => {
+    const text = "remove the yogurt from the curry";
+    const mine = mealOperations(output({ generate: { what: "recipe_change", meal: "m1" } }), withMeal(ideasViewRequest(text), true), NOW);
+    expect(mine.followUps).toEqual([{ kind: "recipe", meal: { mealId: "meal-curry" }, refine: text }]);
+    const noCards = { ...withMeal(ideasViewRequest(text), true, BEN), ideas: [] };
+    const shared = mealOperations(output({ generate: { what: "recipe_change", meal: "m1" } }), noCards, NOW);
+    expect(shared.followUps).toEqual([{ kind: "recipe", meal: { mealId: "meal-curry" }, refine: text }]);
+  });
+
   it("IR4: the model isn't told another member's meal is this card's ('chosen as mN' is only for your own)", () => {
     const req = withMeal(ideasViewRequest("x"), true, BEN);
     expect(renderIdeas(req).split("\n")[0]).toBe(
