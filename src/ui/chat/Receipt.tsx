@@ -7,7 +7,7 @@
  * step, and the one Undo steps that back first, then the purchase (newest first, like Cmd-Z).
  */
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { CheckIcon, UndoIcon } from "@/ui/primitives/icons";
 import { BatchOffers, offersOf, type OnUndoStep, type UndoStep } from "./BatchOffers";
 import type { Receipt as ReceiptModel } from "./chat-reducer";
@@ -18,11 +18,14 @@ export function Receipt({
   receipt,
   onUndo,
   onView,
+  children,
 }: {
   receipt: ReceiptModel;
   onUndo?: (changeSetId: string) => void;
   /** Phone only: show the change in the workspace. */
   onView?: () => void;
+  /** A one-tap offer under the lines (e.g. "Add rice to my list", SL3); hidden once undone. */
+  children?: ReactNode;
 }) {
   const t = useTranslations("receipt");
   const tAll = useTranslations();
@@ -106,6 +109,7 @@ export function Receipt({
 
       {/* "You also had eggs from Oct 2: Still have them · Those are gone" (0025); gone once the purchase is undone. */}
       {offers.length > 0 && !undone && <BatchOffers offers={offers} answers={receipt.batchAnswers} onUndoStep={onUndoStep} />}
+      {!undone && children}
 
       {(showUndo || undone || receipt.undo === "refused" || onView) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">

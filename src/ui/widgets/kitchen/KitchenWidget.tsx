@@ -19,9 +19,11 @@ import { actorName, byOther as byOtherActor, itemName, sentenceCase } from "@/ui
 import { Collapsible } from "@/ui/primitives/Collapsible";
 import { CaretDownIcon, CloseIcon, FreezerIcon, FridgeIcon, PantryIcon, SearchIcon, UnknownPlaceIcon } from "@/ui/primitives/icons";
 import { useKitchenData, type ChangeMark } from "@/ui/sync/KitchenDataContext";
+import { useOnline } from "@/ui/sync/useOnline";
 import type { PlaceProps } from "@/ui/places/types";
 import { batchesOf, calendarDaysSince, groupByCategory, groupItems, highlightParts, isDefrosted, searchKitchen, type GroupKey } from "./model";
 import { LiveRemovals, SinceLastVisit } from "./SharedCues";
+import { ghostOf, LevelLabel, LevelMenu, LevelNoteView, StockLevelProvider, useStockLevelControl } from "./StockLevel";
 import { ToReview } from "./ToReview";
 import { useKitchenView, type KitchenView } from "./view-pref";
 
@@ -51,9 +53,15 @@ export function KitchenWidget({ onRetry }: PlaceProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   // Where focus goes when a To review sheet closes (the card it came from may be gone).
   const rootRef = useRef<HTMLDivElement>(null);
+  // Item buttons need a connection until KOS7 (0044): the same test as the header's Offline pill.
+  const online = useOnline();
+  const [levels, noteRef] = useStockLevelControl(state, !online || status === "stale" || status === "error");
 
+  // An item set to Out has left the kitchen; it stays here, faded, while its receipt shows.
+  const ghost = state ? ghostOf(levels.note, state) : null;
+  const items = state ? (ghost ? [...state.items, ghost] : state.items) : [];
   const searching = query.trim().length > 0;
-  const results = state && searching ? searchKitchen(state.items, query) : [];
+  const results = state && searching ? searchKitchen(items, query) : [];
 
   // "2 matches" / "No matches for 'x'", once typing pauses (never per keystroke).
   const spoken = searching ? (results.length ? t("seeAll.matches", { count: results.length }) : t("seeAll.noMatches", { query: query.trim() })) : "";
@@ -88,36 +96,38 @@ export function KitchenWidget({ onRetry }: PlaceProps) {
     setQuery("");
     searchRef.current?.focus();
   };
-  const hasItems = groupItems(state.items).length > 0;
+  const hasItems = groupItems(items).length > 0;
 
   return (
-    <div ref={rootRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
-      {status === "stale" && syncedAt !== null && (
-        <p className="rounded-md bg-surface-sunken px-3 py-2 text-small text-text-muted">
-          {t("stale", { time: format.dateTime(new Date(syncedAt), { hour: "numeric", minute: "2-digit" }) })}
-        </p>
-      )}
-      {cues && <SinceLastVisit cues={cues} onDismissed={() => rootRef.current?.focus()} />}
-      {cues && <LiveRemovals cues={cues} />}
-      {!searching && <ToReview reviews={state.toReview} finalFocus={rootRef} />}
+    <StockLevelProvider control={levels} noteRef={noteRef}>
+      <div ref={rootRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
+        {status === "stale" && syncedAt !== null && (
+          <p className="rounded-md bg-surface-sunken px-3 py-2 text-small text-text-muted">
+            {t("stale", { time: format.dateTime(new Date(syncedAt), { hour: "numeric", minute: "2-digit" }) })}
+          </p>
+        )}
+        {cues && <SinceLastVisit cues={cues} onDismissed={() => rootRef.current?.focus()} />}
+        {cues && <LiveRemovals cues={cues} />}
+        {!searching && <ToReview reviews={state.toReview} finalFocus={rootRef} />}
 
-      {!hasItems ? (
-        <EmptyKitchen />
-      ) : (
-        <>
-          <div className="sticky top-[var(--topbar-height)] z-10 -mx-4 flex flex-col gap-3 bg-surface-default px-4 py-2 desk:static desk:mx-0 desk:px-0">
-            <SearchField inputRef={searchRef} query={query} onChange={setQuery} onClear={clear} />
-            {/* Stays while searching: results are one flat list either way, and the choice is kept (CAT1). */}
-            <ViewToggle view={view} onChange={setView} />
-          </div>
-          {searching ? (
-            <SearchResults items={results} query={query} meId={me.id} now={now} marks={marks} remoteIds={remoteIds} />
-          ) : (
-            <ItemGroups items={state.items} view={view} meId={me.id} now={now} marks={marks} remoteIds={remoteIds} />
-          )}
-        </>
-      )}
-    </div>
+        {!hasItems ? (
+          <EmptyKitchen />
+        ) : (
+          <>
+            <div className="sticky top-[var(--topbar-height)] z-10 -mx-4 flex flex-col gap-3 bg-surface-default px-4 py-2 desk:static desk:mx-0 desk:px-0">
+              <SearchField inputRef={searchRef} query={query} onChange={setQuery} onClear={clear} />
+              {/* Stays while searching: results are one flat list either way, and the choice is kept (CAT1). */}
+              <ViewToggle view={view} onChange={setView} />
+            </div>
+            {searching ? (
+              <SearchResults items={results} query={query} meId={me.id} now={now} marks={marks} remoteIds={remoteIds} ghostId={ghost?.id} />
+            ) : (
+              <ItemGroups items={items} view={view} meId={me.id} now={now} marks={marks} remoteIds={remoteIds} ghostId={ghost?.id} />
+            )}
+          </>
+        )}
+      </div>
+    </StockLevelProvider>
   );
 }
 
@@ -207,6 +217,8 @@ interface RowContext {
   now: Date;
   marks: ReturnType<typeof useKitchenData>["marks"];
   remoteIds: ReadonlySet<string>;
+  /** The item just set to Out, drawn faded in place while its receipt shows. */
+  ghostId?: string;
 }
 
 function ItemGroups({ items, view, ...row }: RowContext & { items: readonly ItemRow[]; view: KitchenView }) {
@@ -236,6 +248,7 @@ function ItemGroups({ items, view, ...row }: RowContext & { items: readonly Item
                 meId={row.meId}
                 now={row.now}
                 showPlace={view === "type"}
+                gone={item.id === row.ghostId}
               />
             ))}
           </ul>
@@ -272,6 +285,7 @@ function SearchResults({ items, query, ...row }: RowContext & { items: ItemRow[]
             now={row.now}
             showPlace
             query={query}
+            gone={item.id === row.ghostId}
           />
         ))}
       </ul>
@@ -305,6 +319,7 @@ export function ItemRowView({
   now,
   showPlace = false,
   query,
+  gone = false,
 }: {
   item: ItemRow;
   mark?: ChangeMark;
@@ -315,6 +330,8 @@ export function ItemRowView({
   showPlace?: boolean;
   /** See all's search: the words to mark in the name. */
   query?: string;
+  /** Just set to Out (KOS4): faded, labelled Out, no menu, until your next message. */
+  gone?: boolean;
 }) {
   const t = useTranslations();
   const format = useFormatter();
@@ -325,7 +342,8 @@ export function ItemRowView({
   const when = updatedMs < 60_000 ? t("kitchen.justNow") : format.relativeTime(new Date(item.updatedAt), now);
   const highlighted = Boolean(mark) || remote;
   const batches = batchesOf(item);
-  const several = batches.length > 1;
+  const several = batches.length > 1 && !gone;
+  const level = gone ? "out" : item.stock?.value;
   const name = itemName(item.name.value, t, locale);
 
   const content = (
@@ -350,7 +368,7 @@ export function ItemRowView({
       <span className="flex flex-wrap gap-x-2 text-caption text-text-muted">
         {/* "2 batches · oldest 12 days" (0025): the row's addedAt is the oldest open batch's. */}
         <span>{several ? t("kitchen.batches.summary", { count: batches.length, days }) : t("kitchen.addedDaysAgo", { days })}</span>
-        {item.stock?.value === "low" && <span className="font-strong text-warning-text">{t("kitchen.low")}</span>}
+        {level && <LevelLabel level={level} />}
         {item.opened?.value && <span>{t("kitchen.opened")}</span>}
         {item.frozen?.value && item.location?.value !== "freezer" && <span>{t("kitchen.frozen")}</span>}
         {isDefrosted(item) && <span>{t("kitchen.defrosted")}</span>}
@@ -363,18 +381,21 @@ export function ItemRowView({
     </>
   );
 
-  const rowClass = `row-card ${highlighted ? "change-highlight" : ""}`;
+  const rowClass = `row-card ${highlighted && !gone ? "change-highlight" : ""}`;
   // The food's emoji tile, tinted by where it's kept (0048); the catalog emoji comes with KOS2.
   const tile = <FoodTile place={item.location?.value ?? "unknown"} />;
+  // ⋯ "More for rice" with How much is left? (KOS4); KOS3's tap-to-edit will take it over.
+  const menu = gone ? null : <LevelMenu item={item} name={name} />;
+  const note = <LevelNoteView itemId={item.id} name={name} />;
   if (!several) {
     return (
-      <li
-        data-entity-id={item.id}
-        data-change={mark ?? (remote ? "remote" : undefined)}
-        className={`flex min-h-tap items-center gap-3 px-3 py-2 ${rowClass}`}
-      >
-        {tile}
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">{content}</span>
+      <li data-entity-id={item.id} data-change={gone ? "gone" : (mark ?? (remote ? "remote" : undefined))} className={rowClass}>
+        <div className={`flex min-h-tap items-center gap-3 py-2 pl-3 ${menu ? "pr-1" : "pr-3"}`}>
+          {tile}
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">{content}</span>
+          {menu}
+        </div>
+        {note}
       </li>
     );
   }
@@ -383,21 +404,25 @@ export function ItemRowView({
   return (
     <li data-entity-id={item.id} data-change={mark ?? (remote ? "remote" : undefined)} className={rowClass}>
       <Collapsible.Root>
-        <Collapsible.Trigger
-          data-batches-toggle=""
-          className="group flex min-h-tap w-full items-center gap-3 rounded-md px-3 py-2 text-left"
-        >
-          {tile}
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">{content}</span>
-          <CaretDownIcon
-            aria-hidden="true"
-            className="size-icon-sm shrink-0 text-text-muted transition-transform group-data-[panel-open]:rotate-180 motion-reduce:transition-none"
-          />
-        </Collapsible.Trigger>
+        <div className="flex items-center pr-1">
+          <Collapsible.Trigger
+            data-batches-toggle=""
+            className="group flex min-h-tap min-w-0 flex-1 items-center gap-3 rounded-md py-2 pr-2 pl-3 text-left"
+          >
+            {tile}
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">{content}</span>
+            <CaretDownIcon
+              aria-hidden="true"
+              className="size-icon-sm shrink-0 text-text-muted transition-transform group-data-[panel-open]:rotate-180 motion-reduce:transition-none"
+            />
+          </Collapsible.Trigger>
+          {menu}
+        </div>
         <Collapsible.Panel className="px-4 pb-3">
           <BatchList item={item} meId={meId} name={name} />
         </Collapsible.Panel>
       </Collapsible.Root>
+      {note}
     </li>
   );
 }
@@ -425,7 +450,7 @@ function BatchList({ item, meId, name }: { item: ItemRow; meId: string; name: st
               {defrosted && (
                 <span className="text-text-muted">{t("kitchen.batches.defrostedOn", { date: date(b.defrostedOn!.value) })}</span>
               )}
-              {b.stock?.value === "low" && <span className="font-strong text-warning-text">{t("kitchen.low")}</span>}
+              {b.stock && <LevelLabel level={b.stock.value} />}
               {b.opened?.value && <span className="text-text-muted">{t("kitchen.opened")}</span>}
               <span className="text-text-muted">{who}</span>
             </li>

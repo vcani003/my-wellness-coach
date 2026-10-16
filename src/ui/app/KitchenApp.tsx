@@ -16,13 +16,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLocale, useNow, useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  addToShoppingList,
   finishShopping,
   makeAgain,
   queueShoppingForLater,
   removeShoppingListItem,
   resolveToReview,
+  setItemStockLevel,
   tickShoppingListItem,
   undoChange,
   untickShoppingListItem,
@@ -53,6 +55,7 @@ import { useKeyboardInset } from "@/ui/shell/viewport";
 import { KitchenActionsProvider, type KitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { KitchenDataProvider, type ChangeMark } from "@/ui/sync/KitchenDataContext";
 import { useKitchenSync } from "@/ui/sync/useKitchenSync";
+import { useOnline } from "@/ui/sync/useOnline";
 import { useSharedCues } from "@/ui/sync/useSharedCues";
 import { useCueWords } from "@/ui/widgets/kitchen/cue-words";
 import { MEAL_IDEAS_WIDGET_ID } from "@/ui/widgets/meals";
@@ -100,22 +103,6 @@ function placeToResume(): string | null {
   } catch {
     return null;
   }
-}
-
-/** Chat is online only (0044): Send is off while the phone has no connection. */
-function useOnline(): boolean {
-  return useSyncExternalStore(
-    (onChange) => {
-      window.addEventListener("online", onChange);
-      window.addEventListener("offline", onChange);
-      return () => {
-        window.removeEventListener("online", onChange);
-        window.removeEventListener("offline", onChange);
-      };
-    },
-    () => navigator.onLine,
-    () => true,
-  );
 }
 
 /** Unsent shopping ticks are sent on app open and when you're back online, wherever you are (SL4). */
@@ -340,6 +327,8 @@ function KitchenScreen({
       undo: (changeSetId) => undoChange({ ...tap(), changeSetId }),
       closeBatch: (itemId, batchIds) => closeBatch({ ...tap(), itemId, batchIds }),
       keepOlderBatch: (itemId, batchIds) => keepOlderBatch({ ...tap(), itemId, batchIds }),
+      setStockLevel: (itemId, level, batchId) => setItemStockLevel({ ...tap(), itemId, level, ...(batchId ? { batchId } : {}) }),
+      addToList: (source, items) => addToShoppingList({ ...tap(), source, items }),
       showOwn(result, opts) {
         sync.applyOwn(result.state);
         if (opts?.highlight) setMarks(marksFrom(result));

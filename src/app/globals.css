@@ -512,6 +512,36 @@
   .place-tile[data-place="pantry"] {
     background: var(--color-place-pantry);
   }
+  /*
+   * Stock level meter (KOS4): three rising bars filled to the level (Plenty 3, Some 2, Low 1,
+   * Out 0), in the label's own colour. Decorative: the word beside it always says the level.
+   */
+  .level-meter {
+    display: inline-flex;
+    flex: none;
+    align-items: flex-end;
+    gap: var(--spacing-px);
+    height: var(--spacing-3);
+  }
+  .level-meter > span {
+    width: calc(var(--spacing-0_5) + var(--spacing-px));
+    border-radius: var(--radius-full);
+    background: var(--color-border-strong);
+    opacity: 0.35;
+  }
+  .level-meter > span:nth-child(1) {
+    height: var(--spacing-1);
+  }
+  .level-meter > span:nth-child(2) {
+    height: var(--spacing-2);
+  }
+  .level-meter > span:nth-child(3) {
+    height: var(--spacing-3);
+  }
+  .level-meter > span[data-on] {
+    background: currentColor;
+    opacity: 1;
+  }
   /* FoodTile: the emoji is generated content, so it never joins the row's text (src/ui/primitives/FoodTile.tsx). */
   .place-tile[data-emoji]::before {
     content: attr(data-emoji);

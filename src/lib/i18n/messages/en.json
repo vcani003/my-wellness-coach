@@ -47,6 +47,18 @@
     "stale": "Offline · showing your kitchen as of {time}",
     "addedDaysAgo": "{days, plural, =0 {added today} =1 {added yesterday} other {added # days ago}}",
     "low": "Running low",
+    "level": {
+      "plenty": "Plenty",
+      "some": "Some left",
+      "low": "Running low",
+      "out": "Out",
+      "more": "More for {name}",
+      "menuTitle": "How much is left?",
+      "failed": "I couldn't save that, so nothing changed. Try again.",
+      "addToList": "Add {name} to my list",
+      "onList": "{name} is on your list.",
+      "addFailed": "I couldn't add that to your list. Try again."
+    },
     "opened": "Opened",
     "frozen": "Frozen",
     "defrosted": "Defrosted",

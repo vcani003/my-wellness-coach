@@ -9,4 +9,7 @@ export const Menu = {
   Positioner: Base.Positioner,
   Popup: Base.Popup,
   Item: Base.Item,
+  RadioGroup: Base.RadioGroup,
+  RadioItem: Base.RadioItem,
+  RadioItemIndicator: Base.RadioItemIndicator,
 };

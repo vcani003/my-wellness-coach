@@ -31,6 +31,8 @@ export function fakeActions(overrides: Partial<KitchenActions> = {}): KitchenAct
     undo: vi.fn(refused),
     closeBatch: vi.fn(refused),
     keepOlderBatch: vi.fn(refused),
+    setStockLevel: vi.fn(refused),
+    addToList: vi.fn(refused),
     showOwn: vi.fn(),
     touched: vi.fn(),
     ...overrides,

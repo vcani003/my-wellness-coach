@@ -7,6 +7,7 @@
 import { createContext, useContext } from "react";
 import type { ApplyResult } from "@/contracts/apply-result";
 import type { ActionResult } from "@/app/actions";
+import type { ShoppingSource, StockLevel } from "@/contracts/common";
 
 export interface KitchenActions {
   kitchenId: string;
@@ -22,6 +23,10 @@ export interface KitchenActions {
   closeBatch(itemId: string, batchIds: string[]): Promise<ActionResult>;
   /** "Still have them": the older batches stay and the choice goes away (a soft change, no Undo). */
   keepOlderBatch(itemId: string, batchIds: string[]): Promise<ActionResult>;
+  /** Plenty · Some · Low · Out (KOS4). Without `batchId` it sets the whole item. One change set with Undo. */
+  setStockLevel(itemId: string, level: StockLevel, batchId?: string): Promise<ActionResult>;
+  /** One-tap adds to the shopping list, e.g. the Low/Out offer "Add rice to my list" (SL3). */
+  addToList(source: ShoppingSource, items: { name: string }[]): Promise<ActionResult>;
   /** Show a saved button change now; `highlight` marks its rows New / Updated. */
   showOwn(result: ApplyResult, opts?: { highlight?: boolean }): void;
   /** Remember that you used this widget, so a phone reopens with it on top (ux.md §10). */
