@@ -19,7 +19,8 @@ const QuantityFact = z.object({
 });
 
 /**
- * Kitchen actions (add/update/use/remove, plus batch_gone and defrost for batches, 0025) and
+ * Kitchen actions (add/update/use/remove, level for how much is left (KOS4), plus batch_gone and
+ * defrost for batches, 0025) and
  * shopping-list actions (list_*, 0027). A list action never touches the kitchen; "I bought X" is a
  * kitchen add (the backend takes it off the list, SL5, and adds a batch when X is already there).
  */
@@ -27,6 +28,7 @@ export const ModelAction = z.enum([
   "add",
   "update",
   "use",
+  "level",
   "remove",
   "batch_gone",
   "defrost",
@@ -53,7 +55,10 @@ export const ModelOp = z.object({
   quantity: QuantityFact.nullable(),
   location: z.object({ value: Location, ...meta }).nullable(),
   frozen: z.object({ value: z.boolean(), ...meta }).nullable(),
-  /** use: "low" (running low) or "out" (used up / out). */
+  /**
+   * use: "low" (running low) or "out" (used up / out). level (0045 KOS4): how much is left, said
+   * without a use: "plenty" / "some" (or "low" / "out").
+   */
   stock: z.object({ value: StockLevel, ...meta }).nullable(),
   /** use: how much was used, when said. */
   amountUsed: QuantityFact.nullable(),

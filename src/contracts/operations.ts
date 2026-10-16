@@ -106,7 +106,8 @@ export const ItemUpdate = z.object({
 /**
  * Without a batch: an amount comes off the oldest batch first (spilling into the next when the
  * units match), and `stock` applies to the whole item (Out closes every batch). With a batch:
- * only that batch (Out closes it; the item is Out once its last batch closes, 0011).
+ * only that batch (Out closes it; the item is Out once its last batch closes, 0011). A level
+ * without a use ("we have plenty of rice") is `item.stock.set` instead.
  */
 export const ItemUse = z.object({
   ...common,
@@ -116,6 +117,21 @@ export const ItemUse = z.object({
     stock: optionalFact(StockLevel),
     amountUsed: optionalFact(Quantity),
   }),
+});
+
+/**
+ * Set how much is left (0045 KOS4): "we have plenty of rice", "there's some milk left", or the
+ * level buttons. Not a use (no amount, no "last used"). Without a batch: every open batch (the
+ * whole item, like 0036 IA2); with a batch: only that one. `out` closes them (the item is Out once
+ * its last batch closes, 0011). Same level already set → no change. An Out item set to
+ * plenty/some/low is back in stock (a new batch with that level); one the kitchen never heard
+ * about is recorded first (0011).
+ */
+export const ItemStockSet = z.object({
+  ...common,
+  type: z.literal("item.stock.set"),
+  target: ItemBatchTarget,
+  fields: z.object({ stock: fact(StockLevel) }),
 });
 
 export const ItemRemove = z.object({
@@ -412,6 +428,7 @@ export const Operation = z.discriminatedUnion("type", [
   ItemAdd,
   ItemUpdate,
   ItemUse,
+  ItemStockSet,
   ItemRemove,
   ItemBatchClose,
   ItemBatchKeep,

@@ -15,7 +15,7 @@ import { randomUUID } from "node:crypto";
 import { changeSets, itemBatches, kitchens, mealIdeas, meals, users } from "@/db/schema";
 import type { Db, Queryable } from "@/db/client";
 import { ApplyResult, type ApplyResult as ApplyResultT } from "@/contracts/apply-result";
-import type { Msg, Quantity, ShoppingSource } from "@/contracts/common";
+import type { Msg, Quantity, ShoppingSource, StockLevel } from "@/contracts/common";
 import type { Operation } from "@/contracts/operations";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { MealIdea, UpdateKitchenPrompt } from "@/contracts/stream";
@@ -375,6 +375,28 @@ export function closeBatches(db: Db, scope: KitchenScope, args: TapArgs & { item
       target: { itemId: args.itemId, batchId },
     })),
   );
+}
+
+// ─── Stock levels (0045 KOS4) ─────────────────────────────────────────────────────────
+
+/**
+ * A level button (Plenty · Some · Low · Out): one change set with Undo. Without `batchId`, the
+ * whole item (every open batch); with one, only that batch. Out drops it off the Kitchen list
+ * (0011). Same level already set → a no-change.
+ */
+export function setStockLevel(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { itemId: string; batchId?: string; level: StockLevel },
+) {
+  return tap(db, scope, args, "item.stock.set", [
+    {
+      opId: "level",
+      type: "item.stock.set",
+      target: args.batchId ? { itemId: args.itemId, batchId: args.batchId } : { itemId: args.itemId },
+      fields: { stock: said(args.level) },
+    },
+  ]);
 }
 
 /** "Still have them": the older batches stay, and the choice is dismissed (a soft change). */

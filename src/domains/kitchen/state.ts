@@ -176,6 +176,8 @@ export const KITCHEN_EVENT = {
   itemAdded: "item.added",
   itemUpdated: "item.updated",
   itemUsed: "item.used",
+  /** KOS4: how much is left, set without a use. */
+  stockSet: "item.stock.set",
   itemRemoved: "item.removed",
   mealChosen: "meal.chosen",
   mealTransitioned: "meal.transitioned",
@@ -231,6 +233,15 @@ export interface ItemUsedPayload {
   quantityAfter?: Fact<Quantity> | null;
   /** Set when recorded by finishing a meal (0013): used in this meal, amount unknown. */
   mealId?: string;
+}
+/**
+ * How much is left (0045 KOS4), set on one batch without a use: no amount and no "last used".
+ * `out` closes the batch (used up). One event per batch.
+ */
+export interface StockSetPayload {
+  itemId: string;
+  batchId: string;
+  stock: Fact<StockLevel>;
 }
 /** Buying something already in the kitchen adds a batch (0025). */
 export interface BatchAddedPayload extends BatchFacts {
@@ -365,6 +376,7 @@ export function kitchenTouchedKeys(event: EventEnvelope): string[] {
     case KITCHEN_EVENT.itemAdded:
     case KITCHEN_EVENT.itemUpdated:
     case KITCHEN_EVENT.itemUsed:
+    case KITCHEN_EVENT.stockSet:
     case KITCHEN_EVENT.itemRemoved:
     case KITCHEN_EVENT.batchAdded:
     case KITCHEN_EVENT.batchClosed:
@@ -531,6 +543,21 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
         }
       }
       return put(state, "items", next.id, deriveItem(next));
+    }
+    case KITCHEN_EVENT.stockSet: {
+      const p = event.payload as StockSetPayload;
+      const found = state.items[p.itemId];
+      if (!found) return state;
+      const item: Item = { ...ensureBatches(found), ...stamp(event) };
+      const prev = item.batches.find((b) => b.id === p.batchId);
+      // A missing or already closed batch: ignored, so an odd history never throws (0018).
+      if (!prev || prev.closedAt) return state;
+      const b: Batch = { ...prev, stock: p.stock, ...stamp(event) };
+      if (p.stock.value === "out") {
+        b.closedAt = event.recordedAt;
+        b.closedReason = "used-up";
+      }
+      return put(state, "items", item.id, withBatch(item, b));
     }
     case KITCHEN_EVENT.batchAdded: {
       const p = event.payload as BatchAddedPayload;

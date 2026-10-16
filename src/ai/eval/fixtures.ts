@@ -39,7 +39,7 @@ export function item(spec: ItemSpec, index: number): ItemRow {
       addedAt: added,
       ...(spec.location && { location: f(spec.location) }),
       ...(spec.frozen !== undefined && { frozen: f(spec.frozen) }),
-      ...(spec.stock === "low" && { stock: f("low" as const) }),
+      ...(spec.stock && spec.stock !== "out" && { stock: f(spec.stock) }),
       ...(defrostedOn && b === spec.batches!.length - 1 && { defrostedOn }),
       createdAt: added,
       createdBy: actor,

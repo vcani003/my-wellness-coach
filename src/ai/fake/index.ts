@@ -4,6 +4,7 @@
  * Deterministic and tiny, so the app runs locally with no accounts and the end-to-end tests are
  * repeatable (backend-data.md §8). It understands only:
  *   "I bought X, Y and Z" · "I froze the X" · "I used the rest of the X" · "X is running low" ·
+ *   "we have plenty of X" · "there's some X left" (KOS4) ·
  *   "add X and Y to the list [for Store]" · "the old X are gone" · "I defrosted the X" · "undo" ·
  *   "X goes under <category>" (CAT1; adds also get the shared keyword guess) ·
  *   "X goes in the pantry" / "put X in the fridge" (0041; adds get their place from the backend) ·
@@ -48,7 +49,7 @@ type Op = ProposedChange["operations"][number];
 /** For "undo": the speaker's own recent change sets, newest first (looked up by the route). */
 export type RecentChangesLookup = (req: InterpretRequest) => Promise<ChangeSetSummary[]>;
 
-function itemOps(targets: Segment[], type: "item.update" | "item.use", fields: Record<string, unknown>): Op[] {
+function itemOps(targets: Segment[], type: "item.update" | "item.use" | "item.stock.set", fields: Record<string, unknown>): Op[] {
   return targets.map((s) => ({ opId: "", type, evidence: s.raw, target: { name: s.name }, fields }) as Op);
 }
 
@@ -119,6 +120,11 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
         case "low":
           operations = itemOps(intent.targets, "item.use", { stock: said("low") });
           reply = `Noted: marked the ${names(intent.targets)} as running low.`;
+          break;
+        case "level":
+          // KOS4: how much is left, not a use. Plenty and Some never offer the list (SL3).
+          operations = itemOps(intent.targets, "item.stock.set", { stock: said(intent.level) });
+          reply = intent.level === "plenty" ? `Good: marked plenty of ${names(intent.targets)}.` : `Noted: there's some ${names(intent.targets)} left.`;
           break;
         case "toList":
           operations = intent.items.map((s) => ({

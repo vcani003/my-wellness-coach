@@ -178,9 +178,9 @@ describe("corrections and habits are remembered (0041)", () => {
   });
 });
 
-describe("the prompt (interpret-2026-10-15.2)", () => {
+describe("the prompt (interpret-2026-10-16.1)", () => {
   it("asks for the usual place on adds instead of leaving it unknown", () => {
-    expect(PROMPT_VERSION).toBe("interpret-2026-10-15.2");
+    expect(PROMPT_VERSION).toBe("interpret-2026-10-16.1");
     expect(SYSTEM_PROMPT).toContain("# Places (location)");
     expect(SYSTEM_PROMPT).not.toContain("Don't guess where groceries go");
     expect(SYSTEM_PROMPT).toContain('"onions go in the pantry"');

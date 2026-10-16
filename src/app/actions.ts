@@ -12,7 +12,7 @@ import type { UpdateKitchenPrompt } from "@/contracts/stream";
 import { getMeals, handleChooseMeal } from "@/ai";
 import { getRecipe } from "@/domains/kitchen/queries";
 import { checkChatRateLimit } from "@/lib/rate-limit";
-import { Id, Quantity, ShoppingSource } from "@/contracts/common";
+import { Id, Quantity, ShoppingSource, StockLevel } from "@/contracts/common";
 import { ShoppingDoneFields } from "@/contracts/operations";
 import {
   addRecipeNeedsToShoppingList,
@@ -28,6 +28,7 @@ import {
   queueShoppingReview,
   removeShoppingItem,
   resolveReview,
+  setStockLevel,
   tickShoppingItem,
   undo,
 } from "@/domains/kitchen/commands";
@@ -125,6 +126,19 @@ export async function queueShoppingForLater(input: z.input<typeof QueueShoppingI
 /** Add or Skip on a To review card's sheet. A shopping-list card's Add is "Done shopping" for its items. */
 export async function resolveToReview(input: z.input<typeof ResolveReviewInput>): Promise<ActionResult> {
   return run(ResolveReviewInput, input, (ctx, d) => resolveReview(ctx.db, ctx.scope, d));
+}
+
+// ─── Stock levels (0045 KOS4) ─────────────────────────────────────────────────────────
+
+const StockLevelInput = z.object({ ...Tap, itemId: Id, batchId: Id.optional(), level: StockLevel });
+
+/**
+ * The level buttons: Plenty · Some · Low · Out. Without `batchId` it sets the whole item (every
+ * open batch); with one, only that batch. One change set with "What changed" and Undo. Low and
+ * Out offer "Add X to my list" (`offersListAdd`, SL3); Plenty and Some never do.
+ */
+export async function setItemStockLevel(input: z.input<typeof StockLevelInput>): Promise<ActionResult> {
+  return run(StockLevelInput, input, (ctx, d) => setStockLevel(ctx.db, ctx.scope, d));
 }
 
 // ─── Meals (0005, 0013) ───────────────────────────────────────────────────────────────

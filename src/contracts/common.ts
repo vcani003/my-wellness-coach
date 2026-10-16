@@ -69,8 +69,20 @@ export const ItemCategory = z.enum([
 export type ItemCategory = z.infer<typeof ItemCategory>;
 export const ITEM_CATEGORIES = ItemCategory.options;
 
-export const StockLevel = z.enum(["low", "out"]);
+/**
+ * How much of something is left (0045 KOS4): plenty / some / low ("Running low") / out. Absent =
+ * unknown (no made-up default). `out` closes the batch (0011: Out drops off the Kitchen list).
+ * Older events only ever carry `low` or `out`, which keep their meaning.
+ */
+export const StockLevel = z.enum(["plenty", "some", "low", "out"]);
 export type StockLevel = z.infer<typeof StockLevel>;
+export const STOCK_LEVELS = StockLevel.options;
+
+/**
+ * Whether a level triggers the "Add X to my list?" offer (SL3, 0054 SS4): Low and Out do; Plenty
+ * and Some never do. The one place this rule lives.
+ */
+export const offersListAdd = (level: StockLevel | undefined): boolean => level === "low" || level === "out";
 
 /**
  * Which of an item's open batches (0025): the oldest (used first by default) or the newest

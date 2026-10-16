@@ -36,7 +36,7 @@ export const BatchRow = z.object({
   location: fact(Location).optional(),
   frozen: fact(z.boolean()).optional(),
   opened: fact(z.boolean()).optional(),
-  /** Only `low`: an Out batch is closed. */
+  /** plenty / some / low (0045 KOS4); absent = unknown. Never `out`: an Out batch is closed. */
   stock: fact(StockLevel).optional(),
   /** "Defrosted on" (0025): when the user said, else when it was recorded. ISO 8601. */
   defrostedOn: fact(isoDate).optional(),
@@ -50,8 +50,9 @@ export type BatchRow = z.infer<typeof BatchRow>;
 /**
  * One row per item on the Kitchen list. With batches (0025), its fields describe them together:
  * `addedAt`, location, frozen and opened come from the **oldest** open batch (the one used next);
- * `quantity` is the one batch's, or a sum when they share a unit (else unknown); `stock` is `low`
- * only when every open batch is low. "2 batches · oldest 12 days" = `batches.length` + `addedAt`.
+ * `quantity` is the one batch's, or a sum when they share a unit (else unknown); `stock` is set
+ * only when every open batch has a level, and is then the highest of them (plenty > some > low),
+ * so a new batch with no level makes it unknown again (KOS4). "2 batches · oldest 12 days" = `batches.length` + `addedAt`.
  */
 export const ItemRow = z.object({
   id: Id,
@@ -69,7 +70,10 @@ export const ItemRow = z.object({
   location: fact(Location).optional(),
   frozen: fact(z.boolean()).optional(),
   opened: fact(z.boolean()).optional(),
-  /** `low` = "Running low". `out` items are not in KitchenState.items (history keeps them). */
+  /**
+   * plenty / some / low ("Running low") (0045 KOS4); absent = unknown. `out` items are not in
+   * KitchenState.items (history keeps them). Low and Out offer "Add X to my list" (`offersListAdd`).
+   */
   stock: fact(StockLevel).optional(),
   /** For "added X days ago": when the user said it happened, else when it was recorded. */
   addedAt: isoDate,

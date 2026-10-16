@@ -1,9 +1,9 @@
 /**
  * Real-model eval for the interpreter (ai.md §8), scored by exact rules, not by another AI.
  * Run with `npm run eval`; skipped unless ANTHROPIC_API_KEY is set. Costs real money: about
- * 44 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list
+ * 49 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list
  * (0027), older and newer batches (0025), a dish named in chat (MI1), item categories (CAT1) and
- * inferred places (0041).
+ * inferred places (0041) and stock levels (0045 KOS4).
  */
 import { afterAll, describe, expect, it } from "vitest";
 import type { Operation, OperationOf, OperationType } from "@/contracts/operations";
@@ -140,6 +140,62 @@ const cases: Case[] = [
       const [use] = only(ops, "item.use");
       targets(use, "item-1");
       expect(use.fields.stock?.value).toBe("low");
+    },
+  },
+  // Stock levels (0045 KOS4): a level said without a use is item.stock.set; Low/Out stay a use.
+  {
+    name: "levels: we have plenty of rice → plenty, no list offer",
+    text: "we have plenty of rice",
+    items: VERO_PANTRY,
+    check: (r, ops) => {
+      const [set] = only(ops, "item.stock.set");
+      targets(set, "item-2");
+      expect(set.fields.stock).toMatchObject({ value: "plenty", basis: "said" });
+      expect(only(ops, "item.use")).toHaveLength(0);
+      expect(listAdds(ops)).toHaveLength(0);
+      expect(r.reply).not.toMatch(/\blist\b/i);
+    },
+  },
+  {
+    name: "levels: there's some milk left (not in the kitchen) → some, by name",
+    text: "there's some milk left",
+    items: VERO_PANTRY,
+    check: (r, ops) => {
+      const [set] = only(ops, "item.stock.set");
+      expect(set.target).toMatchObject({ name: expect.stringMatching(/milk/i) });
+      expect(set.fields.stock.value).toBe("some");
+      expect(only(ops, "item.add")).toHaveLength(0);
+    },
+  },
+  {
+    name: "levels: we're low on eggs → use with low (Low still offers the list)",
+    text: "we're low on eggs",
+    items: [{ name: "eggs", location: "fridge" }],
+    check: (r, ops) => {
+      const [use] = only(ops, "item.use");
+      targets(use, "item-1");
+      expect(use.fields.stock?.value).toBe("low");
+      expect(listAdds(ops)).toHaveLength(0);
+    },
+  },
+  {
+    name: "levels: used some flour is a use, not a level",
+    text: "I used some flour",
+    items: [{ name: "flour", location: "pantry" }],
+    check: (r, ops) => {
+      expect(only(ops, "item.stock.set")).toHaveLength(0);
+      const [use] = only(ops, "item.use");
+      targets(use, "item-1");
+      expect(use.fields.stock?.value ?? null).not.toBe("out");
+    },
+  },
+  {
+    name: "levels: do we have jasmine rice? (yes, plenty)",
+    text: "do we have jasmine rice?",
+    items: [{ name: "jasmine rice", location: "pantry", stock: "plenty" }],
+    check: (r) => {
+      answerOnly(r);
+      expect(r.reply).toMatch(/plenty/i);
     },
   },
   {

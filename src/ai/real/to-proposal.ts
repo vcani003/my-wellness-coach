@@ -20,9 +20,12 @@
  *   add's is downgraded to a medium guess (a said one would be remembered, and a high one would
  *   beat the household's remembered place) and an update's is dropped: the model never moves an
  *   item by itself.
+ * - Stock levels (0045 KOS4): "we have plenty of rice" / "there's some milk left" is
+ *   `item.stock.set`, not a use. A `use` with plenty/some and no amount is the same thing. Only
+ *   Low and Out count as "marked Out/Low" for the list guard (`offersListAdd`).
  * - The result must pass the contract's Zod schema, or nothing is proposed.
  */
-import type { BatchWhich, Fact, ItemCategory, Location, ShoppingSource } from "@/contracts/common";
+import { offersListAdd, type BatchWhich, type Fact, type ItemCategory, type Location, type ShoppingSource } from "@/contracts/common";
 import type { ItemBatchTarget, Operation, ShoppingTarget } from "@/contracts/operations";
 import { nameTokens, standardName } from "@/shared/text";
 import { ProposedChange } from "@/contracts/proposed-change";
@@ -218,7 +221,18 @@ function toOperationOrNull(op: ModelOp, opId: string, req: InterpretRequest, lab
       if (!target) return null;
       const stock = keep(op.stock, (f) => f.value, evidenceOk);
       const amountUsed = keep(op.amountUsed, quantityOf, evidenceOk);
+      // "There's some milk left" read as a use: it's a level, not a use (KOS4).
+      if (stock && !amountUsed && !offersListAdd(stock.value)) {
+        return { ...common, type: "item.stock.set", target: withBatch(target, which), fields: { stock } };
+      }
       return { ...common, type: "item.use", target: withBatch(target, which), fields: { stock, amountUsed } };
+    }
+    case "level": {
+      // How much is left, said without a use (0045 KOS4). No level → nothing to set.
+      if (!target) return null;
+      const stock = keep(op.stock, (f) => f.value, evidenceOk);
+      if (!stock) return null;
+      return { ...common, type: "item.stock.set", target: withBatch(target, which), fields: { stock } };
     }
     case "batch_gone":
       // "The old eggs are gone": one batch closes, the oldest unless they named the newer one.
@@ -274,7 +288,8 @@ function guardShopping(ops: Operation[], out: ModelOutput, req: InterpretRequest
   const offer = offeredToAddToList(req);
   // Names marked Out/Low in this message ("fish sauce" matches "nước mắm (fish sauce)").
   const stockNames = ops.flatMap((o) => {
-    if (o.type !== "item.use" || !o.fields.stock) return [];
+    if (o.type !== "item.use" && o.type !== "item.stock.set") return [];
+    if (!offersListAdd(o.fields.stock?.value)) return [];
     if ("name" in o.target) return [nameTokens(o.target.name)];
     const id = o.target.itemId;
     const row = req.state.items.find((i) => i.id === id);

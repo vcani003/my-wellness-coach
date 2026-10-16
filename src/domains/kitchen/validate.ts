@@ -75,6 +75,7 @@ import {
   type ShoppingRemovedPayload,
   type ShoppingTickedPayload,
   type ShoppingUpdatedPayload,
+  type StockSetPayload,
 } from "./state";
 import { getProfileEntity } from "@/shared/profile/state";
 
@@ -666,8 +667,8 @@ function itemUse(op: OperationOf<"item.use">, env: OpEnv): OpOutcome {
       ? msg("ITEM_OUT", { name })
       : closedNow > 0
         ? msg("ITEM_BATCH_USED_UP", { name, left: openAfter })
-        : plan.size > 0 && [...plan.values()].some((p) => p.stock?.value === "low")
-          ? msg("ITEM_LOW", { name })
+        : stock && stock.value !== "out"
+          ? levelMsg(stock.value, name)
           : msg("ITEM_USED", { name });
   const touched = targets.filter((b) => plan.has(b.id));
   const ref: ChangeRef = compact({
@@ -675,6 +676,83 @@ function itemUse(op: OperationOf<"item.use">, env: OpEnv): OpOutcome {
     id: item.id,
     change: recorded ? ("added" as const) : ("updated" as const),
     batchId: touched.length === 1 ? touched[0].id : undefined,
+  });
+  return ok(events, summary, [ref]);
+}
+
+/** The receipt line for a level (KOS4). Only Low and Out offer "Add X to my list" (SL3). */
+function levelMsg(level: StockLevel, name: string): Msg {
+  switch (level) {
+    case "plenty":
+      return msg("ITEM_PLENTY", { name });
+    case "some":
+      return msg("ITEM_SOME", { name });
+    case "low":
+      return msg("ITEM_LOW", { name });
+    case "out":
+      return msg("ITEM_OUT", { name });
+  }
+}
+
+/**
+ * "We have plenty of rice", "there's some milk left", or a level button (0045 KOS4). Not a use:
+ * no amount and no "last used". Without a batch, every open batch gets the level (the whole item,
+ * like 0036 IA2); with a batch, only that one. `out` closes them. Same level already everywhere →
+ * no change. An Out item set to plenty/some/low comes back with a new batch (`item.add`'s
+ * restock); one the kitchen never heard about is recorded first (0011).
+ */
+function itemStockSet(op: OperationOf<"item.stock.set">, env: OpEnv): OpOutcome {
+  const k = kitchenStream(env.ctx.kitchenId);
+  const stock = op.fields.stock;
+  const level = stock.value;
+  const match = resolveTargetItem(op.target, env.kitchen);
+  if (match.kind === "rejected") return match.outcome;
+  if (match.kind === "unknown-id" || match.kind === "ambiguous") return reject("UNKNOWN_ITEM");
+
+  const events: EventEnvelope[] = [];
+  let item: Item;
+  let change: "added" | "updated" = "updated";
+  let targets: Batch[];
+  if (match.kind === "none") {
+    const event = recordUnknownItem(nameFact(targetName(op.target)), env);
+    events.push(event);
+    change = "added";
+    item = apply(env.kitchen, event).items[(event.payload as ItemAddedPayload).itemId];
+    targets = openBatches(item);
+  } else if (openBatches(match.item).length === 0) {
+    // Out already: "out" again is no change; any other level means it's back (a new batch).
+    if (level === "out") return noChange();
+    const back = addToKitchen(match.item.name, {}, env.kitchen, env);
+    events.push(...back.events);
+    item = applyAll(env.kitchen, back.events).items[back.itemId];
+    targets = item.batches.filter((b) => b.id === back.batchId);
+  } else {
+    item = match.item;
+    const spec = batchSpec(op.target);
+    if (spec) {
+      const picked = pickBatch(item, spec);
+      if (!picked.ok) return picked.outcome;
+      targets = [picked.batch];
+    } else {
+      targets = openBatches(item);
+    }
+    if (targets.every((b) => b.stock?.value === level)) return noChange();
+  }
+
+  for (const b of targets) {
+    const payload: StockSetPayload = { itemId: item.id, batchId: b.id, stock };
+    events.push(emit(env, k, KITCHEN_EVENT.stockSet, payload));
+  }
+  const after = applyAll(env.kitchen, events).items[item.id];
+  const openAfter = after ? openBatches(after).length : 0;
+  const name = item.name.value;
+  const summary =
+    level === "out" && openAfter > 0 ? msg("ITEM_BATCH_USED_UP", { name, left: openAfter }) : levelMsg(level, name);
+  const ref: ChangeRef = compact({
+    kind: "item" as const,
+    id: item.id,
+    change,
+    batchId: targets.length === 1 && change === "updated" ? targets[0].id : undefined,
   });
   return ok(events, summary, [ref]);
 }
@@ -1386,6 +1464,7 @@ function targetKeys(op: Operation): string[] {
   switch (op.type) {
     case "item.update":
     case "item.use":
+    case "item.stock.set":
     case "item.remove":
     case "item.defrost":
       return "itemId" in op.target ? [`item:${op.target.itemId}`] : [];
@@ -1427,6 +1506,8 @@ function validateOperation(op: Operation, env: OpEnv): OpOutcome {
       return itemUpdate(op, env);
     case "item.use":
       return itemUse(op, env);
+    case "item.stock.set":
+      return itemStockSet(op, env);
     case "item.remove":
       return itemRemove(op, env);
     case "item.batch.close":

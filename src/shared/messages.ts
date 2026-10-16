@@ -22,6 +22,9 @@ const TEMPLATES: Record<string, string> = {
   ITEM_USED: "Used {name}",
   ITEM_LOW: "{name}: running low",
   ITEM_OUT: "{name}: out",
+  // stock levels (0045 KOS4)
+  ITEM_PLENTY: "{name}: plenty",
+  ITEM_SOME: "{name}: some left",
   ITEM_RECORDED: "{name} wasn't in your kitchen, so I added it",
   ITEM_USED_RECORDED: "{name} wasn't in your kitchen; noted it as used",
   ITEM_REMOVED: "Removed {name}",

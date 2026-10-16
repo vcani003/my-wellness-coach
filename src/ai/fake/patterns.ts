@@ -12,6 +12,7 @@ export type FakeIntent =
   | { kind: "froze"; targets: Segment[] }
   | { kind: "usedUp"; targets: Segment[] }
   | { kind: "low"; targets: Segment[] }
+  | { kind: "level"; level: "plenty" | "some"; targets: Segment[] }
   | { kind: "oldGone"; targets: Segment[] }
   | { kind: "defrosted"; targets: Segment[] }
   | { kind: "undo" }
@@ -45,6 +46,16 @@ const LOW = [
   new RegExp(String.raw`\blow\s+on\s+(.+?)` + END, "i"),
   new RegExp(String.raw`^\s*(.+?)(?:\s+(?:is|are)|'s)\s+(?:running|getting)\s+low` + END, "i"),
 ];
+
+/** Stock levels (0045 KOS4): "we have plenty of rice" · "there's some milk left". */
+const PLENTY = new RegExp(
+  String.raw`^\s*(?:(?:we|i)\s+(?:still\s+)?(?:have|'ve got|have got)|we've\s+got|there's|there\s+is|(?:we|i)\s+got)\s+(?:still\s+)?(?:plenty|lots|loads)\s+of\s+(.+?)(?:\s+left)?` + END,
+  "i",
+);
+const SOME = new RegExp(
+  String.raw`^\s*(?:there's|there\s+is|(?:we|i)\s+(?:still\s+)?have)\s+(?:still\s+)?some\s+(.+?)\s+left` + END,
+  "i",
+);
 
 /** Batches (0025): "the old eggs are gone" · "I defrosted the chicken" / "thawed the shrimp". */
 const OLD_GONE = new RegExp(String.raw`^\s*(?:the\s+)?old(?:er)?\s+(.+?)\s+(?:are|is)\s+gone` + END, "i");
@@ -179,6 +190,10 @@ export function matchIntent(text: string): FakeIntent {
   if (dish) return dish;
   const category = categoryIntent(text);
   if (category) return category;
+  const plenty = PLENTY.exec(text);
+  if (plenty) return { kind: "level", level: "plenty", targets: segments(plenty[1]) };
+  const some = SOME.exec(text);
+  if (some) return { kind: "level", level: "some", targets: segments(some[1]) };
   const toList = TO_LIST.exec(text);
   if (toList) return { kind: "toList", items: segments(toList[1]), ...(toList[2] ? { store: toList[2].trim() } : {}) };
   const bought = BOUGHT.exec(text);
