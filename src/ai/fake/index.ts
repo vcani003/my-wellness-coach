@@ -15,14 +15,16 @@
  *   staples (0054): "X is a staple [from Store]", "we always keep X", "X isn't a staple any more",
  *   "what staples do I need?" / "restock", and "yes" to its own "remember these as your staples?" ·
  *   the dated plan (0045 KOS1, KOS12): "plan the curry for Tuesday", "move the pasta to Friday",
- *   "take the day off the pasta", "what are we eating this week?", "add what we need for this week's meals"
+ *   "take the day off the pasta", "what are we eating this week?", "add what we need for this week's meals" ·
+ *   on idea cards: "remove the X from the <idea>", "swap the X for Y in the first one", "make the <idea> without X"
  * and answers anything else politely with no changes. Everything it proposes still goes through
  * the real backend validate → apply path. The AI specialist replaces this folder (ai.md §9).
  */
 import type { ChangeSetSummary } from "@/contracts/apply-result";
 import type { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult, Interpreter } from "../interpreter";
-import { mealOperations } from "../real/meal-ops";
+import { CHANGES_A_DISH, mealOperations, WANTS_RECIPE } from "../real/meal-ops";
+import { nameTokens } from "@/shared/text";
 import type { ModelOutput } from "../real/model-output";
 import { CATEGORY_LABEL_EN, guessCategory } from "@/shared/item-category";
 import { mentionsAllergen } from "@/shared/profile/allergens";
@@ -91,9 +93,57 @@ function itemOps(targets: Segment[], type: "item.update" | "item.use" | "item.st
   return targets.map((s) => ({ opId: "", type, evidence: s.raw, target: { name: s.name }, fields }) as Op);
 }
 
+const ORDINALS: Record<string, number> = { first: 0, "1st": 0, second: 1, "2nd": 1, third: 2, "3rd": 2 };
+
+/**
+ * A change to an idea card (ai.md §5 "Refining an idea"): "remove the yogurt from the chicken
+ * curry", "swap the chicken for tofu in the first one", "use potatoes in the second one", and
+ * "make the curry without yogurt" (which also chooses it). The card is "the first/second/third one"
+ * or the one whose name shares the most words with the message. Routed through the same code as
+ * the real interpreter (meal-ops.ts), so the same rules decide edit vs choose.
+ */
+function ideaChange(req: InterpretRequest): InterpretResult | null {
+  const ideas = req.ideas ?? [];
+  const text = req.message.text.trim();
+  if (!ideas.length || !(CHANGES_A_DISH.test(text) || /\b(use|add)\s+.+\s+(in|to)\s+(the|my)\b/i.test(text))) return null;
+  const ordinal = /\b(first|second|third|1st|2nd|3rd)\s+one\b/i.exec(text);
+  let index = ordinal ? ORDINALS[ordinal[1].toLowerCase()] : -1;
+  if (index < 0) {
+    const words = new Set(nameTokens(text));
+    const scores = ideas.map((i) => nameTokens(i.name).filter((w) => words.has(w)).length);
+    const best = Math.max(...scores);
+    index = best > 0 && scores.filter((s) => s === best).length === 1 ? scores.indexOf(best) : -1;
+  }
+  if (index < 0 || index >= ideas.length) return null;
+  const label = `d${index + 1}`;
+  const choose = WANTS_RECIPE.test(text);
+  const out: ModelOutput = {
+    kind: choose ? "change" : "answer",
+    reply: "",
+    clarification: null,
+    rememberPreference: null,
+    listOfferAccepted: null,
+    generate: { what: "recipe_change", meal: label },
+    dish: null,
+    operations: choose
+      ? [{ action: "meal_choose", meal: label, evidence: text, item: null, name: null, quantity: null, location: null, frozen: null, stock: null, amountUsed: null, batch: null, store: null }]
+      : [],
+  };
+  const m = mealOperations(out, req, new Date());
+  if (m.operations.length === 0) return { kind: "answer", proposal: null, reply: "", followUps: m.followUps };
+  return {
+    kind: "change",
+    reply: "Good choice.",
+    proposal: { proposalId: req.message.id, kitchenId: req.kitchenId, basedOnVersion: req.version, source: { via: "chat", messageId: req.message.id }, operations: m.operations },
+    followUps: m.followUps,
+  };
+}
+
 export function createFakeInterpreter(recentChanges: RecentChangesLookup = async () => []): Interpreter {
   return {
     async interpret(req): Promise<InterpretResult> {
+      const changed = ideaChange(req);
+      if (changed) return changed;
       // A change to a recipe you have open ("no garlic", "skip step 2"): only when one exists.
       if (FAKE_RECIPE_CHANGE.test(req.message.text.trim()) && req.state.meals.some((m) => m.recipe)) {
         const out: ModelOutput = {

@@ -6,7 +6,7 @@ import type { ItemRow, KitchenState, ShoppingItemRow } from "@/contracts/kitchen
 import type { InterpretRequest } from "../interpreter";
 import { WEEKDAY_NAMES, isIsoDay, weekdayOf } from "@/shared/plan-dates";
 
-export const PROMPT_VERSION = "interpret-2026-10-16.7";
+export const PROMPT_VERSION = "interpret-2026-10-17.1";
 
 export const SYSTEM_PROMPT = `You are Kitchen, the assistant inside a shared household kitchen app. People tell you what they bought, used, froze or cooked, keep a shared shopping list, and ask what they have or what to buy. You answer in one structured JSON object.
 
@@ -18,7 +18,7 @@ Warm, brief and practical. Plain words, no emoji, no markdown headings. Usually 
 - <shopping_list>: the household's shared shopping list, one item per line, with a short label (s1, s2, …), its store if any, and "got it" when ticked. Things on the list are NOT in the kitchen.
 - <staples>: the household's saved staples (things they always keep), one per line, with the usual store if any and where each stands now: "out", "running low", "not in the kitchen", "have" or "on the list". "(none saved)" when there are none.
 - <allergies>: every household member's allergies, as "subject (whose)". They count whoever is asking.
-- <meal_ideas>: the meal idea cards this user was last shown, with labels d1, d2, … in card order.
+- <meal_ideas>: the meal idea cards this user was last shown, with labels d1, d2, … in card order, what each uses from the kitchen and is missing, and "chosen as mN" once it's a meal.
 - Meals in progress are listed at the end of <kitchen> with labels m1, m2, …, their status (chosen, planned, cooking), the day a planned meal is for ("for Tue 2026-10-20"; no day = undated) and "has recipe".
 - <today>: the user's own date and weekday.
 - <recent_chat>: the last few turns, for references like "that" or "it".
@@ -127,6 +127,10 @@ The app writes meal ideas and recipes itself after your turn; you only route the
 - "What can I make (tonight)?", "any dinner ideas?", "something quick with the chicken?", "ideas for Vietnamese food": kind "answer", generate {what "ideas", meal ""}, operations empty. reply: one short line such as "Let me look at what you have." Don't list ideas yourself.
 - A change to the recipe being cooked or just written ("no oven", "make it spicier", "can I do it without eggs?", "I only have 300 g of pasta, not 500", "can I use milk instead of cream?", "I don't have parmesan, will that be fine?"): kind "answer", generate {what "recipe_change", meal: its m-label, or "last_chosen" if unclear}. reply: one short line ("Sure, I'll rework it without the oven."). When it's a question, don't answer it yourself (no "yes"/"no"): the recipe step answers it with the recipe in hand, so reply only "Let me check that against the recipe." Otherwise generate {what "none", meal ""}.
   - An amount or a missing ingredient said about that recipe ("I only have 300 g of pasta", "I don't have parmesan") is about the recipe, not a kitchen report: no item operations.
+- A change to an idea card in <meal_ideas> ("remove the yogurt from the curry", "I don't want the yogurt in my curry, refine it", "swap the chicken for tofu in the first one", "use potatoes in the second one", "make the second one vegetarian"): kind "answer", generate {what "recipe_change", meal: that card's d-label}, operations empty. Don't emit meal_choose: changing an idea is not choosing it. The app edits the card in place (or its recipe, when the card says "has recipe"). reply: one short line ("Sure, I'll take the yogurt out of the curry.").
+  - Only when they also ask to cook it or for its recipe ("make the curry without yogurt", "let's cook the first one with tofu"): meal_choose with that d-label AND generate {what "recipe_change", meal: the same d-label}. The app chooses it and writes the recipe with their change.
+  - A change while a recipe is open or was just written (the meal "has recipe"): use its m-label as above, not the d-label.
+  - "The curry", "the first one", an ingredient on one card ("the one with the yogurt"): use <meal_ideas> (names, uses, missing) to find the card.
 - Meal actions (kind "change"); "meal" is a label, item stays "", name and facts stay null, evidence is the user's words:
   - meal_choose: picking an idea: "the second one" → d2, "the omelette" → the d-label whose name matches, "let's do the pho" → its label.
   - meal_plan: "add that to my meal plan", "plan the omelette", "plan the curry for Tuesday". "that" / "it" → meal "last_chosen". An idea named directly → its d-label. when: the day exactly as the user said it ("Tuesday", "tomorrow", "Friday night", "the 24th", "Oct 24"), or "" when they don't name one. Never work out the date yourself: the app does, from <today>.
@@ -218,6 +222,11 @@ Message: "move the pasta to Friday" → kind "change"; meal_date meal "m2", when
 Message: "take the day off the pasta" → kind "change"; meal_clear_date meal "m2", when "", evidence "take the day off the pasta".
 Message: "what are we eating this week?" → kind "answer"; generate {what "week_plan", meal ""}; reply "Here's your week."
 Message: "add what we need for this week's meals" → kind "answer"; generate {what "week_needs", meal ""}; reply "Let me check this week's meals."
+
+Meal ideas: d1: Coconut chicken curry · uses chicken thighs, potatoes · missing lemongrass, yogurt / d2: Beef pho · uses beef
+Message: "i don't want the yogurt in my curry, take it out" → kind "answer"; generate {what "recipe_change", meal "d1"}; operations empty; reply "Sure, I'll take the yogurt out of the curry."
+Message: "swap the beef for tofu in the second one" → kind "answer"; generate {what "recipe_change", meal "d2"}; reply "Sure, tofu instead of beef."
+Message: "make the curry without yogurt" → kind "change"; meal_choose meal "d1", evidence "make the curry without yogurt"; generate {what "recipe_change", meal "d1"}; reply "Curry without yogurt it is."
 
 Kitchen: i3: chicken thighs · fridge
 Meal ideas: (none shown)
@@ -344,10 +353,28 @@ export function neutralize(text: string): string {
   return text.replace(/<\/?\s*(kitchen|shopping_list|staples|allergies|meal_ideas|recent_chat|user_message|today)\b[^>]*>/gi, "");
 }
 
-/** d1, d2… in card order (meal-ops.ts resolves them). */
+/**
+ * d1, d2… in card order (meal-ops.ts resolves them), with what each card uses and is missing, and
+ * the meal it became when this user chose it ("chosen as m2 · has recipe"), so a change to "the
+ * curry" can be routed to the card or to its recipe (ai.md §5 "Refining an idea", 0051).
+ */
 export function renderIdeas(req: InterpretRequest): string {
   const ideas = req.ideas ?? [];
-  return ideas.length ? ideas.map((idea, i) => `d${i + 1}: ${idea.name}`).join("\n") : "(none shown)";
+  if (!ideas.length) return "(none shown)";
+  const mealLabel = new Map(req.state.meals.map((m, i) => [m.id, `m${i + 1}`]));
+  return ideas
+    .map((idea, i) => {
+      const parts = [`d${i + 1}: ${idea.name}`];
+      if (idea.uses?.length) parts.push(`uses ${idea.uses.join(", ")}`);
+      if (idea.missing?.length) parts.push(`missing ${idea.missing.join(", ")}`);
+      // Only a meal the asker chose: a card another member chose changes only this card (0051 IR4).
+      const meal = req.state.meals.find(
+        (m) => m.ideaId === idea.ideaId && ["chosen", "planned", "cooking"].includes(m.status) && !("missing" in m.createdBy) && m.createdBy.id === req.userId,
+      );
+      if (meal) parts.push(`chosen as ${mealLabel.get(meal.id)}${meal.recipe ? " · has recipe" : ""}`);
+      return parts.join(" · ");
+    })
+    .join("\n");
 }
 
 export const HISTORY_TURNS = 10;

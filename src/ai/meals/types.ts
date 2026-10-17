@@ -78,8 +78,11 @@ export type IdeasEvent = { type: "idea"; idea: GeneratedIdea } | { type: "done";
 export interface RecipeMeal {
   mealId: string;
   title: string;
-  /** The idea it came from, when chosen from a card. */
-  idea?: { name: string; why: string; uses: string[]; missing: string[] };
+  /**
+   * The idea it came from, when chosen from a card. `notes`: the user's own words for changes
+   * made to the idea before it had a recipe ("no yogurt"); the recipe honours them.
+   */
+  idea?: { name: string; why: string; uses: string[]; missing: string[]; notes?: string };
   /**
    * A dish the user named in chat (MI1): their own words about it ("with coconut milk,
    * lemongrass, kaffir lime leaves; use the curry base seasoning packet"). Data, never instructions.
@@ -187,6 +190,27 @@ export type RecipePart =
 /** Streamed while a recipe is generated; the last event is always `done`. */
 export type RecipeEvent = ({ type: "part" } & RecipePart) | { type: "done"; result: RecipeResult };
 
+/**
+ * A change to an idea card that has no recipe yet (ai.md §5 "Refining an idea"): "remove the
+ * yogurt from the curry", "swap the chicken for tofu in the first one". The result is the whole
+ * card after the change; code checks it like any idea (labels, missing, basics, allergens).
+ */
+export interface IdeaRefineInput extends MealContext {
+  idea: { ideaId: string; name: string; why: string; uses: string[]; missing: string[]; notes?: string };
+  request: { messageId: string; text: string };
+}
+
+export type IdeaRefineResult =
+  | {
+      ok: true;
+      idea: GeneratedIdea;
+      /** One short line naming what changed ("Took the yogurt out of the curry idea."). */
+      reply: string;
+      /** Nothing changed (it wasn't in the idea, or the change was refused for an allergy): don't save. */
+      unchanged?: true;
+    }
+  | { ok: false; reason: MealFailure; reply: string };
+
 /** The meal AI: real (Claude) or fake (deterministic, for tests and local dev). */
 export interface MealAI {
   streamMealIdeas(input: MealIdeasInput): AsyncGenerator<IdeasEvent>;
@@ -194,4 +218,5 @@ export interface MealAI {
   streamRecipe(input: RecipeInput): AsyncGenerator<RecipeEvent>;
   generateRecipe(input: RecipeInput): Promise<RecipeResult>;
   readPastedRecipe(input: PastedRecipeInput): Promise<RecipeResult>;
+  refineIdea(input: IdeaRefineInput): Promise<IdeaRefineResult>;
 }

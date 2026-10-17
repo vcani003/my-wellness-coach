@@ -23,7 +23,13 @@ export type InterpretRequest = {
    * The meal ideas this user was last shown, in card order, so "the second one" or "the
    * omelette" can be chosen (0013). Optional: without it, ideas can't be chosen from chat.
    */
-  ideas?: Array<{ ideaId: string; name: string }>;
+  ideas?: Array<{
+    ideaId: string;
+    name: string;
+    /** What the card says it uses (kitchen item names) and is missing, so "the curry with the yogurt" resolves. */
+    uses?: string[];
+    missing?: string[];
+  }>;
   /**
    * Every member's allergies (0019: they count whoever is asking), so a general staples or
    * shopping guess leaves them out (0054 SS6). Optional: absent = none known.
@@ -47,9 +53,12 @@ export type MealPointer = { mealId: string } | { chooseOpId: string };
  *   (MI1), their own words about it ("with coconut milk, lemongrass, kaffir lime leaves").
  * - `meal-step`: plan or start cooking a meal this proposal just chose (it had no ID yet).
  * - `after-cooking`: open "Update your kitchen" for a meal just marked done (0013). UI, not AI.
+ * - `idea-refine`: change an idea card that has no recipe yet, in place ("remove the yogurt from
+ *   the curry"); no recipe is written and nothing navigates. `request` is the user's words.
  */
 export type TurnFollowUp =
   | { kind: "ideas"; request: string }
+  | { kind: "idea-refine"; ideaId: string; request: string }
   | { kind: "recipe"; meal: MealPointer; refine?: string; notes?: string }
   | { kind: "meal-step"; meal: { chooseOpId: string }; to: "planned" | "cooking"; date?: string }
   | { kind: "after-cooking"; mealId: string };

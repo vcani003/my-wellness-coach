@@ -10,10 +10,13 @@ import { basicsNote } from "../meals/basics";
 import { labelMaps } from "../meals/context";
 import { matchKitchenItem } from "../meals/match";
 import type { IdeaOut, RecipeEditOut, RecipeOutput } from "../meals/model-output";
+import { toRefinedIdea } from "../meals/refine-idea";
 import { toIdea } from "../meals/to-ideas";
 import { toRecipeResult } from "../meals/to-recipe";
 import type {
   GeneratedIdea,
+  IdeaRefineInput,
+  IdeaRefineResult,
   IdeasEvent,
   MealAI,
   MealIdeasInput,
@@ -106,6 +109,88 @@ export function fakeEdits(text: string, current: Current): { edits: RecipeEditOu
 
 const title = (s: string) => s.replace(/\s*\(.*?\)\s*/g, " ").trim().replace(/^\w/, (c) => c.toUpperCase());
 
+/** "…in the first one", "…from the curry", "…in my curry": where the change goes, not what. */
+const WHERE = String.raw`(?:\s+(?:in|on|from|out of|to)\s+(?:the|my|this|that)\b.*)?`;
+const FAKE_IDEA_SWAP = new RegExp(String.raw`\b(?:swap|switch|replace)\s+(?:the\s+)?(.+?)\s+(?:for|with)\s+(?:some\s+)?(.+?)${WHERE}$`, "i");
+const FAKE_IDEA_INSTEAD = new RegExp(String.raw`\buse\s+(?:the\s+|some\s+)?(.+?)\s+instead of\s+(?:the\s+)?(.+?)${WHERE}$`, "i");
+const FAKE_IDEA_REMOVE = new RegExp(
+  String.raw`\b(?:remove|take out|leave out|without|no|(?:i\s+)?don'?t want(?:\s+to use)?)\s+(?:the\s+|any\s+)?(.+?)${WHERE}$`,
+  "i",
+);
+const FAKE_IDEA_ADD = new RegExp(String.raw`\b(?:use|add)\s+(?:the\s+|some\s+)?(.+?)\s+(?:in|to)\s+(?:the|my|this)\b.*$`, "i");
+
+/**
+ * The fake's idea change (ai.md §5 "Refining an idea"), for e2e tests and testers: "remove the X
+ * from …", "no X in …", "swap the X for Y in …", "use Y instead of X …", "use / add Y in …".
+ * Generic on purpose (no dish words). Returns the whole card, model-shaped, plus a reply.
+ */
+export function fakeIdeaChange(text: string, idea: IdeaRefineInput["idea"], input: IdeaRefineInput): { out: IdeaOut; reply: string } {
+  const t = text.trim().replace(/[.!?]+$/, "");
+  const { toLabel } = labelMaps(input);
+  const nameOf = (id: string) => input.state.items.find((i) => i.id === id)?.name.value ?? "";
+  const hits = (name: string, words: string) => {
+    const a = name.toLowerCase();
+    const w = words.trim().toLowerCase();
+    return Boolean(w) && (a === w || a.includes(w) || w.includes(a));
+  };
+  let uses = [...idea.uses];
+  let missing = [...idea.missing];
+  let name = idea.name;
+  let why = idea.why;
+  const swapWord = (s: string, from: string, to: string) =>
+    s
+      .replace(new RegExp(String.raw`\b${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\b`, "i"), to)
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  const remove = (words: string) => {
+    const before = uses.length + missing.length;
+    uses = uses.filter((id) => !hits(nameOf(id), words));
+    missing = missing.filter((m) => !hits(m, words));
+    return uses.length + missing.length < before;
+  };
+  const add = (words: string) => {
+    const item = matchKitchenItem(input.state, words);
+    if (item) {
+      if (!uses.includes(item.id)) uses.push(item.id);
+    } else if (!missing.some((m) => hits(m, words))) missing.push(words.trim());
+  };
+  let reply = "";
+  let m = FAKE_IDEA_SWAP.exec(t) ?? null;
+  let from = m?.[1];
+  let to = m?.[2];
+  if (!m) {
+    m = FAKE_IDEA_INSTEAD.exec(t);
+    from = m?.[2];
+    to = m?.[1];
+  }
+  if (m && from && to) {
+    if (remove(from)) {
+      add(to);
+      name = swapWord(name, from, title(to));
+      why = swapWord(why, from, to);
+      reply = `Swapped the ${from} for ${to}.`;
+    }
+  } else if ((m = FAKE_IDEA_REMOVE.exec(t))) {
+    const what = m[1];
+    if (remove(what)) {
+      name = swapWord(name, what, "") || idea.name;
+      why = swapWord(why, what, "") || idea.why;
+      reply = `Took the ${what} out of the ${idea.name} idea.`;
+    }
+  } else if ((m = FAKE_IDEA_ADD.exec(t))) {
+    add(m[1]);
+    reply = `Added ${m[1]} to the ${idea.name} idea.`;
+  }
+  const out: IdeaOut = {
+    name: title(name),
+    why,
+    uses: uses.flatMap((id) => (toLabel.get(id) ? [toLabel.get(id)!] : [])),
+    missing,
+    basics: ["salt", "cooking oil"],
+  };
+  return { out, reply };
+}
+
 export function createFakeMealAI(now: () => Date = () => new Date()): MealAI {
   async function* streamMealIdeas(input: MealIdeasInput): AsyncGenerator<IdeasEvent> {
     const at = now();
@@ -116,7 +201,14 @@ export function createFakeMealAI(now: () => Date = () => new Date()): MealAI {
     const order = [...ranked.map((r) => r.itemId), ...input.state.items.map((i) => i.id).filter((id) => !rankedIds.has(id))];
     const raw: IdeaOut[] = [];
     const asked = input.request?.text.trim();
-    if (asked && /\b(taco|soup|salad|curry|stir.?fry|omelette|pasta|noodle|rice|pho)/i.test(asked)) {
+    // "…a chicken curry with potatoes, yogurt and lemongrass": that dish, with those ingredients
+    // (kitchen ones move to Uses through the same guard as the real model's).
+    const withList = asked ? /\b(?:a|an)\s+([a-z][a-z' -]*?)\s+with\s+(.+?)[?!.]*$/i.exec(asked) : null;
+    if (withList) {
+      const fromTitle = withList[1].split(/\s+/).filter((w) => matchKitchenItem(input.state, w));
+      const listed = withList[2].split(/\s*,\s*(?:and\s+)?|\s+and\s+/i).map((s) => s.trim()).filter(Boolean);
+      raw.push({ name: title(withList[1]), why: "You asked for it", uses: [], missing: [...fromTitle, ...listed], basics: ["salt"] });
+    } else if (asked && /\b(taco|soup|salad|curry|stir.?fry|omelette|pasta|noodle|rice|pho)/i.test(asked)) {
       raw.push({ name: title(asked.replace(/[?!.]+$/, "")), why: "You asked for it", uses: [], missing: [asked.replace(/[?!.]+$/, "")], basics: ["salt"] });
     }
     for (const id of order) {
@@ -195,6 +287,9 @@ export function createFakeMealAI(now: () => Date = () => new Date()): MealAI {
         return;
       }
     }
+    // "…without yogurt" / "no yogurt" in the user's words about the meal or its idea: left out.
+    const leftOut = [...`${input.meal.notes ?? ""}\n${idea?.notes ?? ""}`.matchAll(/\b(?:without|no|remove|don'?t want(?: to use)?)\s+(?:the\s+|any\s+)?([a-z][a-z ]*?)(?=$|[\n,.;!?]|\s+(?:in|from|on)\b)/gim)].map((m) => m[1].trim().toLowerCase());
+    const kept = (name: string) => !leftOut.some((w) => name.toLowerCase().includes(w) || w.includes(name.toLowerCase()));
     const out: RecipeOutput = current
       ? {
           title: current.title,
@@ -210,8 +305,10 @@ export function createFakeMealAI(now: () => Date = () => new Date()): MealAI {
           servings: "2",
           ingredients: [
             ...(!idea ? dishIngredients(input, toLabel) : []),
-            ...(idea?.uses ?? []).map((id) => ({ name: input.state.items.find((i) => i.id === id)?.name.value ?? "", amount: null, item: toLabel.get(id) ?? null, basic: false })),
-            ...(idea?.missing ?? []).map((name) => ({ name, amount: null, item: null, basic: false })),
+            ...(idea?.uses ?? [])
+              .map((id) => ({ name: input.state.items.find((i) => i.id === id)?.name.value ?? "", amount: null, item: toLabel.get(id) ?? null, basic: false }))
+              .filter((i) => kept(i.name)),
+            ...(idea?.missing ?? []).filter(kept).map((name) => ({ name, amount: null, item: null, basic: false })),
             { name: "salt", amount: "a pinch", item: null, basic: true },
             { name: "cooking oil", amount: "1 tbsp", item: null, basic: true },
           ],
@@ -265,5 +362,9 @@ export function createFakeMealAI(now: () => Date = () => new Date()): MealAI {
     streamRecipe,
     generateRecipe: (input) => collectRecipe(streamRecipe(input)),
     readPastedRecipe,
+    async refineIdea(input: IdeaRefineInput): Promise<IdeaRefineResult> {
+      const { out, reply } = fakeIdeaChange(input.request.text, input.idea, input);
+      return toRefinedIdea(out, reply, input, now());
+    },
   };
 }

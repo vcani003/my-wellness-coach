@@ -76,6 +76,12 @@ export const StreamEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("idea"), setId: Id, basedOnVersion: z.number().int().nonnegative(), idea: MealIdea }),
   /** The idea set failed part-way (e.g. a refusal): remove its cards; they can't be chosen. */
   z.object({ type: z.literal("ideas.dropped"), setId: Id }),
+  /**
+   * An idea card shown earlier changed (ai.md §5 "Refining an idea"): a chat edit to an idea with no
+   * recipe yet, or its meal's recipe was written or changed (the card follows the latest recipe).
+   * The whole card again; the UI replaces it in place and highlights the lines that differ.
+   */
+  z.object({ type: z.literal("idea.updated"), idea: MealIdea }),
   z.object({
     type: z.literal("recipe"),
     mealId: Id,

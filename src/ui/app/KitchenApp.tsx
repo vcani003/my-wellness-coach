@@ -271,8 +271,13 @@ function KitchenScreen({
         announce(parts.filter(Boolean).join(" "));
         if (dockNow.current === "minimized") setNewReply(true);
       },
-      onUndone(result) {
+      onUndone(result, events, key) {
         sync.applyOwn(result.state);
+        // 0052: a recipe the Undo put back replaces the one shown, and its idea card follows it.
+        if (events.length) {
+          for (const e of events) meals.onEvent(e, key, "chat");
+          meals.onStreamEnd(key);
+        }
         setMarks(marksFrom(result));
         announce(t("receipt.announceUndone", { changes: result.applied.map((a) => formatMsg(a.summary, "plain")).join(", ") }));
       },

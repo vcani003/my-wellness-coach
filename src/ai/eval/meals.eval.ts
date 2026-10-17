@@ -12,6 +12,8 @@ import type { GeneratedIdea, IdeasResult, RecipeIngredientOut } from "../meals/t
 import {
   COOK_ALONG_KITCHEN,
   CURRY_KITCHEN,
+  IDEA_REFINE_MESSAGE,
+  IDEAS_KITCHEN,
   ideasInput,
   kitchen,
   LEVI_SEAFOOD,
@@ -19,6 +21,7 @@ import {
   NOW,
   PASTA_KITCHEN,
   request,
+  SHOWN_IDEAS,
   SHRIMP_KITCHEN,
   VERO_WEEK,
   type ItemSpec,
@@ -263,6 +266,47 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)("meal ideas and recipes (real mo
     if (!r.ok) return;
     expect(r.operation).toMatchObject({ type: "recipe.save", source: "user", text: pasted });
     expect(r.recipe.ingredients.map((i) => i.name).join(" ")).not.toMatch(/allergy|delete/i);
+  });
+
+  // Refining an idea card (ai.md §5, Vero 2026-10-15): the card changes only where asked.
+  const curryIdea = () => {
+    const { ideaId, name, why, uses, missing } = SHOWN_IDEAS[0];
+    return { ideaId, name, why, uses, missing };
+  };
+  const refine = (text: string, restrictions = [] as (typeof LEVI_SEAFOOD)[]) =>
+    meals.refineIdea({ ...mealContext(IDEAS_KITCHEN, { restrictions }), idea: curryIdea(), request: { messageId: "m-r", text } });
+
+  it("idea refine: Vero's exact message → the yogurt is gone from the curry card; everything else stays", async () => {
+    const r = await refine(IDEA_REFINE_MESSAGE);
+    expect(r.ok && !r.unchanged, JSON.stringify(r)).toBe(true);
+    if (!r.ok) return;
+    console.info(`[idea refine yogurt] ${r.idea.name} · uses ${names(IDEAS_KITCHEN, r.idea.uses)} · missing ${r.idea.missing} · ${r.reply}`);
+    expect(names(IDEAS_KITCHEN, r.idea.uses)).toEqual(["chicken thighs", "potatoes", "coconut milk"]);
+    expect(r.idea.missing.map((m) => m.toLowerCase())).toEqual(["lemongrass"]);
+    expect([r.idea.name, r.idea.why, ...r.idea.missing].join(" ")).not.toMatch(/yogh?urt/i);
+    expect(r.idea.name).toMatch(/curry/i);
+    expect(r.reply).toMatch(/yogh?urt/i);
+    expect(r.reply).not.toMatch(FORBIDDEN);
+  });
+
+  it("idea refine: 'swap the chicken for tofu in the first one' → tofu from the kitchen in, chicken out, nothing else", async () => {
+    const r = await refine("swap the chicken for tofu in the first one");
+    expect(r.ok && !r.unchanged, JSON.stringify(r)).toBe(true);
+    if (!r.ok) return;
+    console.info(`[idea refine tofu] ${r.idea.name} · uses ${names(IDEAS_KITCHEN, r.idea.uses)} · missing ${r.idea.missing}`);
+    expect(new Set(names(IDEAS_KITCHEN, r.idea.uses))).toEqual(new Set(["tofu", "potatoes", "coconut milk", "Greek yogurt"]));
+    expect(r.idea.missing.map((m) => m.toLowerCase())).toEqual(["lemongrass"]);
+    expect(r.idea.name).not.toMatch(/chicken/i);
+    expect(r.idea.name).toMatch(/tofu/i);
+  });
+
+  it("the recipe for an edited idea honours the change (no yogurt back in)", async () => {
+    const idea = { ...curryIdea(), uses: ["item-1", "item-2", "item-3"], why: "Creamy and cosy with the coconut milk", notes: IDEA_REFINE_MESSAGE };
+    const r = await meals.generateRecipe({ ...mealContext(IDEAS_KITCHEN), meal: { mealId: "meal-c", title: idea.name, idea } });
+    expect(r.ok, JSON.stringify(r)).toBe(true);
+    if (!r.ok) return;
+    expect(r.recipe.ingredients.map((i) => i.name).join(" ")).not.toMatch(/yogh?urt/i);
+    expect(r.recipe.steps.join(" ")).not.toMatch(/yogh?urt/i);
   });
 
   it("chat: 'what can I make this week?' → ideas follow-up; 'the second one' → meal.choose d2", async () => {

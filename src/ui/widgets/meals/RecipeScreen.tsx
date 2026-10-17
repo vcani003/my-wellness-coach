@@ -47,7 +47,7 @@ export function RecipeScreen({ mealId, initialRecipe }: { mealId: string; initia
   const { snapshot, me, turn = 0 } = useKitchenData();
   const state = snapshot.state;
   const meal = state?.meals.find((m) => m.id === mealId);
-  const recipe = pickRecipe(session.recipes[mealId], initialRecipe);
+  const recipe = pickRecipe(session.recipes[mealId], initialRecipe, meal?.recipe);
   const title = meal?.title ?? recipe?.title ?? (initialRecipe && !("missing" in initialRecipe.meal) ? initialRecipe.meal.title : undefined);
   const ticks = ticksFor(state, mealId);
   const [pendingTicks, setPendingTicks] = useState<Record<string, boolean>>({});

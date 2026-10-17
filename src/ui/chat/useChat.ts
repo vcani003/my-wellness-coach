@@ -59,7 +59,11 @@ export interface TurnCallbacks {
   onTurnEnd(turn: { id?: string; reply: string; result: ApplyResult | null; error: Msg | null; changed: boolean }): void;
   /** Every stream event, for the widgets that follow it (meal ideas, recipes, "Update your kitchen"). */
   onEvent?(event: StreamEvent, id: string): void;
-  onUndone(result: ApplyResult): void;
+  /**
+   * Your Undo went through. `events`: what it shows besides the receipt (0052), to apply like a
+   * stream's: a recipe it put back, and idea cards that follow it. `key` names that "stream".
+   */
+  onUndone(result: ApplyResult, events: StreamEvent[], key: string): void;
   onUndoRefused(reason: Msg): void;
 }
 
@@ -197,7 +201,7 @@ export function useChat(opts: {
         });
         if (out.ok && out.result.applied.length > 0 && out.result.rejected.length === 0) {
           dispatch({ type: "undoDone", changeSetId });
-          cb.current.onUndone(out.result);
+          cb.current.onUndone(out.result, out.events ?? [], `undo:${changeSetId}:${newId()}`);
         } else {
           const reason = out.ok ? (out.result.rejected[0]?.reason ?? out.result.undoBlockedReason) : out.reason;
           const fallback: Msg = { code: "UNDO_CONFLICT", params: {}, text: "" };

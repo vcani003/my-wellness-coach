@@ -26,6 +26,16 @@ export const IdeasOutput = z.object({
 });
 export type IdeasOutput = z.infer<typeof IdeasOutput>;
 
+/**
+ * A change to one idea card (ai.md §5 "Refining an idea"): the whole card after the change, then a
+ * short reply. Same fields as an idea, so the same code guard (to-ideas.ts) checks it. No unions.
+ */
+export const IdeaRefineOutput = IdeaOut.extend({
+  /** One short sentence naming what changed. */
+  reply: z.string(),
+});
+export type IdeaRefineOutput = z.infer<typeof IdeaRefineOutput>;
+
 export const RecipeIngredientOut = z.object({
   name: z.string(),
   /** As written ("2", "1 cup", "a handful"), or null. */

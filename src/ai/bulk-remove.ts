@@ -159,7 +159,13 @@ const FollowUp = z.union([
     refine: z.string().optional(),
     notes: z.string().optional(),
   }),
-  z.object({ kind: z.literal("meal-step"), meal: z.object({ chooseOpId: z.string() }), to: z.enum(["planned", "cooking"]) }),
+  z.object({
+    kind: z.literal("meal-step"),
+    meal: z.object({ chooseOpId: z.string() }),
+    to: z.enum(["planned", "cooking"]),
+    date: z.string().optional(),
+  }),
+  z.object({ kind: z.literal("idea-refine"), ideaId: z.string(), request: z.string() }),
   z.object({ kind: z.literal("after-cooking"), mealId: z.string() }),
 ]);
 

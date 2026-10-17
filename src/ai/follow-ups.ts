@@ -13,7 +13,7 @@ import type { Operation } from "@/contracts/operations";
 import type { KitchenState, RecipeView } from "@/contracts/kitchen-state";
 import type { ProposalSource } from "@/contracts/proposed-change";
 import type { StreamEvent } from "@/contracts/stream";
-import { applyProposedChange, dropIdeaSet, recordMealIdeas, updateKitchenPrompt } from "@/domains/kitchen/commands";
+import { applyProposedChange, dropIdeaSet, recordMealIdeas, updateKitchenPrompt, updateMealIdea } from "@/domains/kitchen/commands";
 import {
   getIdea,
   getIdeaSet,
@@ -25,6 +25,7 @@ import {
 import type { KitchenScope } from "@/shared/membership";
 import type { MealPointer, TurnFollowUp } from "./interpreter";
 import { basicsNote } from "./meals/basics";
+import { IDEA_GONE_REPLY } from "./meals/refine-idea";
 import { savedRecipeMeta } from "./meals/to-recipe";
 import type { MealAI, MealContext, RecipeIngredientOut, RecipeInput, RecipePart } from "./meals";
 
@@ -129,6 +130,100 @@ async function* ideasStep(deps: FollowUpDeps, origin: FollowUpOrigin, request: s
   return "";
 }
 
+// ─── Refining an idea (ai.md §5) ────────────────────────────────────────────────────────
+
+/**
+ * Change an idea card that has no recipe yet, in place: one small AI call returns the card after
+ * the change, code checks it, and the stored card is updated (with the user's words kept as its
+ * notes, so the recipe written later honours them). The UI swaps the card and highlights only the
+ * lines that changed. No recipe is written and nothing navigates.
+ */
+async function* ideaRefineStep(deps: FollowUpDeps, origin: FollowUpOrigin, ideaId: string, request: string): Step {
+  const idea = await getIdea(deps.db, deps.scope, ideaId);
+  if (!idea) return IDEA_GONE_REPLY;
+  const ctx = await mealContext(deps, origin);
+  const result = await deps.meals.refineIdea({
+    ...ctx,
+    idea: { ideaId, ...idea },
+    request: { messageId: origin.id, text: request },
+  });
+  if (!result.ok || result.unchanged) return result.reply;
+  const updated = await updateMealIdea(deps.db, deps.scope, ideaId, {
+    name: result.idea.name,
+    why: result.idea.why,
+    uses: result.idea.uses,
+    missing: result.idea.missing,
+    note: clip(request.trim(), 500),
+  });
+  if (!updated) return IDEA_GONE_REPLY;
+  yield { type: "idea.updated", idea: updated };
+  return result.reply;
+}
+
+/**
+ * One source of truth (ai.md §5): once a meal chosen from an idea card has a recipe, the card's
+ * Uses / Missing follow the LATEST saved version. Called after every `recipe.saved` (a new recipe,
+ * a rewrite or an in-place edit), so the card changes in the same turn. Name and why are kept.
+ * Isolated (0018): a failure is logged and the turn goes on.
+ */
+async function* ideaFollowsRecipe(deps: FollowUpDeps, mealId: string, ideaId: string | undefined): AsyncGenerator<StreamEvent, void> {
+  if (!ideaId) return;
+  try {
+    const [view, idea] = await Promise.all([getRecipe(deps.db, deps.scope, mealId), getIdea(deps.db, deps.scope, ideaId)]);
+    if (!view || !idea) return;
+    const uses: string[] = [];
+    const missing: string[] = [];
+    for (const i of view.ingredients) {
+      if (i.item && !("missing" in i.item)) {
+        if (!uses.includes(i.item.id)) uses.push(i.item.id);
+      } else if (!i.basic && !missing.some((m) => m.toLowerCase() === i.name.toLowerCase())) {
+        missing.push(i.name);
+      }
+    }
+    const same = (a: string[], b: string[]) => a.length === b.length && a.every((x, n) => x === b[n]);
+    if (same(uses, idea.uses) && same(missing, idea.missing)) return;
+    const updated = await updateMealIdea(deps.db, deps.scope, ideaId, { uses, missing });
+    if (updated) yield { type: "idea.updated", idea: updated };
+  } catch (error) {
+    console.error("turn.recipe: couldn't update the idea card from the recipe", { mealId, ideaId, error });
+  }
+}
+
+/**
+ * After an Undo in chat (0051 IR2: Undo still applies to a recipe change): each live card-chosen
+ * meal's card follows its latest saved recipe again. A no-op for cards that already match.
+ */
+export async function* cardsFollowRecipes(deps: FollowUpDeps, result: ApplyResult): AsyncGenerator<StreamEvent, void> {
+  for (const m of result.state.meals) {
+    if (m.ideaId && m.recipe && m.status !== "done" && m.status !== "cancelled") yield* ideaFollowsRecipe(deps, m.id, m.ideaId);
+  }
+}
+
+/**
+ * After any Undo, in chat or by the receipt's button (0052): a recipe version the Undo took away
+ * is replaced on screen by the one it brought back (its parts and `recipe.saved`, as for a saved
+ * recipe opened again), then idea cards follow their recipes (`cardsFollowRecipes`). Isolated
+ * (0018): a failure is logged and the Undo stands.
+ */
+export async function* afterUndo(deps: FollowUpDeps, result: ApplyResult): AsyncGenerator<StreamEvent, void> {
+  try {
+    const refs = result.applied.flatMap((a) => a.refs);
+    const undoneRecipe = refs.some((r) => r.kind === "recipe" && r.change === "removed");
+    for (const r of undoneRecipe ? refs : []) {
+      if (r.kind !== "meal") continue;
+      const meal = result.state.meals.find((m) => m.id === r.id);
+      if (!meal?.recipe) continue;
+      const view = await getRecipe(deps.db, deps.scope, meal.id);
+      if (!view) continue;
+      for (const p of recipeParts(view, meal.title)) yield { type: "recipe", mealId: meal.id, part: p.part, data: p.data };
+      yield { type: "recipe.saved", mealId: meal.id, recipeId: view.id, version: view.version, newVersion: result.newVersion };
+    }
+    yield* cardsFollowRecipes(deps, result);
+  } catch (error) {
+    console.error("undo: couldn't show the restored recipe", { error });
+  }
+}
+
 // ─── Recipe ─────────────────────────────────────────────────────────────────────────────
 
 const group = (i: RecipeView["ingredients"][number]): RecipeIngredientOut["group"] =>
@@ -188,6 +283,8 @@ export async function* recipeStep(
   mealId: string,
   refine?: string,
   notes?: string,
+  /** 0052: the turn's one receipt slot, still free while `open`; the recipe edit that takes it closes it. */
+  opts: { receipt?: { open: boolean } } = {},
 ): Step {
   const proposalId = `${origin.id}:recipe:${mealId}`;
   const state = await getKitchenState(deps.db, deps.scope);
@@ -246,7 +343,14 @@ export async function* recipeStep(
       return "Sorry, I couldn't save that recipe, so nothing changed.";
     }
     const version = Number(saved.summary.params.version ?? 1);
+    // 0052: a chat edit of a recipe the meal already had gets the "What changed" receipt and its
+    // Undo. A first recipe doesn't, so the chat stays quiet.
+    if (opts.receipt?.open && meal.recipe) {
+      opts.receipt.open = false;
+      yield { type: "applied", result: outcome.result };
+    }
     yield { type: "recipe.saved", mealId, recipeId, version, newVersion: outcome.result.newVersion };
+    yield* ideaFollowsRecipe(deps, mealId, meal.ideaId);
     if (result.notes.length) yield { type: "notes", notes: result.notes };
     return result.reply;
   }
@@ -269,6 +373,16 @@ export function withoutRecipeAnnouncement(reply: string, followUps: TurnFollowUp
 }
 
 /**
+ * An idea change speaks for itself ("Took the yogurt out of the curry idea."), so the turn's own
+ * draft goes when nothing else was saved: it was written before code decided, and could say
+ * "Here's the recipe" for a pick that code turned into an idea change (meal-ops.ts).
+ */
+export function withoutIdeaRefineDraft(reply: string, followUps: TurnFollowUp[], result: ApplyResult | null): string {
+  if (!followUps.some((f) => f.kind === "idea-refine")) return reply;
+  return result && result.applied.length > 0 ? reply : "";
+}
+
+/**
  * Run a turn's follow-ups in order, after apply. `meal-step` is not handled here: the turn folds
  * it into the main proposal (`foldMealSteps`), so choosing and planning are one change set.
  * Steps whose meal didn't apply are skipped. Returns the reply lines, in order.
@@ -280,6 +394,8 @@ export async function* runFollowUps(
   result: ApplyResult | null,
 ): AsyncGenerator<StreamEvent, string[]> {
   const replies: string[] = [];
+  // 0052: one receipt per message, so a recipe edit gets it only when the turn saved nothing else.
+  const receipt = { open: !result };
   for (const f of followUps) {
     try {
       let reply = "";
@@ -287,9 +403,12 @@ export async function* runFollowUps(
         case "ideas":
           reply = yield* ideasStep(deps, origin, f.request);
           break;
+        case "idea-refine":
+          reply = yield* ideaRefineStep(deps, origin, f.ideaId, f.request);
+          break;
         case "recipe": {
           const mealId = mealIdOf(f.meal, result);
-          if (mealId) reply = yield* recipeStep(deps, origin, mealId, f.refine, f.notes);
+          if (mealId) reply = yield* recipeStep(deps, origin, mealId, f.refine, f.notes, { receipt });
           break;
         }
         case "after-cooking": {

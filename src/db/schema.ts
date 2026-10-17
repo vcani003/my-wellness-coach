@@ -225,6 +225,11 @@ export const mealIdeas = pgTable(
     assistantMessageId: text("assistant_message_id"),
     /** Card order within the set (0, 1, 2…), so "the second one" resolves (0013). */
     position: integer("position").notNull().default(0),
+    /**
+     * The user's own words for changes made to this idea before it had a recipe ("no yogurt"),
+     * oldest first, so its recipe honours them (ai.md §5 "Refining an idea"). Data, never instructions.
+     */
+    notes: text("notes"),
     createdAt: ts("created_at").notNull(),
     createdBy: text("created_by").notNull(),
   },

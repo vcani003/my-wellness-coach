@@ -80,11 +80,19 @@ export function fromDraft(draft: RecipeDraft): RecipeDisplay {
 
 /**
  * What to show: a recipe streaming now (or one that just failed) wins; otherwise the saved one
- * read on the server; otherwise a draft saved earlier this session.
+ * read on the server; otherwise a draft saved earlier this session. `current` is the meal's
+ * recipe in the kitchen state: after an Undo (0052) the newest version number isn't the live
+ * one any more, so whichever matches `current` wins.
  */
-export function pickRecipe(draft: RecipeDraft | undefined, view: RecipeView | null): RecipeDisplay | null {
+export function pickRecipe(draft: RecipeDraft | undefined, view: RecipeView | null, current?: { version: number }): RecipeDisplay | null {
   if (draft && draft.status !== "saved") return fromDraft(draft);
-  if (draft && view) return (draft.version ?? 0) >= view.version ? fromDraft(draft) : fromView(view);
+  if (draft && view) {
+    if (current && draft.version !== view.version) {
+      if (draft.version === current.version) return fromDraft(draft);
+      if (view.version === current.version) return fromView(view);
+    }
+    return (draft.version ?? 0) >= view.version ? fromDraft(draft) : fromView(view);
+  }
   if (draft) return fromDraft(draft);
   return view ? fromView(view) : null;
 }

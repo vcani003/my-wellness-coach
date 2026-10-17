@@ -46,6 +46,8 @@ const TEMPLATES: Record<string, string> = {
   MEAL_STATUS: "{title}: {status}",
   MEAL_NOTE_SAVED: "Saved a note on {title}",
   RECIPE_SAVED: "Saved the recipe for {title}",
+  // 0052: a new version of a recipe the meal had. The full text is built in validate.ts ({title, what, removed, added}).
+  RECIPE_UPDATED: "Updated the {title} recipe",
   MEAL_MADE_AGAIN: "Making {title} again",
   TICKED: "Ticked {ingredient}",
   UNTICKED: "Unticked {ingredient}",

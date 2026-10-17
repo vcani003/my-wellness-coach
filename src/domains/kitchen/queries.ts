@@ -263,18 +263,20 @@ export async function wasApplied(db: Queryable, scope: KitchenScope, proposalId:
   return rows.length > 0;
 }
 
-/** One stored idea card's content, for writing its recipe; null if unknown here. */
+/** One stored idea card's content, for writing its recipe or refining it; null if unknown here. */
 export async function getIdea(
   db: Queryable,
   scope: KitchenScope,
   ideaId: string,
-): Promise<{ name: string; why: string; uses: string[]; missing: string[] } | null> {
+): Promise<{ name: string; why: string; uses: string[]; missing: string[]; notes?: string } | null> {
   const [row] = await db
-    .select({ name: mealIdeas.name, why: mealIdeas.why, uses: mealIdeas.uses, missing: mealIdeas.missing })
+    .select({ name: mealIdeas.name, why: mealIdeas.why, uses: mealIdeas.uses, missing: mealIdeas.missing, notes: mealIdeas.notes })
     .from(mealIdeas)
     .where(and(eq(mealIdeas.kitchenId, scope.kitchenId), eq(mealIdeas.id, ideaId)))
     .limit(1);
-  return row ?? null;
+  if (!row) return null;
+  const { notes, ...rest } = row;
+  return notes ? { ...rest, notes } : rest;
 }
 
 // ─── Batches and "use it up" (0025) ───────────────────────────────────────────────────

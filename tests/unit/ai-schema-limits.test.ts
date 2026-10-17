@@ -97,6 +97,12 @@ async function bodiesByTask(): Promise<Record<string, Body>> {
   });
   task = "recipe-paste";
   await meals.readPastedRecipe({ ...recipe, messageId: "m", text: "Omelette: 2 eggs. Whisk and cook." });
+  task = "idea-refine";
+  await meals.refineIdea({
+    ...recipe,
+    idea: { ideaId: "idea-1", name: "Spinach omelette", why: "Quick", uses: [], missing: [] },
+    request: { messageId: "m", text: "no spinach" },
+  });
   return out;
 }
 
@@ -107,10 +113,10 @@ describe("structured-output schema limits (every task, the exact body sent)", ()
   });
 
   it("calls every task", async () => {
-    expect(Object.keys(await bodiesByTask()).sort()).toEqual(["ideas", "interpret", "recipe", "recipe-paste", "recipe-refine", "reword"]);
+    expect(Object.keys(await bodiesByTask()).sort()).toEqual(["idea-refine", "ideas", "interpret", "recipe", "recipe-paste", "recipe-refine", "reword"]);
   });
 
-  it.each(["interpret", "reword", "ideas", "recipe", "recipe-refine", "recipe-paste"])("%s stays well under the union and optional limits", async (task) => {
+  it.each(["interpret", "reword", "ideas", "idea-refine", "recipe", "recipe-refine", "recipe-paste"])("%s stays well under the union and optional limits", async (task) => {
     const schemas = strictSchemas((await bodiesByTask())[task]);
     const unions = schemas.reduce((n: number, s) => n + countUnions(s), 0);
     const optionals = schemas.reduce((n: number, s) => n + countOptionals(s), 0);

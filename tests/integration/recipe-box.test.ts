@@ -114,7 +114,8 @@ describe("A2: a Done meal keeps its recipe as cooked", () => {
       const r = await ok(db, ana, [
         { type: "recipe.save", target: { mealId }, source: "ai", text: `v${v}`, ingredients: [ing("eggs")], steps: [], basicsAssumed: [] },
       ]);
-      expect(r.applied[0].summary).toMatchObject({ code: "RECIPE_SAVED", params: { version: v } });
+      // 0052: a new version of a recipe the meal had says "Updated the … recipe".
+      expect(r.applied[0].summary).toMatchObject({ code: v === 1 ? "RECIPE_SAVED" : "RECIPE_UPDATED", params: { version: v } });
     }
   });
 });

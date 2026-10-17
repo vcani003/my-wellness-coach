@@ -1122,6 +1122,29 @@ function cookedRecipe(meal: Meal, kitchen: KitchenEntities): Recipe | undefined 
   );
 }
 
+/**
+ * A new version of a recipe the meal already had (0052): "Updated the Chicken curry recipe:
+ * removed greek yogurt". Ingredients are compared by name (case and accents folded); a change to
+ * amounts or steps only is "Updated the Chicken curry recipe". `what` picks the wording in the UI
+ * catalog (msgIcu.RECIPE_UPDATED); `text` is the English fallback.
+ */
+function recipeUpdatedMsg(
+  title: string,
+  version: number,
+  before: readonly { name: string }[],
+  after: readonly { name: string }[],
+): Msg {
+  const names = (list: readonly { name: string }[]) => new Map(list.map((i) => [foldText(i.name), i.name.trim()]));
+  const was = names(before);
+  const now = names(after);
+  const removed = [...was].filter(([k]) => !now.has(k)).map(([, n]) => n).join(", ");
+  const added = [...now].filter(([k]) => !was.has(k)).map(([, n]) => n).join(", ");
+  const what = removed && added ? "both" : removed ? "removed" : added ? "added" : "other";
+  const changes = [removed && `removed ${removed}`, added && `added ${added}`].filter(Boolean).join(", ");
+  const text = `Updated the ${title} recipe${changes ? `: ${changes}` : ""}`;
+  return { code: "RECIPE_UPDATED", params: { title, version, what, removed, added }, text };
+}
+
 function recipeSave(op: OperationOf<"recipe.save">, env: OpEnv): OpOutcome {
   const meal = env.kitchen.meals[op.target.mealId];
   if (!meal) return reject("UNKNOWN_TARGET");
@@ -1139,9 +1162,10 @@ function recipeSave(op: OperationOf<"recipe.save">, env: OpEnv): OpOutcome {
     steps: op.steps,
     basicsAssumed: op.basicsAssumed,
   };
+  const previous = cookedRecipe(meal, env.kitchen);
   return ok(
     [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.recipeSaved, payload)],
-    msg("RECIPE_SAVED", { title: meal.title, version: payload.version }),
+    previous ? recipeUpdatedMsg(meal.title, payload.version, previous.ingredients, payload.ingredients) : msg("RECIPE_SAVED", { title: meal.title, version: payload.version }),
     [
       { kind: "recipe", id: payload.recipeId, change: "added" },
       { kind: "meal", id: meal.id, change: "updated" },

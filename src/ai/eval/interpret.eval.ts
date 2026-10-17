@@ -18,7 +18,10 @@ import {
   PASTA_KITCHEN,
   CURRY_KITCHEN,
   FIRST_TEST_MESSAGE,
+  IDEA_REFINE_MESSAGE,
+  ideasViewRequest,
   mealInProgress,
+  SHOWN_IDEAS,
   NAMED_DISH_MESSAGE,
   request,
   VERO_LIST,
@@ -42,6 +45,8 @@ type Case = {
   history?: InterpretRequest["history"];
   list?: ListSpec[];
   meals?: ReturnType<typeof mealInProgress>[];
+  /** A whole request instead (e.g. with idea cards shown). */
+  req?: InterpretRequest;
   check: (r: InterpretResult, ops: Operation[]) => void;
 };
 
@@ -520,6 +525,74 @@ const cases: Case[] = [
       },
     }),
   ),
+  // Refining an idea card (ai.md §5, Vero 2026-10-15). SHOWN_IDEAS: d1 the lemongrass curry
+  // (uses chicken thighs, potatoes, coconut milk, Greek yogurt; missing lemongrass), d2 beef mince
+  // fried rice, d3 crispy tofu rice bowl.
+  {
+    name: "idea refine: Vero's exact message on Meal ideas → the curry card is edited; nothing chosen, no recipe",
+    text: IDEA_REFINE_MESSAGE,
+    req: ideasViewRequest(IDEA_REFINE_MESSAGE),
+    check: (r, ops) => {
+      expect(only(ops, "meal.choose")).toHaveLength(0);
+      expect(r.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: IDEA_REFINE_MESSAGE }]);
+      expect(ops.filter((o) => o.type.startsWith("item."))).toHaveLength(0);
+    },
+  },
+  {
+    name: "idea refine: 'swap the chicken for tofu in the first one' → d1 edited, nothing chosen",
+    text: "swap the chicken for tofu in the first one",
+    req: ideasViewRequest("swap the chicken for tofu in the first one"),
+    check: (r, ops) => {
+      expect(only(ops, "meal.choose")).toHaveLength(0);
+      expect(r.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: "swap the chicken for tofu in the first one" }]);
+    },
+  },
+  {
+    name: "idea refine: 'make the curry without yogurt' → chooses the curry card and writes its recipe with the change",
+    text: "make the curry without yogurt",
+    req: ideasViewRequest("make the curry without yogurt"),
+    check: (r, ops) => {
+      const [choose] = only(ops, "meal.choose");
+      expect(choose?.target).toEqual({ ideaId: "idea-curry" });
+      expect(r.followUps).toEqual([expect.objectContaining({ kind: "recipe", notes: expect.stringMatching(/yogurt/i) })]);
+      expect(r.followUps?.some((f) => f.kind === "idea-refine")).toBe(false);
+    },
+  },
+  {
+    name: "idea refine: with the curry's recipe open, 'actually leave out the yogurt' → recipe edit mode on that meal",
+    text: "actually leave out the yogurt",
+    req: {
+      ...ideasViewRequest("actually leave out the yogurt", [{ ...mealInProgress("meal-curry", SHOWN_IDEAS[0].name), ideaId: "idea-curry" }]),
+      history: [
+        { role: "user", text: "the first one" },
+        { role: "assistant", text: `Good choice. Here's a recipe for ${SHOWN_IDEAS[0].name}.` },
+      ],
+    },
+    check: (r, ops) => {
+      expect(only(ops, "meal.choose")).toHaveLength(0);
+      expect(r.followUps).toEqual([{ kind: "recipe", meal: { mealId: "meal-curry" }, refine: "actually leave out the yogurt" }]);
+    },
+  },
+  {
+    name: "idea refine (0051 IR2): on Meal ideas, the curry card already has your recipe → 'remove the yogurt from the curry' edits that recipe",
+    text: "remove the yogurt from the curry",
+    req: ideasViewRequest("remove the yogurt from the curry", [{ ...mealInProgress("meal-curry", SHOWN_IDEAS[0].name), ideaId: "idea-curry" }]),
+    check: (r, ops) => {
+      expect(only(ops, "meal.choose")).toHaveLength(0);
+      expect(r.followUps).toEqual([{ kind: "recipe", meal: { mealId: "meal-curry" }, refine: "remove the yogurt from the curry" }]);
+    },
+  },
+  {
+    name: "idea refine (0051 IR4): the curry card was chosen by another member → only this card changes, never their recipe",
+    text: "remove the yogurt from the curry",
+    req: ideasViewRequest("remove the yogurt from the curry", [
+      { ...mealInProgress("meal-curry", SHOWN_IDEAS[0].name), ideaId: "idea-curry", createdBy: { id: "u-ben", name: "Ben" } },
+    ]),
+    check: (r, ops) => {
+      expect(only(ops, "meal.choose")).toHaveLength(0);
+      expect(r.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: "remove the yogurt from the curry" }]);
+    },
+  },
   {
     name: "a named dish 'or something else?' → ideas, nothing chosen",
     text: "i was thinking a chicken curry, or something else?",
@@ -665,7 +738,7 @@ const cases: Case[] = [
 describe.skipIf(!process.env.ANTHROPIC_API_KEY)("interpreter eval (real model)", () => {
   for (const c of cases) {
     it(c.name, async () => {
-      const result = await interpreter.interpret(request(c.text, c.items, c.history, c.list, c.meals));
+      const result = await interpreter.interpret(c.req ?? request(c.text, c.items, c.history, c.list, c.meals));
       console.info(`[${c.name}] ${result.kind}: ${result.reply}`);
       c.check(result, opsOf(result));
     });

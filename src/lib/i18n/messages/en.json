@@ -156,6 +156,7 @@
         "MEAL_DATE_CLEARED": "took the day off {title}",
         "MEAL_STATUS": "{status, select, cooking {started cooking {title}} done {made {title}} cancelled {cancelled {title}} other {updated {title}}}",
         "RECIPE_SAVED": "saved a recipe for {title}",
+        "RECIPE_UPDATED": "updated the {title} recipe",
         "MEAL_MADE_AGAIN": "chose {title} to make again",
         "other": "made a change"
       }
@@ -357,6 +358,7 @@
     "MEAL_STATUS": "{title}: {status}",
     "MEAL_NOTE_SAVED": "Saved a note on {title}",
     "RECIPE_SAVED": "Saved the recipe for {title}",
+    "RECIPE_UPDATED": "Updated the {title} recipe",
     "MEAL_MADE_AGAIN": "Making {title} again",
     "ALREADY_MAKING": "{title} is already in your plan",
     "RECIPE_LOCKED": "{title} is finished, so its recipe stays as it was. Make it again to change it.",
@@ -379,7 +381,8 @@
   "msgIcu": {
     "ITEM_BATCH_USED_UP": "{name}: finished a batch ({left, plural, one {# batch left} other {# batches left}})",
     "ITEM_BATCH_GONE": "{name}: those are gone ({left, plural, one {# batch left} other {# batches left}})",
-    "ITEM_BATCH_ADDED": "Added {name} ({batches} batches){closedOldest, select, true {; the oldest batch is closed} other {}}{fromList, select, true { and took it off the shopping list} other {}}"
+    "ITEM_BATCH_ADDED": "Added {name} ({batches} batches){closedOldest, select, true {; the oldest batch is closed} other {}}{fromList, select, true { and took it off the shopping list} other {}}",
+    "RECIPE_UPDATED": "Updated the {title} recipe{what, select, removed {: removed {removed}} added {: added {added}} both {: removed {removed}, added {added}} other {}}"
   },
   "unlock": {
     "pageTitle": "Unlock · Kitchen",

@@ -1008,6 +1008,48 @@ export async function recordMealIdeas(
   return { setId, ideas: out };
 }
 
+/** Idea notes are the user's words, newest kept when they grow too long. */
+const IDEA_NOTES_MAX = 2000;
+
+/**
+ * Change one stored idea card in place (ai.md §5 "Refining an idea", and a card following its
+ * meal's latest recipe). Ideas aren't kitchen events (like `dropIdeaSet`), so this is a plain
+ * update. Uses that aren't items in this kitchen are dropped; allergen flags are computed here,
+ * by code, over the new card (0019). `note` (the user's words) is appended to the idea's notes.
+ * Returns the card as a stream `idea` payload, or null when there's no such idea in this kitchen.
+ */
+export async function updateMealIdea(
+  db: Queryable,
+  scope: KitchenScope,
+  ideaId: string,
+  next: { name?: string; why?: string; uses: string[]; missing: string[]; note?: string },
+): Promise<MealIdea | null> {
+  const [row] = await db
+    .select()
+    .from(mealIdeas)
+    .where(and(eq(mealIdeas.kitchenId, scope.kitchenId), eq(mealIdeas.id, ideaId)))
+    .limit(1);
+  if (!row) return null;
+  const names = await itemNames(db, scope.kitchenId, next.uses);
+  const uses = [...new Set(next.uses)].filter((id) => names.has(id));
+  const name = next.name?.trim() || row.name;
+  const why = next.why?.trim() || row.why;
+  const note = next.note?.trim();
+  const joined = note ? [row.notes, note].filter(Boolean).join("\n") : row.notes;
+  const notes = joined && joined.length > IDEA_NOTES_MAX ? joined.slice(joined.length - IDEA_NOTES_MAX) : joined;
+  await db
+    .update(mealIdeas)
+    .set({ name, why, uses, missing: next.missing, notes })
+    .where(and(eq(mealIdeas.kitchenId, scope.kitchenId), eq(mealIdeas.id, ideaId)));
+  const members = await listMembers(db, scope.kitchenId);
+  const profiles = await loadProfiles(
+    db,
+    members.map((m) => m.userId),
+  );
+  const restrictions = Object.values(profiles.restrictions);
+  return { ideaId, name, why, uses, missing: next.missing, allergenFlags: ideaFlags({ name, uses, missing: next.missing }, names, restrictions) };
+}
+
 /**
  * Remove an idea set that failed part-way (a mid-stream refusal, ai.md): its cards can no longer
  * be chosen. Ideas aren't kitchen events, so this is a plain delete. A meal already chosen from
