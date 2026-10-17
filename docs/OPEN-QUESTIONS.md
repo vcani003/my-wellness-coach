@@ -11,7 +11,14 @@
 
 ## Outstanding
 
-*Nothing outstanding.*
+### Preview feedback follow-ups (2026-10-17)
+**PF8 ⚪ Filling in a missing amount.** If a recipe line has no amount and you ask "how much eggs?", should Lumi also write the amount into the recipe (saving a new version, with Undo)?
+- **Rec:** no. Answer in chat only, as PF2 says. With PF1, missing amounts should be rare anyway.
+> Answer:
+
+**PF9 ⚪ Wording when a question is not acted on.** When a removal is skipped because it was asked as a question, Lumi says: "I didn't change anything, since that sounded like a question. Tell me if you meant it as a change."
+- **Rec:** keep this wording.
+> Answer:
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
