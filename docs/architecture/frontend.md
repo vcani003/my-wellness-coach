@@ -227,7 +227,7 @@ No accounts, no real AI. Node 24+.
 | Checks | `npm run typecheck` · `npm run lint` · `npm test` |
 | End-to-end + accessibility | `npx playwright install chromium` (once), then `npm run test:e2e`. It starts its own server on port 3210 with its own database (`.data/pglite-e2e`), so it doesn't touch yours. `M2_SCREENSHOTS=1 npm run test:e2e` refreshes `docs/design/screenshots/m2-*.png`. |
 
-The stand-in AI understands only: "I bought X, Y and Z", "I froze the X", "I used the rest of the X", "X is running low", "I defrosted the X", "the old X are gone", "undo". Anything else gets a polite "I didn't catch that".
+The stand-in AI understands only: "I bought X, Y and Z", "I froze the X", "I used the rest of the X", "X is running low", "I defrosted the X", "the old X are gone", "undo". Anything else gets a polite "I didn't catch that". *Updated by 0059 PF10: it now does simple kitchen updates only, declines questions, recipes and ideas with "That needs the real AI (Claude). I'm only the stand-in.", and "make me a sample recipe" gives a "Sample recipe (stand-in)" for clicking through the recipe screens (ai.md, "the stand-in only does simple kitchen updates").*
 Stop `npm run dev` before `npm run db:seed` (one process per local database folder).
 
 ## Build changelog
