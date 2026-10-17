@@ -1,6 +1,6 @@
 # 0059: Preview feedback: recipe amounts, recipe questions, phone chat, stand-in AI label
 
-**Status:** Accepted · 2026-10-17 · Decided by Vero (PF1–PF5, PF8, PF9: "go with recs"; PF6 and PF7 in her own words). Amends [0017](0017-shared-kitchen-and-layout.md) UX3 (the dock's default on phone).
+**Status:** Accepted · 2026-10-17 · Decided by Vero (PF1–PF5, PF8–PF10: "go with recs"; PF6 and PF7 in her own words). Amends [0017](0017-shared-kitchen-and-layout.md) UX3 (the dock's default on phone).
 
 Context: in the 2026-10-17 local preview, a Japanese rolled omelette recipe came with no amounts and generic steps. A question about the measurements removed ingredients. On her phone, messages didn't send, and chat was open at launch. The preview ran the stand-in AI.
 
@@ -13,3 +13,4 @@ Context: in the 2026-10-17 local preview, a Japanese rolled omelette recipe came
 - **PF7. Phone chat is tested with a real phone keyboard,** not only desktop Chrome with Enter. Vero: "You should be testing real phone capability with keyboard."
 - **PF8. A missing amount isn't written into the recipe** when someone asks about it. It is answered in chat only, as in PF2.
 - **PF9. When a removal is skipped because it was asked as a question,** Lumi says: "I didn't change anything, since that sounded like a question. Tell me if you meant it as a change."
+- **PF10. The stand-in AI only does simple kitchen updates:** bought, used, froze, running low, Out, undo, staples, and plan for a day. For questions, recipes, meal ideas and recipe changes it replies "That needs the real AI (Claude). I'm only the stand-in." and changes nothing. "Make me a sample recipe" gives a recipe titled "Sample recipe (stand-in)", so recipe and week-plan screens can still be clicked through. Recipe quality and questions are tested only with the real AI. Vero: "stand in ai shouldnt be able to answer. only the real model can."
