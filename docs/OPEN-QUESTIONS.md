@@ -11,7 +11,13 @@
 
 ## Outstanding
 
-*Nothing outstanding.*
+### What the stand-in AI may do (2026-10-17)
+**PF10 🟡 Stand-in AI limits.** Vero: "stand in ai shouldnt be able to answer. only the real model can." Today the stand-in pretends: it writes template recipes, answers "how much" from them, and turns sentences into odd items ("ingredients needed to make this", "5-6 large eggs").
+- **Rec:**
+  - The stand-in only does simple kitchen updates (bought, used, froze, running low, Out, undo, staples, plan for a day). For anything else, meaning questions, recipes, meal ideas and recipe changes, it replies "That needs the real AI (Claude). I'm only the stand-in." and changes nothing.
+  - So that recipe screens and the week's missing ingredients can still be clicked through offline, "make me a sample recipe" gives a recipe clearly titled "Sample recipe (stand-in)".
+  - Testing of recipe quality and questions waits for the real AI.
+> Answer:
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
