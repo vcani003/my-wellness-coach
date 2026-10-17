@@ -11,7 +11,14 @@
 
 ## Outstanding
 
-*Nothing outstanding.*
+### Stand-in follow-ups (2026-10-17)
+**PF14 ⚪ No button on a declined reply.** When the stand-in says "That needs the real AI (Claude)…", no button or link goes with it. The "Stand-in AI" badge already explains why.
+- **Rec:** leave it as is.
+> Answer:
+
+**PF15 ⚪ Mixed messages on the stand-in.** "I used the rest of the spinach, what can I make?" changes nothing on the stand-in, because the whole message is declined. The real AI splits it.
+- **Rec:** accept this for the stand-in.
+> Answer:
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
