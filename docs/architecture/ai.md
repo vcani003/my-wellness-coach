@@ -418,3 +418,46 @@ Decided in [0051](../decisions/0051-refining-meal-ideas-in-chat.md) (IR1–IR4).
 - **What the model sees.** `<today>2026-10-16 (Friday)</today>` (the person's day, with its weekday) and each planned meal's day: `m2: Pasta · planned · for Thu 2026-10-15 · has recipe`.
 - **The week, by code.** "What are we eating this week?" → `generate.what "week_plan"`; code answers with `weekPlanAnswer` (`src/ai/week-plan.ts`, the same grouping as the week view: today and the next 6 days, then "No day yet"). "Add what we need for this week's meals" / "what do we need this week?" → `"week_needs"`; the result carries `weekNeeds: {add}` (`add` when the words say add/put), and the **turn** reads the week's needs from the plan (it needs the recipes): `add` appends one `shopping.add` per missing ingredient (source `week-plan`) to the same change set and replies from the receipt; otherwise it lists them and offers "Want me to add these to your list?". A yes is `listOfferAccepted "week-plan"`. The model never writes `list_add` for these.
 - **Eval.** `src/ai/eval/week-plan-cases.ts` (9 cases), run free against the fake in `tests/unit/week-plan-ai.test.ts` and against the real model in `npm run eval`. The fake understands "plan the curry for Tuesday", "move the pasta to Friday", "take the day off the pasta", "what are we eating this week?" and "add what we need for this week's meals". Real-model run not done (staging key over its limit).
+
+## Build notes: recipe amounts and questions about a recipe (2026-10-17, [0059](../decisions/0059-preview-feedback-recipes-and-phone-chat.md) PF1 + PF2, prompts `interpret-2026-10-17.2` + `meals-2026-10-17.1`)
+**What went wrong in the preview** (stand-in AI): a Japanese rolled omelette came with no amounts and three generic steps, and note sentences such as "Season it with only hondashi" became ingredient lines. Then "no measurements for the eggs?" removed the eggs from the recipe, because the stand-in read any message starting "no …" as "take it out". The real path had gaps too: amounts could be null, and nothing said that "how much X do I need?" is a recipe question.
+
+**PF1: every ingredient has an amount.**
+- **Prompt** (`meals/prompts.ts`): every ingredient has an amount sized for "servings". Only salt, pepper and cooking oil used to taste may be null. Steps are concrete (which ingredient, heat, time, what to look for), never "Prepare the ingredients". A named dish's notes are how the user wants it made: they're followed in the ingredients and steps, and a note sentence is never itself an ingredient line ("season it with only hondashi" → hondashi with an amount, no other seasoning).
+- **Code check** (`missingAmounts` in `meals/to-recipe.ts`): any AI recipe (fresh, rewrite or edit) with a non-basic ingredient that has no amount logs `{event: "ai.quality", issue: "missing_amounts", count}`. It's a log, not a fix: code never makes an amount up, and the recipe still saves (0018).
+
+**PF2: a question about a recipe changes nothing.**
+- **Interpreter prompt:** a question about the open recipe's amounts, steps or times ("how much eggs do I need?", "what are the measurements?", "no measurements for the eggs?", "how long do I cook it?") is `recipe_change` with no operations, even when it starts with "no" or names an ingredient. "How much X is left / do we have?" is a kitchen answer instead.
+- **Recipe-change prompt:** such a question is `mode "edit"` with `edits: []`, and the reply answers it from `<current_recipe>`. If the recipe has no amount for that ingredient, the reply gives a sensible one. Empty edits were already "unchanged", so no new version is saved (follow-ups.ts). Known gap: if the edit answer is unreadable, the existing fallback rewrites the whole recipe, and that would save a version. It's rare and not worth new code yet.
+- **Code guard** (`src/ai/question-guard.ts`, called in `turn.ts` right after interpret, for the real and stand-in interpreters alike): **a removal whose own words were asked, not told, is dropped before apply.**
+  - Removals only: `item.remove`, `item.use`, `item.batch.close`, `item.stock.set` to Out, `shopping.remove`, `staple.remove`. Everything else is untouched.
+  - Judged per operation from its evidence. The evidence's clause runs from the last `, ; . ! ?` or line break before it. The words are "asked" when that clause opens with a question word (how, what, which, when, where, why, who, is, are, do, does, did, should, can I, could we, is there…), or when the clause ends at a `?`.
+  - So "I used the rest of the spinach, what can I make?" still uses the spinach: the `?` belongs to the next clause. "Should I throw out the milk?" removes nothing.
+  - Polite requests still count as requests: "Can you…", "Could you…", "Would you…", "Will you…" and "please…" are done as asked.
+  - No evidence, or evidence that can't be found in the message: the whole message is judged.
+  - Reply: when other operations still save, it's built from the receipt (no reword call). When only a follow-up remains, the follow-up answers. When nothing remains: "I didn't change anything, since that sounded like a question. Tell me if you meant it as a change." Logged as `ai.guard` with the count and the operation types (no message text).
+  - Why it's narrow: the risk is losing a real "we're out of eggs" said alongside a question. Judging per clause keeps that working. It's also easy to reverse: one call in `turn.ts`.
+
+**Stand-in AI** (`src/ai/fake/recipes.ts`, new), so previews don't mislead:
+- **Recipes for 2,** from a template for the kind of dish, picked by title words: eggs (omelette, tamagoyaki: rolled-omelette steps), pasta, curry/stew/soup, stir-fry/bowl, or anything else. Each has 4–7 steps that name the recipe's own ingredients and amounts.
+- **Amounts:** every non-basic ingredient gets one from a small name table (`fakeAmount`: eggs 4, coconut milk 1 can (400 ml), hondashi 1 tsp…). A dish's defining ingredient is added when nothing names it (eggs for an omelette, pasta for a pasta dish).
+- **Notes:** "with X, Y" and "I have X" are still ingredients (MI1). Other sentences are guidance: they're shown in the summary ("Your way: …"), a seasoning they name becomes an ingredient, "only <seasoning>" drops the salt, and "sweet" adds 1 tsp sugar.
+- **Questions:** with a recipe open, a recipe question (`isFakeRecipeQuestion`: how much / how many / measurements / amounts / how long / what heat, or "no/without … ?") goes to the recipe step. That step answers from the recipe's amounts or timed steps with `edits: []`, so nothing changes. "No X?" is never a removal edit. "How much rice is left?" isn't a recipe question.
+- **Dishes:** "I want to make it, how much…" no longer makes a dish called "It". A titled dish of it, that, this or one is ignored.
+- **Edits:** an ingredient the stand-in adds ("I'm using baby carrots too") gets an amount too.
+
+**Held removals keep a meal's day** (fixed in cbeb341, now tested): `tests/unit/bulk-remove.test.ts` round-trips a held change with a dated `meal.plan`, a `meal-step` date and an `idea-refine` follow-up. `tests/integration/bulk-remove.test.ts` holds "plan the curry for <day> + throw out 6 things", and the yes plans it for that day.
+
+**For the "stand-in AI" label (PF6, Frontend):** no new flag was added. `selectInterpreterKind()` in `src/ai/index.ts` returns `"fake"` exactly when the stand-in answers. A server component or route can call it and pass a boolean to the client. A real AI whose budget has run out is not the stand-in: it replies with the budget message.
+
+**Tests:**
+- `tests/unit/recipe-questions.test.ts`: the guard's asked/told cases, the stand-in's recipes and answers, the fake interpreter's routing and the "It" regression.
+- `tests/integration/recipe-questions.test.ts`: the preview flow end to end, plus the guard in the turn.
+- `tests/e2e/meals.spec.ts`: the stew edit test no longer assumes 3 steps. It hasn't been run here; Frontend runs Playwright.
+
+**Evals added, not run** (the staging key is blocked until 2026-11-01):
+- `interpret.eval.ts`: 4 recipe questions with an omelette open (no operations, a recipe follow-up), plus the "how much rice is left?" contrast.
+- `meals.eval.ts`:
+  - the amount check on the frittata, the named chicken curry and the cook-along base;
+  - Ana's tamagoyaki: amounts everywhere, the notes aren't ingredient lines, hondashi is used and there's no soy or fish sauce, 4+ steps, and it's rolled;
+  - recipe questions: unchanged, answered from the recipe, including a recipe with no egg amount.

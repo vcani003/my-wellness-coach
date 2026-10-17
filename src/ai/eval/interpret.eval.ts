@@ -4,7 +4,8 @@
  * 68 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list
  * (0027), older and newer batches (0025), a dish named in chat (MI1), item categories (CAT1) and
  * inferred places (0041), stock levels (0045 KOS4), smart staples (0054, `staples-cases.ts`) and
- * the dated week plan (0045 KOS1/KOS12, `week-plan-cases.ts`).
+ * the dated week plan (0045 KOS1/KOS12, `week-plan-cases.ts`) and questions about an open recipe
+ * (0059 PF2).
  */
 import { afterAll, describe, expect, it } from "vitest";
 import { STAPLE_CASES, stapleCaseRequest } from "./staples-cases";
@@ -525,6 +526,35 @@ const cases: Case[] = [
       },
     }),
   ),
+  // 0059 PF2: a question about the open recipe is answered by the recipe step and changes nothing
+  // (no kitchen, list or staple operation), even when it starts with "no" or names an ingredient.
+  ...["how much eggs do I need?", "what are the measurements?", "no measurements for the eggs?", "how long do I cook it?"].map(
+    (text, i): Case => ({
+      name: `recipe question ${i + 1}: '${text}' with an omelette open → recipe_change, no kitchen changes`,
+      text,
+      items: EGGS,
+      meals: [mealInProgress("meal-1", "Japanese rolled omelette", "cooking")],
+      history: [
+        { role: "user", text: "I want to make japanese rolled omelette. Season it with only hondashi. I like it a little sweet" },
+        { role: "assistant", text: "Japanese rolled omelette it is. Here's a recipe." },
+      ],
+      check: (r, ops) => {
+        expect(ops).toHaveLength(0);
+        expect(r.followUps).toEqual([expect.objectContaining({ kind: "recipe", meal: { mealId: "meal-1" }, refine: text })]);
+      },
+    }),
+  ),
+  {
+    name: "recipe question contrast: 'how much rice is left?' with a recipe open → a kitchen answer, no recipe change",
+    text: "how much rice is left?",
+    items: [...EGGS, { name: "jasmine rice", location: "pantry", stock: "some" }],
+    meals: [mealInProgress("meal-1", "Japanese rolled omelette", "cooking")],
+    check: (r, ops) => {
+      expect(ops).toHaveLength(0);
+      expect(r.followUps?.some((f) => f.kind === "recipe") ?? false).toBe(false);
+      expect(r.reply).toMatch(/rice/i);
+    },
+  },
   // Refining an idea card (ai.md §5, Vero 2026-10-15). SHOWN_IDEAS: d1 the lemongrass curry
   // (uses chicken thighs, potatoes, coconut milk, Greek yogurt; missing lemongrass), d2 beef mince
   // fried rice, d3 crispy tofu rice bowl.
