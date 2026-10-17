@@ -11,6 +11,7 @@ import {
   createRealMealAI,
   IDEAS_FAILURE_REPLY,
   MEAL_REFUSAL_REPLY,
+  RECIPE_QUESTION_UNREAD_REPLY,
   PASTE_TOO_LONG_REPLY,
   type MealLog,
   type StreamingMessagesApi,
@@ -501,6 +502,25 @@ describe("refinement edit mode (ai.md §5): small changes edit the recipe in pla
     const refused = setup({ json: {}, stop: "refusal" }, { json: OMELETTE });
     expect(await refused.meals.generateRecipe(await refine("no feta"))).toMatchObject({ ok: false, reason: "refusal", reply: MEAL_REFUSAL_REPLY });
     expect(refused.calls).toHaveLength(1);
+  });
+
+  it("0059 PF2: a question whose answer can't be used never rewrites: a reply, no second call, no recipe.save", async () => {
+    for (const [text, first] of [
+      ["how much eggs do I need?", { json: { oops: true } }],
+      ["what are the measurements?", { json: { mode: "edit", edits: [{ ...blank, op: "remove_ingredient", at: 9 }], recipe: null, reply: "x" } }],
+      ["no measurements for the eggs?", { json: { mode: "rewrite", edits: [], recipe: null, reply: "x" } }],
+    ] as const) {
+      const { meals, calls } = setup(first, { json: OMELETTE });
+      const events = await collect(meals.streamRecipe(await refine(text)));
+      expect(calls, text).toHaveLength(1);
+      expect(events.map((e) => e.type), text).toEqual(["done"]);
+      const done = events[0];
+      expect(done.type === "done" && done.result, text).toEqual({ ok: false, reason: "failed", reply: RECIPE_QUESTION_UNREAD_REPLY });
+    }
+    // A change (not a question) still falls back to the rewrite.
+    const change = setup({ json: { oops: true } }, { json: OMELETTE });
+    expect(await change.meals.generateRecipe(await refine("no feta"))).toMatchObject({ ok: true });
+    expect(change.calls).toHaveLength(2);
   });
 
   it("no edits (a question answered 'yes, that's fine'): nothing to save, no part", async () => {

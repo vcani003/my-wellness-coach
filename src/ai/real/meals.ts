@@ -42,6 +42,7 @@ import type {
   RecipeResult,
 } from "../meals/types";
 import { allergenExcusedIds, rankUseItUp } from "../meals/use-it-up";
+import { isQuestion } from "../question-guard";
 import { BUDGET_EXHAUSTED_REPLY, budgetExhaustedReason, type BudgetReason } from "./budget";
 import { PROMPT_VERSION, SYSTEM_PROMPT } from "./prompt";
 import { estimateCostUsd, taskSettings, type TaskSettings } from "./settings";
@@ -90,6 +91,8 @@ export interface RealMealOptions {
 
 export const IDEAS_FAILURE_REPLY = "Sorry, I couldn't come up with ideas just now. Please try again.";
 export const RECIPE_FAILURE_REPLY = "Sorry, I couldn't write the recipe just now. Please try again.";
+/** 0059 PF2: a question whose answer couldn't be read is never answered by rewriting the recipe. */
+export const RECIPE_QUESTION_UNREAD_REPLY = "Sorry, I couldn't read my answer to that just now, so the recipe is unchanged. Please ask again.";
 export const PASTE_FAILURE_REPLY = "Sorry, I couldn't read that recipe just now, so nothing was saved. Please try again.";
 export const PASTE_TOO_LONG_REPLY = "That recipe is too long for me to save. Could you paste just the ingredients and steps?";
 export const MEAL_REFUSAL_REPLY = "I can't help with that one.";
@@ -434,6 +437,16 @@ export function createRealMealAI(options: RealMealOptions = {}): MealAI {
     const parts = partEmitter(build, "recipe-refine");
     const content = renderRecipeRequest(input, now());
     let streamed = false;
+    // 0059 PF2: a question never saves a new version, so its fallback is a reply, not a rewrite.
+    const asked = isQuestion(refine.text);
+    const fallback = async function* (): AsyncGenerator<RecipeEvent> {
+      if (asked) {
+        log({ event: "ai.error", task: "recipe-refine", reason: "unusable answer to a question: no rewrite" });
+        yield { type: "done", result: { ok: false, reason: "failed", reply: RECIPE_QUESTION_UNREAD_REPLY } };
+        return;
+      }
+      yield* recipeStream("recipe", RECIPE_INSTRUCTIONS, content, build, RECIPE_FAILURE_REPLY);
+    };
     for await (const ev of call("recipe-refine", settings, RECIPE_REFINE_INSTRUCTIONS, REFINE_FORMAT, RecipeRefineOutput, content)) {
       if (ev.kind === "partial") {
         const r = ev.obj.recipe;
@@ -453,7 +466,7 @@ export function createRealMealAI(options: RealMealOptions = {}): MealAI {
           yield { type: "done", result: { ok: false, reason: ev.reason, reply: failReply(ev.reason, RECIPE_FAILURE_REPLY) } };
           return;
         }
-        yield* recipeStream("recipe", RECIPE_INSTRUCTIONS, content, build, RECIPE_FAILURE_REPLY);
+        yield* fallback();
         return;
       }
       const out = ev.value;
@@ -503,7 +516,7 @@ export function createRealMealAI(options: RealMealOptions = {}): MealAI {
         log({ event: "ai.error", task: "recipe-refine", reason: "rewrite without a recipe, rewriting" });
       }
       // Fallback: the full rewrite, exactly as before edit mode existed.
-      yield* recipeStream("recipe", RECIPE_INSTRUCTIONS, content, build, RECIPE_FAILURE_REPLY);
+      yield* fallback();
       return;
     }
     yield { type: "done", result: { ok: false, reason: "failed", reply: RECIPE_FAILURE_REPLY } };
