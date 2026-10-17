@@ -124,6 +124,24 @@ describe("the held change", () => {
     expect(err).toHaveBeenCalled();
     err.mockRestore();
   });
+
+  it("keeps a meal step's day and an idea change (regression: the day was dropped, and idea-refine made it unreadable; fixed in cbeb341)", () => {
+    const ops = [...["a", "b", "c", "d", "e", "f"].map(out), op({ type: "meal.plan", target: { ideaId: "idea-1" }, date: "2026-10-20" })];
+    const confirm = bulkConfirmFor(ops, state)!;
+    const pending = toPending(confirm, {
+      version: 4,
+      sourceMessageId: "m1",
+      messageText: "plan the curry for Tuesday and throw out …",
+      operations: ops,
+      followUps: [
+        { kind: "meal-step", meal: { chooseOpId: "7" }, to: "planned", date: "2026-10-20" },
+        { kind: "idea-refine", ideaId: "idea-2", request: "no yogurt in the second one" },
+      ],
+    });
+    const back = readPending(JSON.parse(JSON.stringify(pending)));
+    expect(back).toEqual(pending);
+    expect(back?.followUps[0]).toMatchObject({ kind: "meal-step", date: "2026-10-20" });
+  });
 });
 
 describe("the fake's removal phrases", () => {

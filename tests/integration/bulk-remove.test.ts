@@ -231,4 +231,41 @@ describe("more than 5 removals in one message (0045 KOS16)", () => {
     expect(yes.result?.applied).toHaveLength(7);
     expect(await open(ana)).toEqual(["limes"]);
   });
+
+  it("'plan the curry for Tuesday' + six removals: held, and the yes plans it for that day (0059: the day survives the hold)", async () => {
+    const { ana } = await anaWithSix();
+    await turn(ana, "I want to make a chicken curry");
+    const meal = (await getKitchenState(db, ana)).meals.find((m) => m.title === "Chicken curry")!;
+    expect(meal.status).toBe("chosen");
+    const day = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+    const said = <T>(value: T) => ({ value, basis: "said" as const, confidence: "high" as const });
+    const text = `plan the curry for ${day} and throw out the ${SIX}`;
+    const model: Interpreter = {
+      async interpret(req) {
+        const proposal: ProposedChange = {
+          proposalId: req.message.id,
+          kitchenId: req.kitchenId,
+          basedOnVersion: req.version,
+          source: { via: "chat", messageId: req.message.id },
+          operations: [
+            { opId: "1", type: "meal.plan", evidence: `plan the curry for ${day}`, target: { mealId: meal.id }, date: day },
+            ...["milk", "eggs", "bread", "rice", "butter", "cheese"].map((name, i) => ({
+              opId: String(i + 2),
+              type: "item.use" as const,
+              evidence: `throw out the ${SIX}`,
+              target: { name },
+              fields: { stock: said("out" as const) },
+            })),
+          ],
+        };
+        return { kind: "change", reply: "Done.", proposal };
+      },
+    };
+    const asked = await turn(ana, text, { interpreter: model });
+    expect(asked.confirm).not.toBeNull();
+    expect((await getKitchenState(db, ana)).meals.find((m) => m.id === meal.id)?.plannedFor).toBeUndefined();
+    const yes = await turn(ana, "yes", { interpreter: model });
+    expect(yes.result?.applied).toHaveLength(7);
+    expect((await getKitchenState(db, ana)).meals.find((m) => m.id === meal.id)).toMatchObject({ status: "planned", plannedFor: day });
+  });
 });
