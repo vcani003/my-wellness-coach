@@ -32,6 +32,7 @@ import { ConfirmSheet } from "./ConfirmSheet";
 import { LinkSheet } from "./LinkSheet";
 import { PassphraseSheet } from "./PassphraseSheet";
 import { clearDeviceData, pendingConfirms, REMEMBER_HEADING_ID, type MemberRestrictions, type SettingsActions } from "./model";
+import { newId } from "@/shared/new-id";
 
 export const SETTINGS_HEADING_ID = "settings-heading";
 
@@ -340,7 +341,7 @@ function RememberSection({
     setBusy({ id: r.id, action });
     setFailed(null);
     try {
-      const res = await actions[action]({ tapId: crypto.randomUUID(), restrictionId: r.id });
+      const res = await actions[action]({ tapId: newId(), restrictionId: r.id });
       if (!res.ok) {
         setFailed(r.id);
         return;

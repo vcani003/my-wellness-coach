@@ -21,6 +21,7 @@ import { undoChange } from "@/app/actions";
 import { chatReducer, initialChatState, type ChatState } from "./chat-reducer";
 import { readTurnStream } from "./stream";
 import { withTimeZone } from "@/ui/sync/time-zone";
+import { newId } from "@/shared/new-id";
 
 /** Messages per history page (the server's default, backend-data.md §6). */
 export const HISTORY_PAGE_SIZE = 30;
@@ -67,7 +68,6 @@ export interface TurnCallbacks {
   onUndoRefused(reason: Msg): void;
 }
 
-const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `m-${Date.now()}-${Math.random()}`);
 
 export function useChat(opts: {
   kitchenId: string;

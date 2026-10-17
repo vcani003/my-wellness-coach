@@ -29,6 +29,7 @@ import { usePlaceMemory } from "@/ui/places/PlaceMemory";
 import { useKitchenActions, type ItemEditFields } from "@/ui/sync/KitchenActionsContext";
 import { useKitchenData } from "@/ui/sync/KitchenDataContext";
 import { outcomeOf, type ItemNote } from "./item-edit-model";
+import { newId } from "@/shared/new-id";
 
 /** The open sheet: which item, the version it opened at (moved on by your own changes in it). */
 export interface Editing {
@@ -145,7 +146,7 @@ export function useItemEditControl(offline: boolean) {
       const open = editingRef.current;
       if (!open || offline) return "failed";
       setBusyId(item.id);
-      const base = { itemId: item.id, before: item, turn, key: crypto.randomUUID(), sheet: open.sheet };
+      const base = { itemId: item.id, before: item, turn, key: newId(), sheet: open.sheet };
       try {
         const res = await call(open.version);
         if (!res.ok) return "failed";
@@ -186,7 +187,7 @@ export function useItemEditControl(offline: boolean) {
     const receipt = current?.receipt;
     if (!current || !receipt || receipt.undo === "pending" || receipt.undo === "done") return;
     const withUndo = (undo: ReceiptModel["undo"], focus: boolean) =>
-      show({ ...current, receipt: { ...receipt, undo }, key: crypto.randomUUID() }, focus ? { undo: false } : null);
+      show({ ...current, receipt: { ...receipt, undo }, key: newId() }, focus ? { undo: false } : null);
     withUndo("pending", false);
     try {
       const res = await actions.undo(receipt.changeSetId);
@@ -215,7 +216,7 @@ export function useItemEditControl(offline: boolean) {
       open(item, el) {
         opener.current = el;
         closingToNote.current = false;
-        setEditing({ itemId: item.id, item, version, sheet: crypto.randomUUID() });
+        setEditing({ itemId: item.id, item, version, sheet: newId() });
       },
       close: () => close(),
       save: (item, edit, batchId) => run(item, (v) => actions.editItem(item.id, edit, { basedOnVersion: v, ...(batchId ? { batchId } : {}) }), { closeOnSave: true, focusUndo: true }),

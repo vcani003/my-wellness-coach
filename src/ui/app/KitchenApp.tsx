@@ -77,6 +77,7 @@ import { fetchPastMeals, RecipeBoxProvider, type RecipeBoxActions } from "@/ui/w
 import { UpdateKitchenSheet } from "@/ui/widgets/meals/UpdateKitchenSheet";
 import { useMealsController } from "@/ui/widgets/meals/useMealsController";
 import { useTickQueue } from "@/ui/widgets/shopping/useTickQueue";
+import { newId } from "@/shared/new-id";
 
 export interface KitchenAppProps {
   kitchenId: string;
@@ -351,7 +352,7 @@ function KitchenScreen({
     // `version`: the one an edit sheet opened at (KOS3), so a change made since is refused whole.
     const tap = (version?: number) => ({
       kitchenId,
-      tapId: crypto.randomUUID(),
+      tapId: newId(),
       basedOnVersion: version ?? sync.getSnapshot().state?.version ?? 0,
     });
     return {
@@ -397,7 +398,7 @@ function KitchenScreen({
     () => ({
       listPastMeals: (q) => fetchPastMeals(kitchenId, q),
       makeAgain: (fromMealId) =>
-        makeAgain({ kitchenId, tapId: crypto.randomUUID(), basedOnVersion: sync.getSnapshot().state?.version ?? 0, fromMealId }),
+        makeAgain({ kitchenId, tapId: newId(), basedOnVersion: sync.getSnapshot().state?.version ?? 0, fromMealId }),
     }),
     [kitchenId, sync],
   );

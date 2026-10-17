@@ -33,6 +33,7 @@ import { MEAL_IDEAS_WIDGET_ID } from "./MealIdeasWidget";
 import type { MealActions, MealNotice, MealsContextValue } from "./MealsContext";
 import { RECIPE_HEADING_ID } from "./RecipeScreen";
 import { initialMealsSession, mealsReducer, type UpdateKitchenRequest } from "./session";
+import { newId } from "@/shared/new-id";
 
 const RECIPE_PATH = /^\/recipe\/([^/]+)\/?$/;
 
@@ -42,7 +43,6 @@ export function recipeMealId(pathname: string | null): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `t-${Date.now()}-${Math.random()}`);
 
 /**
  * Focus an element once it's on screen (the Recipe arrives from the server a moment after the URL
