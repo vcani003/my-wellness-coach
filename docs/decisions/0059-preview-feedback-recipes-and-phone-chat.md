@@ -1,6 +1,6 @@
 # 0059: Preview feedback: recipe amounts, recipe questions, phone chat, stand-in AI label
 
-**Status:** Accepted · 2026-10-17 · Decided by Vero (PF1–PF5, PF8–PF10: "go with recs"; PF6 and PF7 in her own words). Amends [0017](0017-shared-kitchen-and-layout.md) UX3 (the dock's default on phone).
+**Status:** Accepted · 2026-10-17 · Decided by Vero (PF1–PF5, PF8–PF10, PF12, PF13: "go with recs"; PF6 and PF7 in her own words). Amends [0017](0017-shared-kitchen-and-layout.md) UX3 (the dock's default on phone).
 
 Context: in the 2026-10-17 local preview, a Japanese rolled omelette recipe came with no amounts and generic steps. A question about the measurements removed ingredients. On her phone, messages didn't send, and chat was open at launch. The preview ran the stand-in AI.
 
@@ -15,3 +15,5 @@ Context: in the 2026-10-17 local preview, a Japanese rolled omelette recipe came
 - **PF9. When a removal is skipped because it was asked as a question,** Lumi says: "I didn't change anything, since that sounded like a question. Tell me if you meant it as a change."
 - **PF10. The stand-in AI only does simple kitchen updates:** bought, used, froze, running low, Out, undo, staples, and plan for a day. For questions, recipes, meal ideas and recipe changes it replies "That needs the real AI (Claude). I'm only the stand-in." and changes nothing. "Make me a sample recipe" gives a recipe titled "Sample recipe (stand-in)", so recipe and week-plan screens can still be clicked through. Recipe quality and questions are tested only with the real AI. Vero: "stand in ai shouldnt be able to answer. only the real model can."
 - **PF11. The item edit sheet opens with a soft spring bounce** (phone: it slides up; desktop: it pops in), and the tapped food tile squishes slightly. Reduced motion gets a plain fade. This is an exception to [0046](0046-cream-style-details.md)'s "overshoot for Lumi and celebrations only". It is kept as separate motion tokens, so it is easy to remove. Vero: "can you recreate a smoother transition or even something fun like a bounce?"
+- **PF12. After a level or Staple tap with nothing typed,** the item sheet's footer shows a single "Done". Typing anything brings back Cancel and Save.
+- **PF13. Every bottom sheet uses the same motion as the item sheet** (PF11): Restock staples, Done shopping, the week's missing ingredients and the day menu.

@@ -11,14 +11,7 @@
 
 ## Outstanding
 
-### Item sheet follow-ups (2026-10-17)
-**PF12 ⚪ The footer after an instant change.** After you tap a level or Staple and type nothing, the sheet's footer shows a single "Done" button instead of "Done" plus a greyed-out Save. Typing anything brings Save back.
-- **Rec:** keep the single Done.
-> Answer:
-
-**PF13 ⚪ The same motion on other sheets.** Only the item edit sheet bounces. The other sheets (Restock staples, Done shopping, the week's missing ingredients, the day menu) still open plainly.
-- **Rec:** use the same motion on every bottom sheet, for consistency. It's a small change.
-> Answer:
+*Nothing outstanding.*
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
@@ -135,3 +128,4 @@ These are engineering calls, so they're not questions for you. Each will be expl
 | PF1–PF5 | Preview feedback: recipe amounts, recipe questions, chat at launch, working branch, real AI in previews | [0059](decisions/0059-preview-feedback-recipes-and-phone-chat.md): all Recs |
 | PF8–PF9 | Filling in a missing amount; wording when a question is not acted on | [0059](decisions/0059-preview-feedback-recipes-and-phone-chat.md): all Recs |
 | PF10 | What the stand-in AI may do | [0059](decisions/0059-preview-feedback-recipes-and-phone-chat.md): Rec |
+| PF12–PF13 | Item sheet footer after an instant change; same motion on all sheets | [0059](decisions/0059-preview-feedback-recipes-and-phone-chat.md): all Recs |
