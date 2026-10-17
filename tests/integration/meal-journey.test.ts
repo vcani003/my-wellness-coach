@@ -102,14 +102,15 @@ describe("the meal journey (0005 steps 5–7)", () => {
     expect(chose.result?.applied.map((a) => a.summary.text)).toEqual(["Chose Limes rice bowl"]);
     const mealId = chose.result!.applied[0].refs.find((r) => r.kind === "meal")!.id;
     expect(chose.types.slice(0, 7)).toEqual(["ack", "status", "status", "applied", "status", "text", "status"]);
-    expect(of(chose.events, "recipe").map((e) => e.part)).toEqual(["meta", "ingredient", "ingredient", "ingredient", "ingredient", "step", "step", "step", "basics"]);
+    expect(of(chose.events, "recipe").map((e) => e.part)).toEqual(["meta", "ingredient", "ingredient", "ingredient", "ingredient", "step", "step", "step", "step", "step", "basics"]);
     const saved = of(chose.events, "recipe.saved")[0];
     expect(saved).toMatchObject({ mealId, version: 1 });
     expect(chose.types.at(-1)).toBe("done");
     const recipe = await getRecipe(db, vero, mealId);
     expect(recipe?.ingredients.map((i) => [i.name, i.amount ?? null, i.item && "name" in i.item ? i.item.name : null])).toEqual([
-      ["limes", null, "limes"],
-      ["spinach", null, "spinach"],
+      // The stand-in gives every non-basic an amount (0059 PF1).
+      ["limes", "1", "limes"],
+      ["spinach", "a handful", "spinach"],
       ["salt", "a pinch", null],
       ["cooking oil", "1 tbsp", null],
     ]);

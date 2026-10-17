@@ -242,23 +242,25 @@ test("in chat: a small recipe change edits the open Recipe in place (ai.md §5 e
   const steps = recipe(page).getByRole("listitem");
   // A step's words, without its number circle (aria-hidden).
   const stepText = steps.locator("span:not([aria-hidden])");
-  await expect(steps).toHaveCount(3);
+  // The stand-in writes 4+ concrete steps for a stew (0059); the exact count doesn't matter here.
+  await expect(steps.nth(3)).toBeVisible();
   const before = await stepText.allTextContents();
+  const last = before.length - 1;
 
   await say(page, "I'm using baby carrots too");
   const carrots = recipe(page).getByRole("checkbox", { name: "Baby carrots" });
   await expect(carrots).toBeVisible();
   // The new line is marked for the highlight; the rest of the recipe is exactly as it was.
   await expect(recipe(page).locator("[data-recipe-changed]").filter({ has: page.getByRole("checkbox", { name: "Baby carrots" }) })).toHaveCount(1);
-  await expect(steps).toHaveCount(3);
-  expect((await stepText.allTextContents()).slice(0, 2)).toEqual(before.slice(0, 2));
-  await expect(steps.nth(2)).toHaveAttribute("data-recipe-changed", "");
-  await expect(steps.nth(2)).toContainText("baby carrots");
+  await expect(steps).toHaveCount(before.length);
+  expect((await stepText.allTextContents()).slice(0, last)).toEqual(before.slice(0, last));
+  await expect(steps.nth(last)).toHaveAttribute("data-recipe-changed", "");
+  await expect(steps.nth(last)).toContainText("baby carrots");
   await expect(recipe(page)).not.toContainText("Writing your recipe…");
   await expect(page.getByTestId("announcer")).toContainText("Recipe updated.");
   await expectAccessible(page, "recipe after an edit");
 
   await say(page, "skip step 1");
-  await expect(steps).toHaveCount(2);
+  await expect(steps).toHaveCount(before.length - 1);
   await expect(stepText.first()).toHaveText(before[1]);
 });

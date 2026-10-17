@@ -26,36 +26,33 @@ import type {
   RecipeResult,
 } from "../meals/types";
 import { allergenExcusedIds, rankUseItUp } from "../meals/use-it-up";
+import { answerRecipeQuestion, definingIngredient, fakeAmount, fakeSteps, isFakeRecipeQuestion, readNotes, type ReadNotes } from "./recipes";
 import { collectIdeas, collectRecipe } from "../real/meals";
 
 /**
  * A named dish's ingredients (MI1), the fake way: kitchen items a word of the title names
- * ("chicken" → chicken thighs), then everything listed in the notes ("with X, Y and Z", "I have
- * X"), as said. Code then sorts them into In your kitchen / Need, as for the real model.
+ * ("chicken" → chicken thighs), then what the notes list ("with X, Y and Z", "I have X") and what
+ * they season it with ("season it with only hondashi" → hondashi). Notes about HOW they want it
+ * are guidance, never ingredient lines (0059). Code then sorts them into In your kitchen / Need.
  */
-function dishIngredients(input: RecipeInput, toLabel: Map<string, string>): RecipeOutput["ingredients"] {
+function dishIngredients(input: RecipeInput, toLabel: Map<string, string>, notes: ReadNotes): RecipeOutput["ingredients"] {
   const fromTitle = input.meal.title
     .split(/\s+/)
     .map((word) => matchKitchenItem(input.state, word))
     .filter((i): i is NonNullable<typeof i> => Boolean(i));
-  const named = (input.meal.notes ?? "")
-    .split(/[.!?;]+/)
-    .map((s) => s.trim().replace(/^(?:and\s+)?(?:with|(?:i|we)\s+(?:also\s+)?(?:have|'ve got|got)|use)\s+(?:also\s+)?/i, ""))
-    .flatMap((s) => s.split(/\s*,\s*(?:and\s+)?|\s+and\s+/i))
-    .map((s) => s.trim().replace(/^(?:a|an|some|the)\s+/i, ""))
-    .filter(Boolean);
   const out: RecipeOutput["ingredients"] = [];
   const seen = new Set<string>();
   for (const item of fromTitle) {
     if (seen.has(item.id)) continue;
     seen.add(item.id);
-    out.push({ name: item.name.value, amount: null, item: toLabel.get(item.id) ?? null, basic: false });
+    out.push({ name: item.name.value, amount: fakeAmount(item.name.value), item: toLabel.get(item.id) ?? null, basic: false });
   }
-  for (const name of named) {
+  for (const name of [...notes.listed, ...notes.seasoning]) {
     const item = matchKitchenItem(input.state, name);
     if (item && seen.has(item.id)) continue;
     if (item) seen.add(item.id);
-    out.push({ name, amount: null, item: item ? (toLabel.get(item.id) ?? null) : null, basic: false });
+    if (!item && out.some((o) => o.name.toLowerCase() === name.toLowerCase())) continue;
+    out.push({ name, amount: fakeAmount(name), item: item ? (toLabel.get(item.id) ?? null) : null, basic: false });
   }
   return out;
 }
@@ -85,7 +82,8 @@ export function fakeEdits(text: string, current: Current): { edits: RecipeEditOu
     if (at < 0) return null;
     return { edits: [{ ...blank, op: "change_ingredient", at: at + 1, name: current.ingredients[at].name, amount: m[1] }], reply: `Changed it to ${m[1]} ${m[2]}.` };
   }
-  m = /^(?:no|without|i don'?t have(?: any)?|i'?m out of) (.+)$/i.exec(t);
+  // "No measurements for the eggs?" is a question, not a removal (0059 PF2).
+  m = /\?\s*$/.test(text) && /^(?:no|without)\b/i.test(t) ? null : /^(?:no|without|i don'?t have(?: any)?|i'?m out of) (.+)$/i.exec(t);
   if (m) {
     const at = find(m[1]);
     if (at < 0) return null;
@@ -98,7 +96,7 @@ export function fakeEdits(text: string, current: Current): { edits: RecipeEditOu
     if (!name || last === 0) return null;
     return {
       edits: [
-        { ...blank, op: "add_ingredient", at: current.ingredients.length, name },
+        { ...blank, op: "add_ingredient", at: current.ingredients.length, name, amount: fakeAmount(name) },
         { ...blank, op: "change_step", at: last, text: `${current.steps[last - 1]} Add the ${name} too.` },
       ],
       reply: `Added ${name} and worked it into step ${last}.`,
@@ -252,8 +250,15 @@ export function createFakeMealAI(now: () => Date = () => new Date()): MealAI {
     const { toId, toLabel } = labelMaps(input);
     const idea = input.meal.idea;
     const current = input.refine?.current;
+    // 0059 PF2: a question about the recipe ("how much eggs do I need?") is answered from it and
+    // changes nothing: no edits, so no new version (the same code path as the real one).
+    const question = current && isFakeRecipeQuestion(input.refine!.text);
     // A small refinement goes through edit mode and the SAME apply code as the real one.
-    const edit = current ? fakeEdits(input.refine!.text, current) : null;
+    const edit = question
+      ? { edits: [], reply: answerRecipeQuestion(input.refine!.text, current) }
+      : current
+        ? fakeEdits(input.refine!.text, current)
+        : null;
     if (edit) {
       const applied = applyRecipeEdits(current!, edit.edits, edit.reply, {
         ctx: input,
@@ -264,6 +269,10 @@ export function createFakeMealAI(now: () => Date = () => new Date()): MealAI {
         opId: `${input.refine!.messageId}:recipe`,
         evidence: input.refine!.text,
       });
+      if (applied.ok && applied.result.unchanged) {
+        yield { type: "done", result: applied.result };
+        return;
+      }
       if (applied.ok) {
         const r = applied.result;
         const g = r.recipe;
@@ -290,31 +299,49 @@ export function createFakeMealAI(now: () => Date = () => new Date()): MealAI {
     // "…without yogurt" / "no yogurt" in the user's words about the meal or its idea: left out.
     const leftOut = [...`${input.meal.notes ?? ""}\n${idea?.notes ?? ""}`.matchAll(/\b(?:without|no|remove|don'?t want(?: to use)?)\s+(?:the\s+|any\s+)?([a-z][a-z ]*?)(?=$|[\n,.;!?]|\s+(?:in|from|on)\b)/gim)].map((m) => m[1].trim().toLowerCase());
     const kept = (name: string) => !leftOut.some((w) => name.toLowerCase().includes(w) || w.includes(name.toLowerCase()));
-    const out: RecipeOutput = current
-      ? {
-          title: current.title,
-          summary: `Adjusted: ${input.refine!.text}`,
-          servings: current.servings ?? "2",
-          ingredients: current.ingredients.map((i) => ({ name: i.name, amount: i.amount, item: i.itemId ? (toLabel.get(i.itemId) ?? null) : null, basic: i.group === "basic" })),
-          steps: [...current.steps, `Adjusted for: ${input.refine!.text}`],
-          reply: "Here's the updated recipe.",
-        }
-      : {
-          title: input.meal.title,
-          summary: "A quick suggestion from your kitchen.",
-          servings: "2",
-          ingredients: [
-            ...(!idea ? dishIngredients(input, toLabel) : []),
-            ...(idea?.uses ?? [])
-              .map((id) => ({ name: input.state.items.find((i) => i.id === id)?.name.value ?? "", amount: null, item: toLabel.get(id) ?? null, basic: false }))
-              .filter((i) => kept(i.name)),
-            ...(idea?.missing ?? []).filter(kept).map((name) => ({ name, amount: null, item: null, basic: false })),
-            { name: "salt", amount: "a pinch", item: null, basic: true },
-            { name: "cooking oil", amount: "1 tbsp", item: null, basic: true },
-          ],
-          steps: ["Prepare the ingredients.", "Cook everything in a hot pan with the oil.", "Season with salt and serve."],
-          reply: `Here's a recipe for ${input.meal.title}.`,
-        };
+    let out: RecipeOutput;
+    if (current) {
+      out = {
+        title: current.title,
+        summary: `Adjusted: ${input.refine!.text}`,
+        servings: current.servings ?? "2",
+        ingredients: current.ingredients.map((i) => ({ name: i.name, amount: i.amount, item: i.itemId ? (toLabel.get(i.itemId) ?? null) : null, basic: i.group === "basic" })),
+        steps: [...current.steps, `Adjusted for: ${input.refine!.text}`],
+        reply: "Here's the updated recipe.",
+      };
+    } else {
+      // A fresh recipe for 2 (0059): amounts on everything but the to-taste basics, steps for this
+      // kind of dish, and the user's notes as guidance.
+      const notes = readNotes(input.meal.notes ?? "");
+      const mains: RecipeOutput["ingredients"] = [
+        ...(!idea ? dishIngredients(input, toLabel, notes) : []),
+        ...(idea?.uses ?? [])
+          .map((id) => {
+            const name = input.state.items.find((i) => i.id === id)?.name.value ?? "";
+            return { name, amount: fakeAmount(name), item: toLabel.get(id) ?? null, basic: false };
+          })
+          .filter((i) => kept(i.name)),
+        ...(idea?.missing ?? []).filter(kept).map((name) => ({ name, amount: fakeAmount(name), item: null, basic: false })),
+      ].filter((i) => kept(i.name));
+      const defining = definingIngredient(input.meal.title, mains);
+      if (defining) mains.unshift(defining);
+      if (notes.sweet && !mains.some((i) => /\b(sugar|honey|mirin)\b/i.test(i.name))) mains.push({ name: "sugar", amount: "1 tsp", item: null, basic: false });
+      const salt = !notes.onlySeasoning;
+      const ingredients = [
+        ...mains,
+        ...(salt ? [{ name: "salt", amount: "a pinch", item: null, basic: true }] : []),
+        { name: "cooking oil", amount: "1 tbsp", item: null, basic: true },
+      ];
+      const guidance = notes.guidance.map((g) => g.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase()));
+      out = {
+        title: input.meal.title,
+        summary: `A quick ${input.meal.title.toLowerCase()} for 2.${guidance.length ? ` Your way: ${guidance.join("; ")}.` : ""}`,
+        servings: "2",
+        ingredients,
+        steps: fakeSteps(input.meal.title, ingredients, { salt }),
+        reply: `Here's a recipe for ${input.meal.title}.`,
+      };
+    }
     const result = toRecipeResult(out, {
       ctx: input,
       labels: toId,

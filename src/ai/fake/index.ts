@@ -11,7 +11,9 @@
  *   "X goes under <category>" (CAT1; adds also get the shared keyword guess) ·
  *   "X goes in the pantry" / "put X in the fridge" (0041; adds get their place from the backend) ·
  *   "I was thinking a <dish>, with … I have X" / "I want to make <dish>" (MI1) ·
- *   with a recipe open: "I'm using X too", "no X", "use 3 X instead of 2", "skip step 2", "make it …" ·
+ *   with a recipe open: "I'm using X too", "no X", "use 3 X instead of 2", "skip step 2", "make it …",
+ *   and questions about it ("how much X do I need?", "what are the measurements?", "how long?"),
+ *   answered from the recipe with no change (0059 PF2) ·
  *   staples (0054): "X is a staple [from Store]", "we always keep X", "X isn't a staple any more",
  *   "what staples do I need?" / "restock", and "yes" to its own "remember these as your staples?" ·
  *   the dated plan (0045 KOS1, KOS12): "plan the curry for Tuesday", "move the pasta to Friday",
@@ -34,6 +36,7 @@ import { STAPLES_OFFER, staplesAnswer } from "../staples";
 import { WEEK_NEEDS_ADD, weekPlanAnswer } from "../week-plan";
 import { isIsoDay } from "@/shared/plan-dates";
 import { matchIntent, splitList, type Segment } from "./patterns";
+import { isFakeRecipeQuestion } from "./recipes";
 
 /** The recipe changes the fake understands (fake/meals.ts `fakeEdits`), plus "make it vegetarian" (a rewrite). */
 export const FAKE_RECIPE_CHANGE =
@@ -144,8 +147,11 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
     async interpret(req): Promise<InterpretResult> {
       const changed = ideaChange(req);
       if (changed) return changed;
-      // A change to a recipe you have open ("no garlic", "skip step 2"): only when one exists.
-      if (FAKE_RECIPE_CHANGE.test(req.message.text.trim()) && req.state.meals.some((m) => m.recipe)) {
+      // A change to a recipe you have open ("no garlic", "skip step 2"), or a question about it
+      // ("how much eggs do I need?", "no measurements for the eggs?", 0059 PF2): only when one
+      // exists. A question goes the same way and the recipe step answers it with no change.
+      const text = req.message.text.trim();
+      if ((isFakeRecipeQuestion(text) || FAKE_RECIPE_CHANGE.test(text)) && req.state.meals.some((m) => m.recipe)) {
         const out: ModelOutput = {
           kind: "answer",
           reply: "",

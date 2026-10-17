@@ -221,7 +221,8 @@ function dishIntent(text: string): FakeIntent | null {
   const m = DISH.exec(text);
   if (!m) return null;
   const dish = m[2].trim();
-  if (!dish) return null;
+  // "I want to make it, how much…" names no dish (0059).
+  if (!dish || /^(?:it|that|this|this one|that one|one|something|some)$/i.test(dish)) return null;
   const notes = m[3].replace(/^\s*[,.]\s*/, "").trim();
   const have = notes
     .split(/[.!?]+/)
