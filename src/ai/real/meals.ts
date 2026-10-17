@@ -26,7 +26,7 @@ import {
 } from "../meals/prompts";
 import { IDEA_REFINE_FAILURE_REPLY, toRefinedIdea } from "../meals/refine-idea";
 import { toIdea, type IdeaGuardContext } from "../meals/to-ideas";
-import { toIngredient, toRecipeResult, toStep, type RecipeBuild } from "../meals/to-recipe";
+import { missingAmounts, toIngredient, toRecipeResult, toStep, type RecipeBuild } from "../meals/to-recipe";
 import type {
   GeneratedIdea,
   IdeaRefineInput,
@@ -77,7 +77,9 @@ export type MealLog =
       ms: number;
     }
   | { event: "ai.budget_exhausted"; task: MealTask; reason: BudgetReason; status: number | undefined; requestId: string | null }
-  | { event: "ai.error"; task: MealTask; reason: string };
+  | { event: "ai.error"; task: MealTask; reason: string }
+  /** 0059 PF1: a written recipe with ingredients that have no amount (count only; nothing is changed). */
+  | { event: "ai.quality"; task: MealTask; issue: "missing_amounts"; count: number };
 
 export interface RealMealOptions {
   messages?: StreamingMessagesApi;
@@ -327,7 +329,7 @@ export function createRealMealAI(options: RealMealOptions = {}): MealAI {
    * Turns a recipe being written (partial JSON objects) into `recipe` parts, each sent once, in
    * order; `finish` sends whatever wasn't streamed from the validated answer (authoritative).
    */
-  function partEmitter(build: StreamBuild) {
+  function partEmitter(build: StreamBuild, task: MealTask) {
     const { ctx, labels } = build;
     let metaSent = false;
     let ingProcessed = 0;
@@ -372,6 +374,10 @@ export function createRealMealAI(options: RealMealOptions = {}): MealAI {
 
     function* finish(result: Extract<RecipeResult, { ok: true }>): Generator<RecipeEvent> {
       const r = result.recipe;
+      if (build.source === "ai") {
+        const missing = missingAmounts(r.ingredients).length;
+        if (missing > 0) log({ event: "ai.quality", task, issue: "missing_amounts", count: missing });
+      }
       if (!metaSent) {
         yield { type: "part", part: "meta", data: { title: r.title, summary: r.summary, servings: r.servings, source: r.source, allergenFlags: r.allergenFlags } };
       }
@@ -392,7 +398,7 @@ export function createRealMealAI(options: RealMealOptions = {}): MealAI {
     failure: string,
   ): AsyncGenerator<RecipeEvent> {
     const settings = taskSettings("recipe", env);
-    const parts = partEmitter(build);
+    const parts = partEmitter(build, task);
     for await (const ev of call(task, settings, instructions, RECIPE_FORMAT, RecipeOutput, content)) {
       if (ev.kind === "partial") {
         // Parts stream only for an AI recipe; a pasted one is shown once it's read.
@@ -425,7 +431,7 @@ export function createRealMealAI(options: RealMealOptions = {}): MealAI {
   async function* refineStream(input: RecipeInput, build: StreamBuild): AsyncGenerator<RecipeEvent> {
     const refine = input.refine!;
     const settings = taskSettings("recipe", env);
-    const parts = partEmitter(build);
+    const parts = partEmitter(build, "recipe-refine");
     const content = renderRecipeRequest(input, now());
     let streamed = false;
     for await (const ev of call("recipe-refine", settings, RECIPE_REFINE_INSTRUCTIONS, REFINE_FORMAT, RecipeRefineOutput, content)) {
@@ -470,6 +476,8 @@ export function createRealMealAI(options: RealMealOptions = {}): MealAI {
           const reply = r.reply || build.defaultReply(r.recipe.title);
           if (!r.unchanged) {
             const g = r.recipe;
+            const missing = missingAmounts(g.ingredients).length;
+            if (missing > 0) log({ event: "ai.quality", task: "recipe-refine", issue: "missing_amounts", count: missing });
             yield {
               type: "part",
               part: "edit",

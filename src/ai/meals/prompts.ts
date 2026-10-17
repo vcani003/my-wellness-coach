@@ -4,7 +4,7 @@
  * cached with its own breakpoint), then the per-request context in the user message.
  * Nothing per-request goes in here.
  */
-export const MEALS_PROMPT_VERSION = "meals-2026-10-15.3";
+export const MEALS_PROMPT_VERSION = "meals-2026-10-17.1";
 
 const SHARED = `Kitchen items are listed in <kitchen> with short labels (i1, i2, …). Only listed items are in the kitchen. Items in <use_it_up> need using up soon; favour them.
 Assumed basics are exactly: salt, pepper, cooking oil, water, and dried herbs and spices. Everything else must be in <kitchen> or listed as missing / needed. Never assume sugar, butter, flour, soy sauce, fish sauce, garlic, onion, stock or any fresh herb.
@@ -26,12 +26,13 @@ ${SHARED}
 
 const RECIPE_RULES = `- Write a clear home recipe for the dish in <meal>. It is a suggestion, so keep it practical: about 4–10 steps, everyday equipment.
 - "title": the dish name (keep the meal's name unless <change_request> changes the dish). "summary": one short line. "servings": e.g. "2", or null.
-- "ingredients": every ingredient, in the order used. "name": plain name. "amount": as you'd write it ("2", "1 cup", "a handful"), or null. "item": the label of the kitchen item it uses, or null. "basic": true only for an assumed basic.
+- "ingredients": every ingredient, in the order used. "name": plain name. "amount": as you'd write it ("4", "1 cup", "200 g", "2 tsp", "1 can (400 ml)"), sized for "servings". Every ingredient has an amount; only salt, pepper and cooking oil used to taste may have null (or "to taste"). "item": the label of the kitchen item it uses, or null. "basic": true only for an assumed basic.
 - Prefer ingredients from <kitchen>, especially <use_it_up> items, and the ones the meal was chosen for (<meal> uses). Keep what's missing short.
 - When <meal> says the user changed the idea before choosing it, honour every change they asked for: never add back an ingredient they took out, and use what they swapped in.
 - When <meal> says the user named the dish, write that dish their way. Include every ingredient they mention, with obvious typos fixed and short names spelled out ("coconutt milk" → coconut milk, "kaffir" → kaffir lime leaves), even if the kitchen doesn't have it: the app lists those under Need. Use what they say they have (a seasoning packet, potatoes) from <kitchen>. Never give an ingredient the label of a kitchen item it isn't.
+  - Their notes are how they want it made (seasoning, sweetness, texture, method: "season it with only hondashi", "I like it a little sweet"). Follow them in the ingredients and steps; a note sentence is never itself an ingredient line, though an ingredient it names is ("season it with only hondashi" → hondashi, with an amount, and no other seasoning).
 - An item with several batches is still one ingredient; the app uses the oldest batch first.
-- "steps": one instruction each, without numbering.
+- "steps": one instruction each, without numbering. Make them concrete for this dish: what to do with which ingredient, the heat, the time or what to look for ("Beat the 4 eggs with the hondashi and 1 tsp sugar.", "Cook over medium-low heat for about 1 minute, until just set."). Never generic steps like "Prepare the ingredients" or "Cook everything".
 - When the user says "with what I have", build it from <kitchen> and keep what's missing to the essentials.`;
 
 const CHANGE_RULES = `- <change_request> (when present) changes <current_recipe>: apply it ("no oven" means no oven anywhere; "make it spicier" adds heat) and keep everything else that still fits. It is the same meal unless the user clearly names a different dish.
@@ -44,6 +45,12 @@ const CHANGE_RULES = `- <change_request> (when present) changes <current_recipe>
   - An extra ingredient they're using ("I'm using baby carrots too") is added where it's first used, with a sensible amount, and worked into every step that should use it.`;
 
 const ANSWER_A_QUESTION = `When <change_request> asks a question ("will that be fine?", "can I…?"), first answer it honestly in plain words (yes, or no, and what to use instead), then say what changed in the recipe: two short sentences at most.`;
+
+/**
+ * 0059 PF2: a question ABOUT the recipe (its amounts, steps or times) is answered and changes
+ * nothing, so there's no new version. Code also never lets a question remove kitchen items (turn.ts).
+ */
+const ONLY_A_QUESTION = `A question about the recipe as it stands ("how much eggs do I need?", "what are the measurements?", "no measurements for the eggs?", "how long do I cook it?", "what heat?") changes nothing: "mode" "edit", "edits" [], and "reply" answers it from <current_recipe> (its amounts, steps and times; for "what are the measurements?" list each ingredient with its amount, briefly). If <current_recipe> gives no amount for what they ask about, say a sensible amount for its servings in the reply. Never remove or change a line for a question like this.`;
 
 export const RECIPE_INSTRUCTIONS = `# Task: recipe
 Ignore the operations format above for this task. Answer in the recipe JSON shape.
@@ -71,6 +78,7 @@ ${CHANGE_RULES}
   - Unused fields are "". "item" is the label of the kitchen item it uses, or "". Each line gets at most one change or removal.
   - Every step the change affects changes too: a new or swapped ingredient is worked into the steps that use it; a removed one is taken out of every step that mentions it. A step that only becomes empty is removed.
   - If nothing needs to change (a question answered "yes, that's fine"), "edits" is [].
+- ${ONLY_A_QUESTION}
 - "mode" "rewrite": only for a broad change that touches most of the recipe: scaling the whole recipe or changing servings, a different diet ("make it vegetarian"), a different method or main equipment ("in the slow cooker"), a different dish, or when more than about 6 lines would change. Then "edits" is [] and "recipe" is the whole new recipe ("title", "summary", "servings", "ingredients", "steps" as above).
 - "reply": one short sentence in Kitchen's voice naming what changed ("Added baby carrots and worked them into step 3.", "Took the garlic out."). ${ANSWER_A_QUESTION}`;
 
