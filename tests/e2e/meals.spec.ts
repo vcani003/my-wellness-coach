@@ -1,17 +1,19 @@
 /**
- * Journey steps 5–7 and after cooking (ux.md §8, decisions 0005, 0013) on the FAKE meal AI, at
- * phone and desktop size, with axe at each checkpoint:
- * ask → ideas → Choose → Recipe → Add to plan → Start cooking → Done cooking → "Update your
- * kitchen" (Running low + note) → Kitchen reflects it → Undo; then the same in chat ("the second
- * one", "add that to my meal plan", "start cooking", "I made it") with Out, Do later → To review.
- * Kitchen OS places (0042): ideas asked for elsewhere show a "Meal ideas are ready · Show" cue and
- * the page stays put (0035 f); the plan is the Plan place; after cooking, the Kitchen shows it.
- * Set MEAL_SCREENSHOTS=1 to save docs/design/screenshots/m-ideas-phone.png, m-recipe-phone.png and
+ * Journey steps 5–7 and after cooking (ux.md §8, decisions 0005, 0013) on the STAND-IN AI, at
+ * phone and desktop size, with axe at each checkpoint. The stand-in declines meal ideas, a named
+ * dish's recipe and recipe changes (0059 PF10: "only the real model can"), so the journey runs on
+ * its clearly titled "Sample recipe (stand-in)":
+ * ask for ideas → the decline line → "make me a sample recipe" → Recipe → Add to plan → Start
+ * cooking → Done cooking → "Update your kitchen" (Running low + note) → Kitchen reflects it → Undo;
+ * then the same in chat ("add that to my meal plan", "start cooking", "I made it") with Out, Do
+ * later → To review. Ideas cards, Choose on a card, a named dish and recipe edits need the real AI
+ * and are covered by integration tests with a scripted double (tests/support/scripted-ai).
+ * Set MEAL_SCREENSHOTS=1 to save docs/design/screenshots/m-recipe-phone.png and
  * m-update-kitchen-phone.png.
  */
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
-import { cueShow, goTo, openChat } from "../support/places";
+import { goTo, openChat } from "../support/places";
 
 const COOKIE = "dev_acting_as";
 const KITCHEN_ID = "test-kitchen-demo";
@@ -50,45 +52,36 @@ async function screenshot(page: Page, isPhone: boolean, file: string) {
   await page.screenshot({ path: shoot(file) });
 }
 
-/** The item a card uses, read from its "Uses" line (the fake AI builds one idea per item). */
-async function cardNames(page: Page) {
-  const cards = ideas(page).getByRole("listitem");
-  await expect(cards).toHaveCount(3);
-  return cards.getByRole("heading", { level: 3 }).allTextContents();
-}
+/** The stand-in's one line for what only the real AI does (0059 PF10). */
+const DECLINE = "That needs the real AI (Claude). I'm only the stand-in.";
+const SAMPLE = "Sample recipe (stand-in)";
+/** The kitchen as the server has it (nothing chosen or added by a declined message). */
+const kitchenState = async (page: Page) =>
+  (await (await page.request.get(`/api/kitchens/${KITCHEN_ID}/state`)).json()) as { meals: unknown[]; items: unknown[] };
+const lastReply = (page: Page) => page.getByRole("log").getByText(DECLINE).last();
 
-test("journey 5–7: ideas → Choose → Recipe → plan → cook → Update your kitchen (low + note) → Undo", async ({ page, baseURL }, testInfo) => {
+test("journey 5–7: ideas need the real AI → sample recipe → plan → cook → Update your kitchen (low + note) → Undo", async ({ page, baseURL }, testInfo) => {
   const isPhone = testInfo.project.name === "phone";
-  await resetAndActAs(page, baseURL!);
+  await resetAndActAs(page, baseURL!, "/meals");
   await say(page, "I bought eggs, chicken thighs, spinach and yogurt");
   await expect(lastReceipt(page)).toContainText("Added yogurt");
 
-  // Step 5, asked on Today: the page stays put and a cue points at the ideas (0035 f).
-  await say(page, "What can I make tonight?");
-  await expect(page.getByText("Meal ideas are ready", { exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/\/$/);
-  await expect(composer(page)).toBeFocused();
-  await cueShow(page, "Meals").click();
-  await expect(page).toHaveURL(/\/meals$/);
-  const names = await cardNames(page);
-  const first = ideas(page).getByRole("listitem").first();
-  await expect(first).toContainText("Uses");
-  await expect(first).toContainText("Missing");
-  await expect(ideas(page)).toContainText("Assumes");
-  await expectAccessible(page, "meal ideas");
-  if (isPhone) {
-    await page.getByRole("button", { name: "Minimize chat" }).click();
-    await screenshot(page, isPhone, "m-ideas-phone.png");
-    await page.getByRole("button", { name: /^Open chat/ }).click();
-  }
+  // Step 5 on the stand-in: the Meals place's "Get ideas" button asks in chat, and the stand-in
+  // says only the real AI does ideas (PF10). No cards appear and nothing changes.
+  await page.getByRole("button", { name: "Get ideas" }).click();
+  await expect(lastReply(page)).toBeVisible();
+  await expect(ideas(page).getByRole("listitem")).toHaveCount(0);
+  await expect.poll(async () => (await kitchenState(page)).meals.length).toBe(0);
 
-  // Step 6: Choose → the Recipe opens at its own URL, labelled a suggestion; the dock stays.
-  await ideas(page).getByRole("button", { name: `Choose ${names[0]}` }).click();
+  // Step 6: a sample recipe opens at its own URL, clearly titled, labelled a suggestion; the dock stays.
+  const names = [SAMPLE];
+  await say(page, "make me a sample recipe");
   await expect(page).toHaveURL(/\/recipe\//);
-  await expect(recipe(page).getByRole("heading", { level: 2, name: names[0] })).toBeFocused();
+  await expect(recipe(page).getByRole("heading", { level: 2, name: SAMPLE })).toBeVisible();
   await expect(recipe(page)).toContainText("Suggested recipe");
   await expect(recipe(page).getByRole("button", { name: "Use my own recipe" })).toBeVisible();
   await expect(recipe(page).getByRole("group", { name: "In your kitchen" })).toBeVisible();
+  await expect(recipe(page).getByRole("group", { name: "Need" })).toBeVisible();
   await expect(recipe(page).getByRole("heading", { name: "Steps" })).toBeVisible();
   await expect(recipe(page)).toContainText("Assumes salt and cooking oil");
   await expect(composer(page)).toBeVisible();
@@ -154,18 +147,20 @@ test("journey 5–7: ideas → Choose → Recipe → plan → cook → Update yo
   await expect(kitchen(page).getByRole("listitem").filter({ hasText: "Running low" })).toHaveCount(0);
 });
 
-test("in chat: 'the second one' opens its Recipe; plan, cook, 'I made it' → Out → Do later → To review → Done", async ({ page, baseURL }) => {
+test("in chat: a sample recipe; plan, cook, 'I made it' → Out → Do later → To review → Done", async ({ page, baseURL }) => {
   await resetAndActAs(page, baseURL!, "/meals");
   await say(page, "I bought eggs, chicken thighs, spinach and yogurt");
   await expect(lastReceipt(page)).toContainText("Added yogurt");
-  await say(page, "What can I make tonight?");
-  const names = await cardNames(page);
-
-  // Naming it in chat chooses it: the Recipe opens; focus stays in the composer.
+  // Picking an idea card needs the real AI (PF10).
   await say(page, "the second one");
+  await expect(lastReply(page)).toBeVisible();
+  const names = [`${SAMPLE}: Chicken stir-fry`];
+
+  // The sample recipe opens; focus stays in the composer; the chicken thighs are In your kitchen.
+  await say(page, "make me a sample recipe for chicken stir-fry");
   await expect(page).toHaveURL(/\/recipe\//);
-  await expect(recipe(page).getByRole("heading", { level: 2, name: names[1] })).toBeVisible();
-  await expect(recipe(page).getByRole("group", { name: "In your kitchen" })).toBeVisible();
+  await expect(recipe(page).getByRole("heading", { level: 2, name: names[0] })).toBeVisible();
+  await expect(recipe(page).getByRole("group", { name: "In your kitchen" })).toContainText(/chicken thighs/i);
   await expect(composer(page)).toBeFocused();
 
   await say(page, "Add that to my meal plan");
@@ -174,16 +169,15 @@ test("in chat: 'the second one' opens its Recipe; plan, cook, 'I made it' → Ou
   await expect(recipe(page)).toContainText("Cooking");
   await page.goBack();
   await expect(page).toHaveURL(/\/meals$/);
-  await expect(ideas(page).getByRole("listitem").filter({ hasText: names[1] })).toContainText("Chosen");
 
   // "I made it" → the sheet opens from the stream; Out, then Do later puts it in To review.
   await say(page, "I made it");
   await expect(sheet(page)).toBeVisible();
-  await expect(sheet(page)).toContainText(`Cooked: ${names[1]}`);
+  await expect(sheet(page)).toContainText(`Cooked: ${names[0]}`);
   await sheet(page).getByRole("button", { name: "Do later" }).click();
   await expect(sheet(page)).toHaveCount(0);
   await goTo(page, "Kitchen");
-  const card = kitchen(page).getByRole("button", { name: `Update your kitchen · ${names[1]}` });
+  const card = kitchen(page).getByRole("button", { name: `Update your kitchen · ${names[0]}` });
   await expect(card).toBeVisible();
   await expectAccessible(page, "to review after cooking");
 
@@ -196,7 +190,7 @@ test("in chat: 'the second one' opens its Recipe; plan, cook, 'I made it' → Ou
   await sheet(page).getByRole("button", { name: "Done" }).click();
   await expect(sheet(page)).toHaveCount(0);
   await expect(card).toHaveCount(0);
-  await expect(kitchen(page)).toContainText(`Updated your kitchen after ${names[1]}: 1 out.`);
+  await expect(kitchen(page)).toContainText(`Updated your kitchen after ${names[0]}: 1 out.`);
   await expect(kitchen(page).getByRole("listitem")).toHaveCount(itemCount - 2); // the To review row and the item
 });
 
@@ -204,9 +198,7 @@ test("Cancel in the Meal plan leaves 'cancelled · Undo'; Undo brings it back", 
   await resetAndActAs(page, baseURL!, "/meals");
   await say(page, "I bought eggs and spinach");
   await expect(lastReceipt(page)).toContainText("Added spinach");
-  await say(page, "What can I make tonight?");
-  await expect(ideas(page).getByRole("listitem")).toHaveCount(2);
-  await say(page, "the first one");
+  await say(page, "make me a sample recipe");
   await expect(page).toHaveURL(/\/recipe\//);
   const name = await recipe(page).getByRole("heading", { level: 2 }).textContent();
   await say(page, "Add that to my meal plan");
@@ -221,48 +213,43 @@ test("Cancel in the Meal plan leaves 'cancelled · Undo'; Undo brings it back", 
   await expect(plan(page).getByRole("button", { name: `Start cooking ${name}` })).toBeVisible();
 });
 
-test("in chat: a dish she names (MI1) → what she has goes in the kitchen, and its Recipe opens with a Need list", async ({ page, baseURL }) => {
+test("in chat: a named dish needs the real AI (PF10); 'sample recipe for chicken curry' opens a sample with a Need list", async ({ page, baseURL }) => {
   await resetAndActAs(page, baseURL!, "/meals");
   await say(page, "I bought chicken thighs");
   await expect(lastReceipt(page)).toContainText("Added chicken thighs");
 
+  // The stand-in never writes a named dish's recipe or adds what the message says you have.
   await say(page, "i was thinking a chicken curry, with coconut milk, lemongrass. I have a curry base seasoning packet. i also have potatoes");
+  await expect(lastReply(page)).toBeVisible();
+  await expect(page).toHaveURL(/\/meals$/);
+  await expect.poll(async () => (await kitchenState(page)).meals.length).toBe(0);
+  await expect.poll(async () => (await kitchenState(page)).items.length).toBe(1); // no potatoes or "curry base" added
+
+  await say(page, "make me a sample recipe for chicken curry");
   await expect(page).toHaveURL(/\/recipe\//);
-  await expect(recipe(page).getByRole("heading", { level: 2, name: "Chicken curry" })).toBeVisible();
-  const have = recipe(page).getByRole("group", { name: "In your kitchen" });
-  for (const name of [/chicken thighs/i, /curry base seasoning packet/i, /potatoes/i]) await expect(have).toContainText(name);
+  await expect(recipe(page).getByRole("heading", { level: 2, name: `${SAMPLE}: Chicken curry` })).toBeVisible();
+  await expect(recipe(page).getByRole("group", { name: "In your kitchen" })).toContainText(/chicken thighs/i);
   const need = recipe(page).getByRole("group", { name: "Need" });
-  for (const name of [/coconut milk/i, /lemongrass/i]) await expect(need).toContainText(name);
+  for (const name of [/coconut milk/i, /curry paste/i]) await expect(need).toContainText(name);
 });
 
-test("in chat: a small recipe change edits the open Recipe in place (ai.md §5 edit mode)", async ({ page, baseURL }) => {
+test("in chat: a recipe change needs the real AI (PF10): the open recipe stays exactly as it was", async ({ page, baseURL }) => {
   await resetAndActAs(page, baseURL!);
   await say(page, "I bought chicken thighs and potatoes");
   await expect(lastReceipt(page)).toContainText(/potatoes/i);
-  await say(page, "I want to make a chicken stew");
+  await say(page, "make me a sample recipe for chicken stew");
   await expect(page).toHaveURL(/\/recipe\//);
   const steps = recipe(page).getByRole("listitem");
-  // A step's words, without its number circle (aria-hidden).
   const stepText = steps.locator("span:not([aria-hidden])");
-  // The stand-in writes 4+ concrete steps for a stew (0059); the exact count doesn't matter here.
   await expect(steps.nth(3)).toBeVisible();
   const before = await stepText.allTextContents();
-  const last = before.length - 1;
 
-  await say(page, "I'm using baby carrots too");
-  const carrots = recipe(page).getByRole("checkbox", { name: "Baby carrots" });
-  await expect(carrots).toBeVisible();
-  // The new line is marked for the highlight; the rest of the recipe is exactly as it was.
-  await expect(recipe(page).locator("[data-recipe-changed]").filter({ has: page.getByRole("checkbox", { name: "Baby carrots" }) })).toHaveCount(1);
-  await expect(steps).toHaveCount(before.length);
-  expect((await stepText.allTextContents()).slice(0, last)).toEqual(before.slice(0, last));
-  await expect(steps.nth(last)).toHaveAttribute("data-recipe-changed", "");
-  await expect(steps.nth(last)).toContainText("baby carrots");
-  await expect(recipe(page)).not.toContainText("Writing your recipe…");
-  await expect(page.getByTestId("announcer")).toContainText("Recipe updated.");
-  await expectAccessible(page, "recipe after an edit");
-
-  await say(page, "skip step 1");
-  await expect(steps).toHaveCount(before.length - 1);
-  await expect(stepText.first()).toHaveText(before[1]);
+  for (const text of ["I'm using baby carrots too", "skip step 1", "how much chicken do I need?"]) {
+    await say(page, text);
+    await expect(page.getByRole("log").getByText(DECLINE)).toHaveCount(["I'm using baby carrots too", "skip step 1", "how much chicken do I need?"].indexOf(text) + 1);
+  }
+  await expect(recipe(page).getByRole("checkbox", { name: "Baby carrots" })).toHaveCount(0);
+  await expect(recipe(page).locator("[data-recipe-changed]")).toHaveCount(0);
+  expect(await stepText.allTextContents()).toEqual(before);
+  await expectAccessible(page, "recipe after a declined change");
 });
