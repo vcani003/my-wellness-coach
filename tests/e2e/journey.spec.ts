@@ -157,8 +157,9 @@ test.describe("phone dock", () => {
     // A reply that arrives while minimized shows the dot, named in words too.
     await fab.click();
     await expect(composer(page)).toBeFocused();
+    // Slow enough that Minimize lands first, even while the dock is still springing up (PF16).
     await page.route("**/api/chat", async (route) => {
-      await new Promise((r) => setTimeout(r, 800));
+      await new Promise((r) => setTimeout(r, 2000));
       await route.continue();
     });
     await say(page, "The eggs are running low");

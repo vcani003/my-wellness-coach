@@ -168,6 +168,22 @@
   --motion-duration-pop-in: 380ms;
   --motion-duration-sheet-out: 200ms;
   --motion-duration-sheet-fade: 220ms;
+  /*
+   * Everything else that comes and goes (0059 PF16; inventory in frontend.md §6a). Pop-ups (the
+   * chat dock rising, the chat button popping back) use the springs above; everything else is a
+   * calm ease, and leaving is always quicker than arriving.
+   * - enter / exit: messages, receipts, cues, banners, rows and cards (fade + a small rise).
+   * - dock-in / dock-out: the phone chat rising from behind the dock, and dropping back.
+   * - morph: Peek <-> Full (the chat's top edge slides; a view transition).
+   * - place-in / place-out: switching places (a cross-fade; the content also rises, .place-enter).
+   */
+  --motion-duration-enter: 240ms;
+  --motion-duration-exit: 160ms;
+  --motion-duration-dock-in: 440ms;
+  --motion-duration-dock-out: 200ms;
+  --motion-duration-morph: 320ms;
+  --motion-duration-place-in: 220ms;
+  --motion-duration-place-out: 120ms;
   --icon-stroke: 2px;
 
   /* The primary gradient (prototype `.btn.primary`): coral → orange, ink text. */
@@ -186,6 +202,8 @@
   --keyboard-inset: 0px;
   /* Set by the dock (ResizeObserver) so the workspace never hides behind it (WCAG 2.4.11). */
   --dock-height: 0px;
+  /* The places dock alone (phone), for the chat button: KitchenApp. */
+  --nav-height: 0px;
   --topbar-height: 56px;
 
   color-scheme: light;
@@ -206,6 +224,14 @@
     --motion-duration-pop-in: 150ms;
     --motion-duration-sheet-out: 150ms;
     --motion-duration-sheet-fade: 150ms;
+    /* PF16: things still come and go, but only fade (no movement; see the motion section). */
+    --motion-duration-enter: 150ms;
+    --motion-duration-exit: 120ms;
+    --motion-duration-dock-in: 150ms;
+    --motion-duration-dock-out: 120ms;
+    --motion-duration-morph: 150ms;
+    --motion-duration-place-in: 150ms;
+    --motion-duration-place-out: 100ms;
   }
 }
 
@@ -918,8 +944,9 @@
 .dock-nav {
   padding-bottom: max(var(--spacing-2), calc(env(safe-area-inset-bottom) - var(--keyboard-inset)));
 }
+/* Measured from the places dock alone, so the button never jumps while the chat drops away (PF16). */
 .chat-fab {
-  bottom: calc(var(--dock-height) + var(--spacing-3));
+  bottom: calc(var(--nav-height) + var(--spacing-3));
 }
 
 /*
@@ -1041,5 +1068,146 @@
   /* "launch": desktop starts with the chat column open, so no chat button (0059 PF3). */
   .chat-fab[data-launch] {
     display: none;
+  }
+}
+
+/*
+ * The chat's own motion (0059 PF16). Unlayered, after the shell layout, so it wins there.
+ * Transitions only switch on once the app has settled ([data-motion] on .app-shell, set a moment
+ * after hydration), so opening the app never animates the dock or the chat button into place.
+ * Hiding still uses display: none (no layout change while it's hidden, nothing focusable), and the
+ * hidden dock is also `inert`; `transition-behavior: allow-discrete` keeps it drawn while it leaves,
+ * and @starting-style gives it a place to come in from. A browser without them just shows and hides.
+ */
+@media (width < 56.25rem) {
+  /* The dock of places sits in front, so the chat rises from behind it and drops back behind it. */
+  .dock-nav {
+    position: relative;
+    z-index: 1;
+    view-transition-name: dock-nav;
+  }
+  .chat-dock {
+    view-transition-name: chat-dock;
+    /* The spring lifts the chat a little past its place: its own colour fills in under it. */
+    box-shadow: var(--shadow-dock), 0 48px 0 0 var(--color-surface-default);
+  }
+  /* Opening: springs up like the sheets. Minimizing: drops quickly, without the spring. */
+  .app-shell[data-motion] .chat-dock {
+    transition:
+      transform var(--motion-duration-dock-in) var(--ease-spring),
+      opacity var(--motion-duration-dock-in) var(--ease-gentle),
+      display var(--motion-duration-dock-in) allow-discrete;
+  }
+  @starting-style {
+    .app-shell[data-motion] .chat-dock {
+      transform: translateY(100%);
+    }
+  }
+  .chat-dock[data-dock="minimized"] {
+    transform: translateY(100%);
+    pointer-events: none;
+  }
+  .app-shell[data-motion] .chat-dock[data-dock="minimized"] {
+    transition-duration: var(--motion-duration-dock-out);
+    transition-timing-function: var(--ease-exit);
+  }
+  /* The places reappear after the keyboard closes: a short fade in. (Hiding stays instant: PF7.) */
+  .app-shell[data-motion] .dock-nav {
+    transition: opacity var(--motion-duration-enter) var(--ease-gentle);
+  }
+  @starting-style {
+    .app-shell[data-motion] .dock-nav {
+      opacity: 0;
+    }
+  }
+}
+
+@media (width >= 56.25rem) {
+  /* The chat column fades and slides in a little when you open it; it leaves at once. */
+  .app-shell[data-motion] .chat-dock:not([data-dock="minimized"]) {
+    transition:
+      opacity var(--motion-duration-enter) var(--ease-gentle),
+      transform var(--motion-duration-enter) var(--ease-gentle);
+  }
+  @starting-style {
+    .app-shell[data-motion] .chat-dock {
+      opacity: 0;
+      transform: translateX(calc(var(--motion-distance) * 2));
+    }
+  }
+}
+
+/* The round chat button pops in on the livelier spring and shrinks away quickly. */
+.chat-fab[data-hidden] {
+  display: none;
+  opacity: 0;
+  transform: scale(0.6);
+  pointer-events: none;
+}
+.app-shell[data-motion] .chat-fab {
+  transition:
+    transform var(--motion-duration-pop-in) var(--ease-spring-pop),
+    opacity var(--motion-duration-sheet-fade) var(--ease-gentle),
+    box-shadow var(--motion-duration-quick) var(--ease-gentle),
+    background-color var(--motion-duration-quick) var(--ease-gentle),
+    display var(--motion-duration-pop-in) allow-discrete;
+}
+.app-shell[data-motion] .chat-fab[data-hidden] {
+  transition-duration: var(--motion-duration-exit);
+  transition-timing-function: var(--ease-exit);
+}
+@starting-style {
+  .app-shell[data-motion] .chat-fab {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+/*
+ * Peek <-> Full on a phone: a view transition (KitchenApp's changeDock). The chat's box grows or
+ * shrinks from its top edge while the message box at the bottom stays put: both pictures are pinned
+ * to the bottom and clipped to the moving box. The overlay never takes taps.
+ */
+::view-transition {
+  pointer-events: none;
+}
+::view-transition-group(chat-dock) {
+  animation-duration: var(--motion-duration-morph);
+  animation-timing-function: var(--ease-gentle);
+}
+::view-transition-image-pair(chat-dock) {
+  clip-path: inset(0 round var(--radius-sheet) var(--radius-sheet) 0 0);
+}
+::view-transition-old(chat-dock),
+::view-transition-new(chat-dock) {
+  inset-block-start: auto;
+  inset-block-end: 0;
+  animation-duration: var(--motion-duration-morph);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Fades only: the chat, the button and the morph don't move. */
+  .chat-dock[data-dock="minimized"],
+  .chat-fab[data-hidden] {
+    transform: none;
+    opacity: 0;
+  }
+  @starting-style {
+    .app-shell[data-motion] .chat-dock,
+    .app-shell[data-motion] .chat-fab {
+      transform: none;
+      opacity: 0;
+    }
+  }
+  .app-shell[data-motion] .chat-fab {
+    transition:
+      opacity var(--motion-duration-sheet-fade) var(--ease-gentle),
+      display var(--motion-duration-sheet-fade) allow-discrete;
+  }
+  .app-shell[data-motion] .chat-fab[data-hidden] {
+    transition-duration: var(--motion-duration-exit);
+  }
+  ::view-transition-group(chat-dock) {
+    animation: none;
   }
 }

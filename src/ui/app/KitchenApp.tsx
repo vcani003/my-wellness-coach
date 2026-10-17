@@ -17,6 +17,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLocale, useNow, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import {
   acceptStaplesOffer,
   addStaples,
@@ -107,6 +108,9 @@ function useHydrated(): boolean {
   return useSyncExternalStore(noSubscribe, () => true, () => false);
 }
 
+/** How long after the app opens before things animate (the launch state settles first; PF16). */
+const MOTION_SETTLE_MS = 400;
+
 /**
  * "Reopen where you left off" (ux.md §10: the list is waiting at the store). This phone keeps the
  * last place you used; a fresh open of `/` within a few hours goes back there. Best effort.
@@ -190,6 +194,12 @@ function KitchenScreen({
   const hydrated = useHydrated();
   const dock: DockView = chosenDock ?? (hydrated ? launchDock(isDesktop) : "launch");
   const [newReply, setNewReply] = useState(false);
+  // Motion switches on a moment after the app settles, so opening it never animates (0059 PF16).
+  const [motion, setMotion] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setMotion(true), MOTION_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, []);
   const [turn, setTurn] = useState(0);
   const [cue, setCue] = useState<Cue | null>(null);
 
@@ -453,14 +463,17 @@ function KitchenScreen({
     const header = headerRef.current;
     const bottom = bottomRef.current;
     if (!header || !bottom) return;
+    const nav = bottom.querySelector<HTMLElement>(".dock-nav");
     const update = () => {
       root.style.setProperty("--topbar-height", `${header.offsetHeight}px`);
       root.style.setProperty("--dock-height", `${isDesktop ? 0 : bottom.offsetHeight}px`);
+      root.style.setProperty("--nav-height", `${isDesktop || !nav ? 0 : nav.offsetHeight}px`);
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(header);
     ro.observe(bottom);
+    if (nav) ro.observe(nav);
     return () => ro.disconnect();
   }, [dock, isDesktop]);
 
@@ -481,10 +494,23 @@ function KitchenScreen({
   const changeDock = (next: DockState, focus: "fab" | "composer" | null = null) => {
     focusAfterDock.current = focus;
     if (next !== "minimized") setNewReply(false);
+    // Peek <-> Full on a phone: the chat's top edge slides (a view transition, globals.css); where
+    // the browser has none, or it fails, it just changes.
+    const prev = dockNow.current;
+    const morph = !isDesktop && ((prev === "peek" && next === "full") || (prev === "full" && next === "peek"));
+    if (morph && motion && typeof document.startViewTransition === "function") {
+      try {
+        document.startViewTransition(() => flushSync(() => setDock(next)));
+        return;
+      } catch {
+        // Fall through: change without the motion.
+      }
+    }
     setDock(next);
   };
 
   const phoneFull = !isDesktop && dock === "full";
+  const chatOpen = dock !== "minimized" && dock !== "launch";
   const cuePlace = cue ? places.find((p) => p.id === cue.placeId) : null;
   const cueText = cue && cuePlace ? (cue.kind === "ideas" ? t("cue.ideas") : t("cue.updated", { place: t(cuePlace.titleKey) })) : null;
 
@@ -525,7 +551,7 @@ function KitchenScreen({
     <PlaceMemoryProvider>
     <ConfirmPromptProvider initial={initialPendingConfirm} fillComposer={fillComposer}>
       <TickQueueFlusher />
-      <div className="app-shell min-h-dvh" data-chat={dock === "minimized" || dock === "launch" ? dock : "open"}>
+      <div className="app-shell min-h-dvh" data-chat={dock === "minimized" || dock === "launch" ? dock : "open"} data-motion={motion ? "" : undefined}>
         <a href="#workspace" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-surface-raised focus:p-2">
           {t("app.skipToWorkspace")}
         </a>
@@ -556,6 +582,8 @@ function KitchenScreen({
             tabIndex={-1}
             aria-label={t("chat.label")}
             data-dock={dock}
+            // Hidden (and, while it drops away, not tappable or focusable): 0059 PF16.
+            inert={dock === "minimized"}
             className="chat-dock flex flex-col rounded-t-sheet bg-surface-default shadow-dock desk:rounded-none desk:border-l-2 desk:border-border-default desk:shadow-none"
           >
             <h2 className="sr-only">{t("chat.heading")}</h2>
@@ -625,21 +653,23 @@ function KitchenScreen({
           }} />
         </div>
 
-        {(dock === "minimized" || dock === "launch") && (
-          <button
-            ref={fabRef}
-            data-launch={dock === "launch" ? "" : undefined}
-            type="button"
-            onClick={() => changeDock("peek", "composer")}
-            aria-label={newReply ? t("chat.openChatNewReply") : t("chat.openChat")}
-            className="chat-fab btn btn-primary fixed right-4 z-30 size-fab p-0 shadow-fab"
-          >
-            <ChatIcon aria-hidden="true" className="size-icon-lg" />
-            {newReply && (
-              <span aria-hidden="true" className="absolute top-1 right-1 size-dot rounded-full bg-accent-text ring-2 ring-surface-raised" />
-            )}
-          </button>
-        )}
+        {/* Always mounted, so it can pop in and shrink away (0059 PF16); hidden = display: none + inert. */}
+        <button
+          ref={fabRef}
+          data-launch={dock === "launch" ? "" : undefined}
+          data-hidden={chatOpen ? "" : undefined}
+          inert={chatOpen}
+          aria-hidden={chatOpen || undefined}
+          type="button"
+          onClick={() => changeDock("peek", "composer")}
+          aria-label={newReply ? t("chat.openChatNewReply") : t("chat.openChat")}
+          className="chat-fab btn btn-primary fixed right-4 z-30 size-fab p-0 shadow-fab"
+        >
+          <ChatIcon aria-hidden="true" className="size-icon-lg" />
+          {newReply && (
+            <span aria-hidden="true" className="absolute top-1 right-1 size-dot rounded-full bg-accent-text ring-2 ring-surface-raised" />
+          )}
+        </button>
       </div>
     </ConfirmPromptProvider>
     </PlaceMemoryProvider>
