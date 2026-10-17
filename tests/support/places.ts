@@ -17,3 +17,14 @@ export async function goTo(page: Page, place: PlaceName) {
 
 /** The "Kitchen updated · Show" cue after your own change concerns another place (0035 f). */
 export const cueShow = (page: Page, place: string) => page.getByRole("link", { name: `Show ${place}` });
+
+/**
+ * On phone the chat starts Minimized, only the chat button (0059 PF3). Open it as a person would,
+ * after the app has hydrated ("launch" is the server-rendered state). No-op on desktop.
+ */
+export async function openChat(page: Page) {
+  await expect(page.locator("#chat")).not.toHaveAttribute("data-dock", "launch");
+  const fab = page.getByRole("button", { name: /^Open chat/ });
+  if (await fab.isVisible()) await fab.click();
+  await expect(page.getByRole("textbox", { name: "Message Lumi" })).toBeVisible();
+}
