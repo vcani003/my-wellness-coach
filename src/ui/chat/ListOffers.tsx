@@ -12,6 +12,7 @@
  *   gone). No separate Undo: the List has Remove. Failures say so in place (0018).
  * - Item buttons need a connection until KOS7 (0044), so it's off while offline.
  */
+import { Appear } from "@/ui/primitives/Appear";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { isListOfferOpen, type AppliedOp, type ListOffer } from "@/contracts/apply-result";
@@ -101,7 +102,11 @@ function ListOfferLine({ offer }: { offer: ListOffer }) {
       >
         {pending ? t("adding") : offer.stapleId ? t("addShort") : label}
       </button>
-      {phase === "failed" && <span className="text-small text-error-text">{t("failed")}</span>}
+      {phase === "failed" && (
+        <Appear as="span" kind="fade" className="text-small text-error-text">
+          {t("failed")}
+        </Appear>
+      )}
     </div>
   );
 }

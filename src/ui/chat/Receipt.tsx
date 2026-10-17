@@ -8,6 +8,7 @@
  */
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Appear, useAppear } from "@/ui/primitives/Appear";
 import { CheckIcon, UndoIcon } from "@/ui/primitives/icons";
 import { BatchOffers, offersOf, type OnUndoStep, type UndoStep } from "./BatchOffers";
 import type { Receipt as ReceiptModel } from "./chat-reducer";
@@ -58,6 +59,8 @@ export function Receipt({
     });
   }, []);
   const step = undone ? undefined : steps.at(-1);
+  // A receipt that arrives with a reply (or under a row) eases in; saved ones are just there (PF16).
+  const appear = useAppear("rise");
 
   // A new answer to step back: focus moves to the Undo that now undoes it.
   const undoRef = useRef<HTMLButtonElement>(null);
@@ -82,6 +85,7 @@ export function Receipt({
       aria-label={t("title")}
       data-receipt={receipt.changeSetId}
       className="receipt mt-2 px-4 py-3"
+      {...appear}
     >
       <h3 className="eyebrow font-body">{t("title")}</h3>
       <ul className="mt-1 flex flex-col gap-1">
@@ -89,7 +93,7 @@ export function Receipt({
           const display = formatMsg(line.summary);
           const plain = formatMsg(line.summary, "plain");
           return (
-            <li key={line.key} className={`flex items-start gap-2 text-small ${undone ? "text-text-muted line-through" : ""}`}>
+            <li key={line.key} className={`receipt-line flex items-start gap-2 text-small ${undone ? "text-text-muted line-through" : ""}`}>
               <CheckIcon aria-hidden="true" className="mt-0.5 size-icon-sm shrink-0 text-success-text" />
               {display === plain ? (
                 <span>{display}</span>
@@ -117,9 +121,15 @@ export function Receipt({
 
       {(showUndo || undone || receipt.undo === "refused" || onView) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {undone && <span className="text-small font-medium text-text-muted">{t("undone")}</span>}
+          {undone && (
+            <Appear as="span" kind="fade" className="text-small font-medium text-text-muted">
+              {t("undone")}
+            </Appear>
+          )}
           {receipt.undo === "refused" && (
-            <p className="rounded-md bg-warning-bg px-3 py-2 text-small text-warning-text">{t("cantUndo")}</p>
+            <Appear as="p" kind="fade" className="rounded-md bg-warning-bg px-3 py-2 text-small text-warning-text">
+              {t("cantUndo")}
+            </Appear>
           )}
           {showUndo && (
             <button

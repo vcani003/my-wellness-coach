@@ -59,6 +59,7 @@ import { PlaceRetryProvider } from "@/ui/places/Place";
 import { PlaceMemoryProvider } from "@/ui/places/PlaceMemory";
 import { places, TODAY_PLACE_ID } from "@/ui/places/registry";
 import { CaretDownIcon, CaretUpIcon, ChatIcon, GoIcon, MinusIcon } from "@/ui/primitives/icons";
+import { Appear, AppearScope, useAppear } from "@/ui/primitives/Appear";
 import { ConfirmPromptProvider } from "@/ui/settings/ConfirmPrompt";
 import type { PendingConfirm } from "@/ui/settings/model";
 import { Dock } from "@/ui/shell/Dock";
@@ -550,6 +551,7 @@ function KitchenScreen({
     <PlaceRetryProvider value={() => void sync.refresh()}>
     <PlaceMemoryProvider>
     <ConfirmPromptProvider initial={initialPendingConfirm} fillComposer={fillComposer}>
+    <AppearScope>
       <TickQueueFlusher />
       <div className="app-shell min-h-dvh" data-chat={dock === "minimized" || dock === "launch" ? dock : "open"} data-motion={motion ? "" : undefined}>
         <a href="#workspace" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-surface-raised focus:p-2">
@@ -612,7 +614,7 @@ function KitchenScreen({
             </div>
 
             {cueText && cuePlace && (
-              <p data-cue={cuePlace.id} className="mx-4 mb-1 flex items-center gap-2 rounded-md bg-highlight-bg py-1 pl-3 text-small font-strong text-highlight-text">
+              <CueLine key={cuePlace.id} placeId={cuePlace.id}>
                 <span className="flex-1">{cueText}</span>
                 <Link
                   href={cuePlace.href}
@@ -626,7 +628,7 @@ function KitchenScreen({
                   {t("cue.show")}
                   <GoIcon aria-hidden="true" className="size-icon-sm" />
                 </Link>
-              </p>
+              </CueLine>
             )}
 
             <div id="chat-log" ref={logRef} className="chat-log relative min-h-0 flex-1 overflow-y-auto px-4 pt-1 pb-2 desk:pt-3">
@@ -642,7 +644,11 @@ function KitchenScreen({
             </div>
 
             <div className="composer-area px-4 pt-2">
-              {!online && <p className="mb-2 text-small text-text-muted">{t("chat.offline")}</p>}
+              {!online && (
+                <Appear as="p" kind="fade" className="mb-2 text-small text-text-muted">
+                  {t("chat.offline")}
+                </Appear>
+              )}
               <Composer ref={composerRef} busy={chat.state.busy || !online} onSend={send} />
             </div>
           </section>
@@ -671,6 +677,7 @@ function KitchenScreen({
           )}
         </button>
       </div>
+    </AppearScope>
     </ConfirmPromptProvider>
     </PlaceMemoryProvider>
     </PlaceRetryProvider>
@@ -679,5 +686,15 @@ function KitchenScreen({
     </MealsProvider>
     </KitchenDataProvider>
     </KitchenActionsProvider>
+  );
+}
+
+/** "Kitchen updated · Show": eases in under the chat's top row (0059 PF16). */
+function CueLine({ placeId, children }: { placeId: string; children: ReactNode }) {
+  const appear = useAppear("rise");
+  return (
+    <p data-cue={placeId} className="mx-4 mb-1 flex items-center gap-2 rounded-md bg-highlight-bg py-1 pl-3 text-small font-strong text-highlight-text" {...appear}>
+      {children}
+    </p>
   );
 }

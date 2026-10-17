@@ -1211,3 +1211,49 @@
     animation: none;
   }
 }
+
+/*
+ * Arrivals (src/ui/primitives/Appear.tsx): whatever turns up after a part of the screen opened (a
+ * new message, a receipt, a row someone added, a cue, a "Saved" note) eases in once. rise: fade +
+ * a small lift; fade: opacity only; grow: a row in a list also opens its own height where the
+ * browser can animate to `auto` (elsewhere it just rises), so the rows below slide down instead of
+ * jumping. Reduced motion: --motion-distance is 0 and the height doesn't animate, so all of them
+ * just fade.
+ */
+[data-appear] {
+  animation: appear-rise var(--motion-duration-enter) var(--ease-gentle) both;
+}
+[data-appear="fade"] {
+  animation-name: appear-fade;
+}
+@keyframes appear-rise {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-distance));
+  }
+}
+@keyframes appear-fade {
+  from {
+    opacity: 0;
+  }
+}
+@supports (interpolate-size: allow-keywords) {
+  @media (prefers-reduced-motion: no-preference) {
+    [data-appear="grow"] {
+      interpolate-size: allow-keywords;
+      overflow: clip;
+      animation-name: appear-grow;
+    }
+    @keyframes appear-grow {
+      from {
+        height: 0;
+        opacity: 0;
+        transform: translateY(calc(var(--motion-distance) * -0.5));
+      }
+    }
+  }
+}
+/* Undo on a receipt: the lines dim into "Undone" instead of switching. */
+.receipt-line {
+  transition: color var(--motion-duration-enter) var(--ease-gentle);
+}
