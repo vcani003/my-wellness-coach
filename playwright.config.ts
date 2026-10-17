@@ -34,10 +34,11 @@ export default defineConfig({
     { name: "desktop", testIgnore: /phone-keyboard\.spec\.ts/, use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } } },
     {
       // Phone chat with a simulated iPhone keyboard (0059 PF7), in WebKit (Safari's engine) only;
-      // also the item sheet's level / Save and its motion, which Vero found on her iPhone.
+      // also the item sheet's level / Save and its motion, which Vero found on her iPhone, and
+      // every other sheet's motion (0059 PF13).
       // Needs `npx playwright install webkit`. Run it with --project=iphone-webkit.
       name: "iphone-webkit",
-      testMatch: /(phone-keyboard|item-edit-level|item-edit-motion)\.spec\.ts/,
+      testMatch: /(phone-keyboard|item-edit-level|item-edit-motion|sheet-motion)\.spec\.ts/,
       use: { ...devices["iPhone 13"] },
     },
   ],

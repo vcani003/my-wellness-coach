@@ -18,7 +18,7 @@ import {
 } from "@/contracts/common";
 import type { ItemRow } from "@/contracts/kitchen-state";
 import { actorName, byOther, sentenceCase } from "@/ui/fallbacks";
-import { AlertDialog, Dialog } from "@/ui/primitives/Dialog";
+import { AlertDialog, Dialog, SheetBackdrop, SheetPopup } from "@/ui/primitives/Dialog";
 import { FoodTile } from "@/ui/primitives/FoodTile";
 import {
   CheckIcon,
@@ -80,7 +80,7 @@ export function ItemEditSheet() {
       onOpenChange={(next) => !next && control.close()}
     >
       <Dialog.Portal>
-        <Dialog.Backdrop className="scrim-motion fixed inset-0 z-40 bg-scrim" />
+        <SheetBackdrop />
         {shown && item && (
           <SheetBody key={shown.sheet} item={item} control={control} />
         )}
@@ -213,12 +213,12 @@ function SheetBody({
     error?.field === "amount" ? t(error.code, { max: AMOUNT_MAX }) : null;
 
   return (
-    <Dialog.Popup
+    <SheetPopup
       initialFocus={off ? titleRef : nameRef}
       finalFocus={() => control.finalFocus()}
       aria-describedby={failed ? ids.failed : undefined}
       data-item-sheet={item.id}
-      className="sheet sheet-motion fixed inset-x-0 bottom-(--keyboard-inset) z-50 flex max-h-[calc(90dvh-var(--keyboard-inset))] flex-col rounded-t-sheet bg-surface-raised pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop outline-none desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:max-h-[88dvh] desk:w-[34rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
+      className="fixed inset-x-0 bottom-(--keyboard-inset) z-50 flex max-h-[calc(90dvh-var(--keyboard-inset))] flex-col rounded-t-sheet bg-surface-raised pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] outline-none desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:max-h-[88dvh] desk:w-[34rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
     >
       <form
         onSubmit={(e) => void submit(e)}
@@ -463,7 +463,7 @@ function SheetBody({
           setFailed(answer === "failed");
         }}
       />
-    </Dialog.Popup>
+    </SheetPopup>
   );
 }
 
@@ -594,11 +594,11 @@ function RemoveConfirm({
   return (
     <AlertDialog.Root open={open} onOpenChange={(next) => !next && onCancel()}>
       <AlertDialog.Portal>
-        <AlertDialog.Backdrop className="fixed inset-0 z-50 bg-scrim" />
+        <AlertDialog.Backdrop className="scrim-motion fixed inset-0 z-50 bg-scrim" />
         <AlertDialog.Popup
           initialFocus={cancelRef}
           data-remove-confirm=""
-          className="sheet fixed inset-x-4 top-1/2 z-50 flex -translate-y-1/2 flex-col gap-2 rounded-sheet bg-surface-raised p-5 shadow-pop outline-none desk:inset-x-auto desk:left-1/2 desk:w-[24rem] desk:-translate-x-1/2"
+          className="sheet pop-motion fixed inset-x-4 top-1/2 z-50 flex -translate-y-1/2 flex-col gap-2 rounded-sheet bg-surface-raised p-5 shadow-pop outline-none desk:inset-x-auto desk:left-1/2 desk:w-[24rem] desk:-translate-x-1/2"
         >
           <AlertDialog.Title className="font-heading text-title font-medium">
             {t("removeTitle", { name })}

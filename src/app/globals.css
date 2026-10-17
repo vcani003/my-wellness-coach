@@ -162,8 +162,10 @@
   --motion-duration-gentle: 300ms;
   --motion-duration-slow: 560ms;
   --motion-distance: 10px; /* how far things rise when they enter */
-  /* Sheets (the item sheet): rise in on the spring, leave quicker and plainly; the scrim fades. */
+  /* Sheets (every bottom sheet, 0059 PF13): rise in on the spring, leave quicker and plainly; the
+     scrim fades. Desktop dialogs and menus pop in on --ease-spring-pop over --motion-duration-pop-in. */
   --motion-duration-sheet-in: 420ms;
+  --motion-duration-pop-in: 380ms;
   --motion-duration-sheet-out: 200ms;
   --motion-duration-sheet-fade: 220ms;
   --icon-stroke: 2px;
@@ -201,6 +203,7 @@
     --ease-spring-pop: cubic-bezier(0.2, 0.8, 0.2, 1);
     /* Sheets just fade (no movement, see .sheet-motion); a short fade, not a jump. */
     --motion-duration-sheet-in: 150ms;
+    --motion-duration-pop-in: 150ms;
     --motion-duration-sheet-out: 150ms;
     --motion-duration-sheet-fade: 150ms;
   }
@@ -744,16 +747,23 @@
   }
 
   /*
-   * The item sheet's entrance and exit, on Base UI's own transition hooks: the popup and backdrop
-   * carry [data-starting-style] for their first frame and [data-ending-style] while closing, and
-   * Base UI keeps them drawn until the transition ends. Phone: the sheet slides up on the spring
-   * and drops away quicker without one. Desktop: the centred dialog pops in from 0.94 and fades
-   * out. Only transform and opacity move (never the form's layout). Tailwind's centring uses the
-   * separate `translate` property, so it's untouched. While closing, nothing takes taps, so a
-   * closing sheet never sits over the row you tap next.
+   * Every sheet's entrance and exit (0059 PF11, PF13), on Base UI's own transition hooks: a popup
+   * and its backdrop carry [data-starting-style] for their first frame and [data-ending-style]
+   * while closing, and Base UI keeps them drawn until the transition ends. Used through
+   * SheetPopup / SheetBackdrop (src/ui/primitives/Dialog.tsx) and Menu.Popup.
+   * - .sheet-motion (bottom sheets). Phone: slides up on the spring and drops away quicker without
+   *   one. Desktop (where the sheet is a centred dialog): the pop below.
+   * - .pop-motion (menus anchored to a button, and dialogs centred on every screen): pops in from
+   *   0.94 towards its button (Base UI's --transform-origin) and fades out.
+   * Only transform and opacity move (never the layout). Tailwind's centring uses the separate
+   * `translate` property, so it's untouched. While closing, nothing takes taps, so a closing sheet
+   * never sits over the thing you tap next (the lingering-overlay bug).
    */
-  .sheet-motion {
+  .sheet-motion,
+  .pop-motion {
     transition-property: transform, opacity;
+  }
+  .sheet-motion {
     transition-duration: var(--motion-duration-sheet-in), var(--motion-duration-sheet-fade);
     transition-timing-function: var(--ease-spring), var(--ease-gentle);
   }
@@ -761,24 +771,38 @@
   .sheet-motion[data-ending-style] {
     transform: translateY(100%);
   }
-  .sheet-motion[data-ending-style] {
+  .pop-motion {
+    transform-origin: var(--transform-origin, center);
+    transition-duration: var(--motion-duration-pop-in), var(--motion-duration-sheet-fade);
+    transition-timing-function: var(--ease-spring-pop), var(--ease-gentle);
+  }
+  .pop-motion[data-starting-style] {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  .pop-motion[data-ending-style] {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  .sheet-motion[data-ending-style],
+  .pop-motion[data-ending-style] {
     pointer-events: none;
     transition-duration: var(--motion-duration-sheet-out);
     transition-timing-function: var(--ease-exit);
   }
-  /* The spring lifts the sheet a little past its place: its own colour fills in under it. */
-  .sheet-motion::after {
-    content: "";
-    position: absolute;
-    inset-inline: 0;
-    top: 100%;
-    height: 64px;
-    background: inherit;
-    pointer-events: none;
+  @media (width < 56.25rem) {
+    /*
+     * The spring lifts a sheet a little past its place: its own colour fills in under it. A
+     * shadow, not a pseudo-element, so it never adds to a scrolling sheet's scroll height (this
+     * replaces .sheet's own shadow, so sheets don't also carry the shadow-pop utility).
+     */
+    .sheet-motion {
+      box-shadow: var(--shadow-pop), 0 64px 0 0 var(--color-surface-raised);
+    }
   }
   @media (width >= 56.25rem) {
     .sheet-motion {
-      transition-duration: 380ms, var(--motion-duration-sheet-fade);
+      transition-duration: var(--motion-duration-pop-in), var(--motion-duration-sheet-fade);
       transition-timing-function: var(--ease-spring-pop), var(--ease-gentle);
     }
     .sheet-motion[data-starting-style] {
@@ -789,9 +813,6 @@
       opacity: 0;
       transform: scale(0.97);
       transition-duration: var(--motion-duration-sheet-out);
-    }
-    .sheet-motion::after {
-      content: none;
     }
   }
   .scrim-motion {
@@ -818,18 +839,27 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    /* No movement: the sheet and its scrim only fade; the tile doesn't squish. */
+    /* No movement: sheets, menus and their scrims only fade; the tile doesn't squish. */
     .sheet-motion,
     .sheet-motion[data-starting-style],
-    .sheet-motion[data-ending-style] {
+    .sheet-motion[data-ending-style],
+    .pop-motion,
+    .pop-motion[data-starting-style],
+    .pop-motion[data-ending-style] {
       transform: none;
     }
     .sheet-motion[data-starting-style],
     .sheet-motion[data-ending-style] {
       opacity: 0;
     }
-    .sheet-motion {
+    .sheet-motion,
+    .pop-motion {
       transition-property: opacity;
+      transition-duration: var(--motion-duration-sheet-fade);
+    }
+    .sheet-motion[data-ending-style],
+    .pop-motion[data-ending-style] {
+      transition-duration: var(--motion-duration-sheet-out);
     }
     .row-card:has([data-item-edit]:active) [data-food-tile] {
       transform: none;
