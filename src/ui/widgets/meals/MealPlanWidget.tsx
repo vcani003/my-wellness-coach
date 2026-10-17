@@ -26,6 +26,7 @@ import { actorName, byOther } from "@/ui/fallbacks";
 import { LumiHalo } from "@/ui/lumi/Lumi";
 import { usePlaceMemory } from "@/ui/places/PlaceMemory";
 import { formatPlanDay } from "@/ui/plan-day-format";
+import { LeavingList, leaveProps, useAppear } from "@/ui/primitives/Appear";
 import { UndoIcon } from "@/ui/primitives/icons";
 import { useKitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { useKitchenData } from "@/ui/sync/KitchenDataContext";
@@ -237,19 +238,21 @@ export function MealPlanWidget() {
   const mealList = (group: GroupKey, ids: string[]) => {
     // Cooking first within each group, then plan order (0013), as the undated list always was.
     const ordered = [...ids].filter((id) => byId.has(id)).sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0));
-    const items: ({ kind: "meal"; meal: MealRow } | { kind: "ghost"; ghost: Ghost })[] = ordered.map((id) => ({ kind: "meal" as const, meal: byId.get(id)! }));
+    const items: PlanEntry[] = ordered.map((id) => ({ kind: "meal" as const, meal: byId.get(id)! }));
     for (const g of liveGhosts.filter((x) => x.group === group).sort((a, b) => a.index - b.index)) {
       items.splice(Math.min(g.index, items.length), 0, { kind: "ghost", ghost: g });
     }
     if (items.length === 0) return null;
     return (
       <ul className="flex flex-col gap-2">
-        {items.map((entry) =>
+        <LeavingList items={items} keyOf={planEntryKey}>
+        {(entry, leaving) =>
           entry.kind === "ghost" ? (
-            <GhostRow key={`ghost-${entry.ghost.id}`} ghost={entry.ghost} failed={failed?.id === entry.ghost.id ? failed.text : null} onUndo={() => void undoCancel(entry.ghost)} />
+            <GhostRow key={`ghost-${entry.ghost.id}`} leaving={leaving} ghost={entry.ghost} failed={failed?.id === entry.ghost.id ? failed.text : null} onUndo={() => void undoCancel(entry.ghost)} />
           ) : (
             <MealCard
               key={entry.meal.id}
+              leaving={leaving}
               meal={entry.meal}
               week={week}
               busy={busy !== null}
@@ -261,8 +264,9 @@ export function MealPlanWidget() {
               onPickDay={(date) => void pickDay(entry.meal, date)}
               onUndoDay={undoDay}
             />
-          ),
-        )}
+          )
+        }
+        </LeavingList>
       </ul>
     );
   };
@@ -372,10 +376,14 @@ function DayRow({ date, today, count, children }: { date: string; today: string;
   );
 }
 
-function GhostRow({ ghost, failed, onUndo }: { ghost: Ghost; failed: string | null; onUndo: () => void }) {
+type PlanEntry = { kind: "meal"; meal: MealRow } | { kind: "ghost"; ghost: Ghost };
+const planEntryKey = (entry: PlanEntry) => (entry.kind === "ghost" ? `ghost-${entry.ghost.id}` : entry.meal.id);
+
+function GhostRow({ ghost, failed, onUndo, leaving }: { ghost: Ghost; failed: string | null; onUndo: () => void; leaving?: boolean }) {
   const t = useTranslations("meals.plan");
+  const appear = useAppear("grow");
   return (
-    <li className="flex min-h-tap flex-wrap items-center gap-2 rounded-md border-2 border-dashed border-border-default px-4 py-2 text-small text-text-muted">
+    <li {...appear} {...leaveProps(leaving)} className="flex min-h-tap flex-wrap items-center gap-2 rounded-md border-2 border-dashed border-border-default px-4 py-2 text-small text-text-muted">
       <span>{t("cancelled", { title: ghost.title })}</span>
       <button type="button" aria-label={t("undoCancelLabel", { title: ghost.title })} onClick={onUndo} className="btn-quiet">
         <UndoIcon aria-hidden="true" className="size-icon-sm" />
@@ -401,8 +409,11 @@ function MealCard({
   onRun,
   onPickDay,
   onUndoDay,
+  leaving,
 }: {
   meal: MealRow;
+  /** Cooked, cancelled or moved to another day: eases out (0059 PF16). */
+  leaving?: boolean;
   week: WeekPlan;
   busy: boolean;
   offline: boolean;
@@ -418,8 +429,9 @@ function MealCard({
   const { me } = useKitchenData();
   const { actions } = useMeals();
   const cooking = meal.status === "cooking";
+  const appear = useAppear("grow");
   return (
-    <li data-entity-id={meal.id} data-planned-for={meal.plannedFor ?? ""} className={`card flex flex-col gap-3 px-4 py-3 ${cooking ? "border-accent-text" : ""}`}>
+    <li {...appear} {...leaveProps(leaving)} data-entity-id={meal.id} data-planned-for={meal.plannedFor ?? ""} className={`card flex flex-col gap-3 px-4 py-3 ${cooking ? "border-accent-text" : ""}`}>
       <div className="flex flex-wrap items-baseline gap-2">
         <button
           type="button"

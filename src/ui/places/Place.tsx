@@ -4,6 +4,7 @@
  * and its own error boundary (0018). Route pages render `<Place id="kitchen" />`; the shell
  * provides `onRetry` (refresh the kitchen) through `PlaceRetryContext`.
  */
+import { AppearScope } from "@/ui/primitives/Appear";
 import { useTranslations } from "next-intl";
 import { createContext, useContext, type ReactNode } from "react";
 import { PlaceErrorBoundary } from "./PlaceErrorBoundary";
@@ -29,7 +30,8 @@ export function PlaceFailed({ retry }: { retry: () => void }) {
 export function PlaceSection({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <section aria-label={title} data-place={id} className="place-enter mx-auto flex w-full max-w-prose flex-col gap-4 pb-6">
-      {children}
+      {/* Rows, cards and notes that turn up while you're here ease in; the place's own arrival is .place-enter. */}
+      <AppearScope>{children}</AppearScope>
     </section>
   );
 }

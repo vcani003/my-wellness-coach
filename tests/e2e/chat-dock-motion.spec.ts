@@ -5,6 +5,7 @@
  * focusable or tappable, even while it drops away. Opening and minimizing over and over, then
  * tapping Send, still sends. Peek <-> Full runs a view transition where the browser has one.
  * Desktop: the chat column fades in when reopened. Reduced motion: fades only, nothing moves.
+ * Also list rows: ease in when added, out when removed (inert while leaving).
  */
 import { expect, test, type Page } from "@playwright/test";
 
@@ -151,4 +152,49 @@ test.describe("desktop", () => {
     await expect(composer(page)).toBeFocused();
     await expect.poll(() => moved(page, "dock")).toContain("opacity");
   });
+});
+
+/**
+ * Rows ease in and out (0059 PF16): a row that turns up while you're on the list opens into place;
+ * a removed one is drawn a moment longer while it closes, and in that moment it can't be tapped
+ * or focused and isn't in the accessibility tree. Rows already there when you arrive don't animate.
+ */
+test("list rows ease in when added and out when removed; a leaving row is inert", async ({ page, baseURL }) => {
+  await start(page, baseURL!);
+  await page.goto("/list");
+  await expect(page.locator(".app-shell")).toHaveAttribute("data-motion", "");
+  const fabButton = fab(page);
+  if (await fabButton.isVisible()) await fabButton.click();
+  // Record which rows start an entrance or exit, by name.
+  await page.evaluate(() => {
+    const w = window as unknown as { __rows: string[] };
+    w.__rows = [];
+    document.addEventListener("animationstart", (e) => {
+      const el = e.target as HTMLElement;
+      if (el.matches("li[data-appear]")) w.__rows.push(`in:${el.textContent}`);
+      if (el.matches("li[data-leave]")) {
+        w.__rows.push(`out:${el.textContent}`);
+        w.__rows.push(`inert:${el.inert}:${el.getAttribute("aria-hidden")}`);
+      }
+    });
+  });
+  const rows = () => page.evaluate(() => (window as unknown as { __rows: string[] }).__rows);
+  await expect(async () => {
+    await composer(page).fill("Add hoisin to the list");
+    await expect(page.getByRole("button", { name: "Send" })).toBeEnabled({ timeout: 500 });
+  }).toPass();
+  await composer(page).press("Enter");
+  const list = page.getByRole("region", { name: "Shopping list" });
+  await expect(list.getByRole("checkbox", { name: /^Hoisin, got it/ })).toBeVisible();
+  await expect.poll(async () => (await rows()).some((r) => r.startsWith("in:") && r.includes("Hoisin"))).toBe(true);
+
+  if (await minimize(page).isVisible()) await minimize(page).click();
+  await list.getByRole("button", { name: "More for hoisin" }).click();
+  await page.getByRole("menuitem", { name: "Remove" }).click();
+  await expect.poll(async () => (await rows()).some((r) => r.startsWith("out:") && r.includes("Hoisin"))).toBe(true);
+  expect(await rows()).toContain("inert:true:true");
+  // Gone for good after the exit; the Undo ghost is in its place.
+  await expect(list.getByRole("checkbox", { name: /^Hoisin, got it/ })).toHaveCount(0);
+  await expect(page.locator("li[data-leave]")).toHaveCount(0);
+  await expect(list.getByRole("button", { name: /^Undo/ })).toBeVisible();
 });

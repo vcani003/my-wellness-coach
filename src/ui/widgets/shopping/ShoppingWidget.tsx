@@ -11,6 +11,7 @@ import { usePlaceMemory } from "@/ui/places/PlaceMemory";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import type { ShoppingItemRow } from "@/contracts/kitchen-state";
+import { Appear, LeavingList, leaveProps, useAppear } from "@/ui/primitives/Appear";
 import { Checkbox } from "@/ui/primitives/Checkbox";
 import { useAnnounce } from "@/ui/a11y/Announcer";
 import { actorName, itemName, sentenceCase } from "@/ui/fallbacks";
@@ -249,9 +250,10 @@ export function ShoppingWidget({ onRetry }: PlaceProps) {
                 <span className="sr-only">{store}</span>
               </h3>
               <ul className="flex flex-col gap-2">
-                {group.rows.map((row) =>
+                <LeavingList items={group.rows} keyOf={shoppingRowKey}>
+                {(row, leaving) =>
                   row.kind === "ghost" ? (
-                    <li key={`ghost-${row.ghost.id}`} className="flex min-h-tap items-center gap-2 rounded-md border-2 border-dashed border-border-default px-4 text-small text-text-muted">
+                    <Appear as="li" kind="grow" key={`ghost-${row.ghost.id}`} leaving={leaving} className="flex min-h-tap items-center gap-2 rounded-md border-2 border-dashed border-border-default px-4 text-small text-text-muted">
                       <span>{t("shopping.removed", { name: row.ghost.name })}</span>
                       <button
                         type="button"
@@ -262,10 +264,11 @@ export function ShoppingWidget({ onRetry }: PlaceProps) {
                         <UndoIcon aria-hidden="true" className="size-icon-sm" />
                         {t("shopping.undo")}
                       </button>
-                    </li>
+                    </Appear>
                   ) : (
                     <ShoppingRowView
                       key={row.item.id}
+                      leaving={leaving}
                       item={row.item}
                       pending={pending.get(row.item.id)}
                       mark={marks[row.item.id]}
@@ -276,8 +279,9 @@ export function ShoppingWidget({ onRetry }: PlaceProps) {
                       onRetry={() => void queue.retry(row.item.id)}
                       onRemove={() => void remove(row.item)}
                     />
-                  ),
-                )}
+                  )
+                }
+                </LeavingList>
               </ul>
             </section>
           );
@@ -305,6 +309,8 @@ export function ShoppingWidget({ onRetry }: PlaceProps) {
   );
 }
 
+const shoppingRowKey = (row: Row) => (row.kind === "ghost" ? `ghost-${row.ghost.id}` : row.item.id);
+
 function ShoppingRowView({
   item,
   pending,
@@ -315,8 +321,11 @@ function ShoppingRowView({
   onToggle,
   onRetry,
   onRemove,
+  leaving,
 }: {
   item: ShoppingItemRow;
+  /** Ticked off and done, removed, or moved to another store: eases out (0059 PF16). */
+  leaving?: boolean;
   pending?: PendingTick;
   mark?: ChangeMark;
   remote: boolean;
@@ -333,11 +342,14 @@ function ShoppingRowView({
   // Show who ticked it only when it wasn't you, and only for the kitchen's tick (not a pending one of yours).
   const tickedBy = ticked && !pending && item.ticked && ("missing" in item.ticked.by || item.ticked.by.id !== meId) ? actorName(item.ticked.by, t) : null;
   const highlighted = Boolean(mark) || remote;
+  const appear = useAppear("grow");
   return (
     <li
       data-entity-id={item.id}
       data-change={mark ?? (remote ? "remote" : undefined)}
       className={`row-card flex flex-col ${highlighted ? "change-highlight" : ""}`}
+      {...appear}
+      {...leaveProps(leaving)}
     >
       <div className="flex min-h-tap items-center">
         <label className="flex min-h-tap flex-1 cursor-pointer items-center gap-3 py-2 pl-4">

@@ -144,6 +144,10 @@ test("the day menu pops and the week's missing ingredients sheet springs; closin
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const addNeeds = page.getByRole("button", { name: "Add this week's missing ingredients" });
 
+  // The meal card just moved to its day: it eases out and in (0059 PF16). Let the list settle
+  // before taking positions, as a person would.
+  await expect.poll(() => page.evaluate(() => document.getAnimations().filter((a) => a.playState === "running").length)).toBe(0);
+
   // The day menu pops in from its button; Escape, and a tap during its exit lands.
   const addNeedsAt = await spot(addNeeds);
   const dayButtonAt = await spot(dayButton);

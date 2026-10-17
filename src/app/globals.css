@@ -1257,3 +1257,80 @@
 .receipt-line {
   transition: color var(--motion-duration-enter) var(--ease-gentle);
 }
+
+/*
+ * Leaving (useLeaving in Appear.tsx): a row that's gone fades and drops a little, quicker than it
+ * came; where the browser can animate to `auto` its height closes too, so the rows below slide up.
+ * It never takes taps while leaving.
+ */
+[data-leave] {
+  pointer-events: none;
+  animation: leave-fade var(--motion-duration-exit) var(--ease-exit) both;
+}
+@keyframes leave-fade {
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--motion-distance) * 0.5));
+  }
+}
+@supports (interpolate-size: allow-keywords) {
+  @media (prefers-reduced-motion: no-preference) {
+    [data-leave] {
+      interpolate-size: allow-keywords;
+      overflow: clip;
+      animation-name: leave-close;
+    }
+    @keyframes leave-close {
+      from {
+        height: auto;
+      }
+      to {
+        height: 0;
+        opacity: 0;
+        transform: scale(0.98);
+      }
+    }
+  }
+}
+
+/*
+ * Disclosures that open with the `hidden` attribute ("See all" under a cue, the allergen details)
+ * and the header's stand-in label: they fade in as they appear; closing stays instant.
+ */
+.disclose,
+.standin-minimized {
+  transition:
+    opacity var(--motion-duration-enter) var(--ease-gentle),
+    transform var(--motion-duration-enter) var(--ease-gentle);
+}
+@starting-style {
+  .disclose {
+    opacity: 0;
+    transform: translateY(calc(var(--motion-distance) * -0.5));
+  }
+  .standin-minimized {
+    opacity: 0;
+  }
+}
+
+/*
+ * Switching places (KitchenApp's <ViewTransition>): the old place fades out quickly, the new one
+ * fades in (it also rises, .place-enter). The chat and the places dock have their own names, so
+ * they hold still.
+ */
+::view-transition-old(.place-out) {
+  animation: place-out var(--motion-duration-place-out) var(--ease-exit) both;
+}
+::view-transition-new(.place-in) {
+  animation: place-in var(--motion-duration-place-in) var(--ease-gentle) both;
+}
+@keyframes place-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes place-in {
+  from {
+    opacity: 0;
+  }
+}

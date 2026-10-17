@@ -16,7 +16,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLocale, useNow, useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, ViewTransition, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import {
   acceptStaplesOffer,
@@ -510,6 +510,8 @@ function KitchenScreen({
     setDock(next);
   };
 
+  // One key per place (and per page outside the places: Settings, a Recipe), for the cross-fade.
+  const placeKey = current?.id ?? pathname ?? "";
   const phoneFull = !isDesktop && dock === "full";
   const chatOpen = dock !== "minimized" && dock !== "launch";
   const cuePlace = cue ? places.find((p) => p.id === cue.placeId) : null;
@@ -574,7 +576,14 @@ function KitchenScreen({
         />
 
         <main id="workspace" tabIndex={-1} aria-label={t("workspace.label")} inert={phoneFull} className="stage px-4 pt-4 outline-none desk:px-7 desk:pt-6">
-          {children}
+          {/*
+            Switching places cross-fades (0059 PF16): navigations are transitions, so React runs a
+            view transition where the browser has one (globals.css .place-in / .place-out); the
+            content also rises in (.place-enter). Elsewhere it just changes.
+          */}
+          <ViewTransition key={placeKey} enter="place-in" exit="place-out" default="none">
+            {children}
+          </ViewTransition>
         </main>
         <UpdateKitchenSheet />
 

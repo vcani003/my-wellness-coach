@@ -17,6 +17,7 @@
  * - **Privacy and terms:** links to `/privacy` and `/terms`.
  * Never crashes (0018): a failed load shows "Try again"; a failed tap says so in place.
  */
+import { Appear } from "@/ui/primitives/Appear";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
@@ -183,7 +184,13 @@ function AccountSection({ view, actions, onView }: { view: SettingsView; actions
           {hasPassphrase ? t("changePassphraseHint", { name: view.me.name }) : t("setPassphraseHint")}
         </p>
         <p role="status" className="text-small text-success-text empty:hidden">
-          {saved ? t("passphraseSaved") : ""}
+          {saved ? (
+            <Appear as="span" kind="fade">
+              {t("passphraseSaved")}
+            </Appear>
+          ) : (
+            ""
+          )}
         </p>
       </div>
       <PassphraseSheet

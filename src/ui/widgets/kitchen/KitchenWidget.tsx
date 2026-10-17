@@ -14,6 +14,7 @@ import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import type { ItemRow } from "@/contracts/kitchen-state";
 import { useAnnounce } from "@/ui/a11y/Announcer";
 import { LumiHalo } from "@/ui/lumi/Lumi";
+import { LeavingList, leaveProps, useAppear } from "@/ui/primitives/Appear";
 import { FoodTile } from "@/ui/primitives/FoodTile";
 import { actorName, itemName, sentenceCase } from "@/ui/fallbacks";
 import { CaretRightIcon, CloseIcon, CounterIcon, FreezerIcon, FridgeIcon, PantryIcon, SearchIcon, UnknownPlaceIcon } from "@/ui/primitives/icons";
@@ -242,9 +243,11 @@ function ItemGroups({ items, view, ...row }: RowContext & { items: readonly Item
             </h3>
           </div>
           <ul className="flex flex-col gap-2">
-            {group.items.map((item) => (
+            <LeavingList items={group.items} keyOf={rowKey}>
+              {(item, leaving) => (
               <ItemRowView
                 key={item.id}
+                leaving={leaving}
                 item={item}
                 mark={row.marks[item.id]}
                 remote={row.remoteIds.has(item.id)}
@@ -253,7 +256,8 @@ function ItemGroups({ items, view, ...row }: RowContext & { items: readonly Item
                 showPlace={view === "type"}
                 ghost={item.id === row.ghost?.row.id ? row.ghost.kind : undefined}
               />
-            ))}
+              )}
+            </LeavingList>
           </ul>
         </section>
       ))}
@@ -296,6 +300,8 @@ function SearchResults({ items, query, ...row }: RowContext & { items: ItemRow[]
   );
 }
 
+const rowKey = (item: ItemRow) => item.id;
+
 /** A search match inside a name (CAT1): marked, so it doesn't rely on colour alone (bold too). */
 export function HighlightedName({ text, query }: { text: string; query?: string }) {
   if (!query?.trim()) return <>{text}</>;
@@ -323,8 +329,11 @@ export function ItemRowView({
   showPlace = false,
   query,
   ghost,
+  leaving,
 }: {
   item: ItemRow;
+  /** Gone from the kitchen this moment: eases out (0059 PF16). */
+  leaving?: boolean;
   mark?: ChangeMark;
   remote: boolean;
   meId: string;
@@ -354,6 +363,8 @@ export function ItemRowView({
   const saving = control?.busyId === item.id;
   // One way in (KOS3): the name is the edit button, stretched over the whole row for a tap.
   const editable = Boolean(control) && !ghost;
+  // A row that turns up while you're here (yours or the other person's) opens into place (PF16).
+  const appear = useAppear("grow");
 
   const nameText = (
     <>
@@ -372,6 +383,8 @@ export function ItemRowView({
       data-entity-id={item.id}
       data-change={ghost ? "gone" : (mark ?? (remote ? "remote" : undefined))}
       className={`row-card ${highlighted && !ghost ? "change-highlight" : ""}`}
+      {...appear}
+      {...leaveProps(leaving)}
     >
       <div className="relative flex min-h-tap items-center gap-3 py-2 pr-3 pl-3">
         {/* The food's emoji tile, tinted by where it's kept (0048); the catalog emoji comes with KOS2. */}

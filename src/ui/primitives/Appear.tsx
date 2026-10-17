@@ -12,7 +12,7 @@
  * `auto`), so nothing is delayed for screen readers: the content is in the page from the start.
  * Reduced motion: a fade only.
  */
-import { createContext, useCallback, useContext, useEffect, useState, type AnimationEvent, type ReactNode } from "react";
+import { createContext, Fragment, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type AnimationEvent, type ReactNode } from "react";
 
 /** rise: fade + a small lift (messages, cards). fade: opacity only (status lines). grow: rows in a list. */
 export type AppearKind = "rise" | "fade" | "grow";
@@ -61,17 +61,95 @@ export function Appear({
   kind = "rise",
   as: Tag = "div",
   className,
+  leaving,
   children,
 }: {
   kind?: AppearKind;
   as?: "div" | "span" | "p" | "li";
   className?: string;
+  /** In a `useLeaving` list: this one is on its way out. */
+  leaving?: boolean;
   children: ReactNode;
 }) {
   const appear = useAppear(kind);
   return (
-    <Tag className={className} {...appear}>
+    <Tag className={className} {...appear} {...leaveProps(leaving)}>
       {children}
     </Tag>
   );
+}
+
+/** How long a leaving row stays drawn: --motion-duration-exit (160 ms) plus a frame of slack. */
+export const LEAVE_MS = 200;
+
+export interface Present<T> {
+  item: T;
+  /** Gone from the data: drawn a moment longer while it eases out, never tappable or announced. */
+  leaving: boolean;
+}
+
+interface Leaving<T> {
+  key: string;
+  item: T;
+  index: number;
+}
+
+/**
+ * A list whose removed entries ease out instead of vanishing (rows used up, removed, ticked off,
+ * moved to another group). Returns the current items plus, for a moment, the ones that just left,
+ * at the place they were. Spread `leaveProps(leaving)` on each row.
+ * The gone row is found in a layout effect, so the frame without it is never painted.
+ */
+export function useLeaving<T>(items: readonly T[], keyOf: (item: T) => string, ms = LEAVE_MS): Present<T>[] {
+  const last = useRef<readonly T[]>(items);
+  const [leaving, setLeaving] = useState<Leaving<T>[]>([]);
+  useLayoutEffect(() => {
+    const prev = last.current;
+    last.current = items;
+    if (prev === items) return;
+    const keys = new Set(items.map(keyOf));
+    const gone: Leaving<T>[] = [];
+    prev.forEach((item, index) => {
+      const key = keyOf(item);
+      if (!keys.has(key)) gone.push({ key, item, index });
+    });
+    setLeaving((l) => {
+      // Back again (Undo) → not leaving; a fresh removal replaces an older one with the same key.
+      const kept = l.filter((x) => !keys.has(x.key) && !gone.some((g) => g.key === x.key));
+      if (gone.length === 0 && kept.length === l.length) return l;
+      return [...kept, ...gone];
+    });
+  }, [items, keyOf]);
+  useEffect(() => {
+    if (leaving.length === 0) return;
+    const batch = leaving;
+    const timer = setTimeout(() => setLeaving((l) => l.filter((x) => !batch.includes(x))), ms);
+    return () => clearTimeout(timer);
+  }, [leaving, ms]);
+
+  const out: Present<T>[] = items.map((item) => ({ item, leaving: false }));
+  for (const l of [...leaving].sort((a, b) => a.index - b.index)) {
+    out.splice(Math.min(l.index, out.length), 0, { item: l.item, leaving: true });
+  }
+  return out;
+}
+
+/** On a leaving row: eases out (globals.css [data-leave]); inert and hidden from assistive tech. */
+export function leaveProps(leaving: boolean | undefined): { "data-leave"?: ""; inert?: boolean; "aria-hidden"?: true } {
+  return leaving ? { "data-leave": "", inert: true, "aria-hidden": true } : {};
+}
+
+/** `useLeaving` as a component, for lists rendered inside a map (one hook per list). */
+export function LeavingList<T>({
+  items,
+  keyOf,
+  children,
+}: {
+  items: readonly T[];
+  /** Stable (module-level), so the list isn't re-checked on every render. */
+  keyOf: (item: T) => string;
+  children: (item: T, leaving: boolean) => ReactNode;
+}) {
+  const present = useLeaving(items, keyOf);
+  return present.map((p) => <Fragment key={keyOf(p.item)}>{children(p.item, p.leaving)}</Fragment>);
 }
