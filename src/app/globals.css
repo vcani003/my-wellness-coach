@@ -143,6 +143,14 @@
   --ease-gentle: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
   --ease-pop: cubic-bezier(0.3, 1.6, 0.5, 1); /* overshoot: Lumi and celebrations only (0046) */
+  /*
+   * A soft spring, as a curve (a damped spring sampled into linear()): the item sheet rising in
+   * and the food tile springing back after a press (Vero, 0059 preview feedback: "something fun
+   * like a bounce"). Rises ~3% past its end and settles; never used for leaving.
+   */
+  --ease-spring: linear(0, 0.07, 0.224, 0.405, 0.577, 0.723, 0.836, 0.918, 0.972, 1.004, 1.021, 1.028, 1.028, 1.024, 1.019, 1.014, 1.01, 1.006, 1.003, 1.001, 1);
+  /* A livelier spring for the desktop dialog's small scale-in (0.94 → ~1.006 → 1). */
+  --ease-spring-pop: linear(0, 0.108, 0.34, 0.594, 0.809, 0.962, 1.052, 1.09, 1.093, 1.076, 1.052, 1.029, 1.011, 0.999, 0.993, 0.991, 0.992, 0.994, 0.996, 0.998, 1);
 
   /* ── Layout ───────────────────────────────────────────────────────── */
   --breakpoint-*: initial;
@@ -154,6 +162,10 @@
   --motion-duration-gentle: 300ms;
   --motion-duration-slow: 560ms;
   --motion-distance: 10px; /* how far things rise when they enter */
+  /* Sheets (the item sheet): rise in on the spring, leave quicker and plainly; the scrim fades. */
+  --motion-duration-sheet-in: 420ms;
+  --motion-duration-sheet-out: 200ms;
+  --motion-duration-sheet-fade: 220ms;
   --icon-stroke: 2px;
 
   /* The primary gradient (prototype `.btn.primary`): coral → orange, ink text. */
@@ -185,6 +197,12 @@
     --motion-duration-slow: 0ms;
     --motion-distance: 0px;
     --ease-pop: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --ease-spring-pop: cubic-bezier(0.2, 0.8, 0.2, 1);
+    /* Sheets just fade (no movement, see .sheet-motion); a short fade, not a jump. */
+    --motion-duration-sheet-in: 150ms;
+    --motion-duration-sheet-out: 150ms;
+    --motion-duration-sheet-fade: 150ms;
   }
 }
 
@@ -723,6 +741,99 @@
   /* Sheets (Base UI dialog): white, rising from the bottom on a phone, on the large soft shadow. */
   .sheet {
     box-shadow: var(--shadow-pop);
+  }
+
+  /*
+   * The item sheet's entrance and exit, on Base UI's own transition hooks: the popup and backdrop
+   * carry [data-starting-style] for their first frame and [data-ending-style] while closing, and
+   * Base UI keeps them drawn until the transition ends. Phone: the sheet slides up on the spring
+   * and drops away quicker without one. Desktop: the centred dialog pops in from 0.94 and fades
+   * out. Only transform and opacity move (never the form's layout). Tailwind's centring uses the
+   * separate `translate` property, so it's untouched. While closing, nothing takes taps, so a
+   * closing sheet never sits over the row you tap next.
+   */
+  .sheet-motion {
+    transition-property: transform, opacity;
+    transition-duration: var(--motion-duration-sheet-in), var(--motion-duration-sheet-fade);
+    transition-timing-function: var(--ease-spring), var(--ease-gentle);
+  }
+  .sheet-motion[data-starting-style],
+  .sheet-motion[data-ending-style] {
+    transform: translateY(100%);
+  }
+  .sheet-motion[data-ending-style] {
+    pointer-events: none;
+    transition-duration: var(--motion-duration-sheet-out);
+    transition-timing-function: var(--ease-exit);
+  }
+  /* The spring lifts the sheet a little past its place: its own colour fills in under it. */
+  .sheet-motion::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 100%;
+    height: 64px;
+    background: inherit;
+    pointer-events: none;
+  }
+  @media (width >= 56.25rem) {
+    .sheet-motion {
+      transition-duration: 380ms, var(--motion-duration-sheet-fade);
+      transition-timing-function: var(--ease-spring-pop), var(--ease-gentle);
+    }
+    .sheet-motion[data-starting-style] {
+      opacity: 0;
+      transform: scale(0.94);
+    }
+    .sheet-motion[data-ending-style] {
+      opacity: 0;
+      transform: scale(0.97);
+      transition-duration: var(--motion-duration-sheet-out);
+    }
+    .sheet-motion::after {
+      content: none;
+    }
+  }
+  .scrim-motion {
+    transition: opacity var(--motion-duration-sheet-fade) var(--ease-gentle);
+  }
+  .scrim-motion[data-starting-style],
+  .scrim-motion[data-ending-style] {
+    opacity: 0;
+  }
+  .scrim-motion[data-ending-style] {
+    pointer-events: none;
+    transition-duration: var(--motion-duration-sheet-out);
+    transition-timing-function: var(--ease-exit);
+  }
+
+  /* A tap on an item's row: its food tile gives a small squish, and springs back on release. */
+  [data-food-tile] {
+    transition: transform var(--motion-duration-gentle) var(--ease-spring);
+  }
+  .row-card:has([data-item-edit]:active) [data-food-tile] {
+    transform: scale(0.88);
+    transition-duration: var(--motion-duration-quick);
+    transition-timing-function: var(--ease-gentle);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /* No movement: the sheet and its scrim only fade; the tile doesn't squish. */
+    .sheet-motion,
+    .sheet-motion[data-starting-style],
+    .sheet-motion[data-ending-style] {
+      transform: none;
+    }
+    .sheet-motion[data-starting-style],
+    .sheet-motion[data-ending-style] {
+      opacity: 0;
+    }
+    .sheet-motion {
+      transition-property: opacity;
+    }
+    .row-card:has([data-item-edit]:active) [data-food-tile] {
+      transform: none;
+    }
   }
 
   /* A place's content rises in once when you arrive (gentle, never the pop; 0 with reduced motion). */

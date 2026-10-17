@@ -65,8 +65,8 @@ export function ItemEditSheet() {
   const control = useItemEdit();
   const { snapshot } = useKitchenData();
   const editing = control?.editing ?? null;
-  // The popup stays drawn while the dialog closes (Base UI finishes closing through it), so keep
-  // the last opening until the next one.
+  // The popup stays drawn while the dialog closes (Base UI plays its closing transition through
+  // it, globals.css .sheet-motion), so keep the last opening until the next one.
   const [shown, setShown] = useState(editing);
   if (editing && editing !== shown) setShown(editing);
   if (!control) return null;
@@ -80,7 +80,7 @@ export function ItemEditSheet() {
       onOpenChange={(next) => !next && control.close()}
     >
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
+        <Dialog.Backdrop className="scrim-motion fixed inset-0 z-40 bg-scrim" />
         {shown && item && (
           <SheetBody key={shown.sheet} item={item} control={control} />
         )}
@@ -218,7 +218,7 @@ function SheetBody({
       finalFocus={() => control.finalFocus()}
       aria-describedby={failed ? ids.failed : undefined}
       data-item-sheet={item.id}
-      className="sheet fixed inset-x-0 bottom-(--keyboard-inset) z-50 flex max-h-[calc(90dvh-var(--keyboard-inset))] flex-col rounded-t-sheet bg-surface-raised pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop outline-none desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:max-h-[88dvh] desk:w-[34rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
+      className="sheet sheet-motion fixed inset-x-0 bottom-(--keyboard-inset) z-50 flex max-h-[calc(90dvh-var(--keyboard-inset))] flex-col rounded-t-sheet bg-surface-raised pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop outline-none desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:max-h-[88dvh] desk:w-[34rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
     >
       <form
         onSubmit={(e) => void submit(e)}
