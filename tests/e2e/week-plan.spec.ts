@@ -116,8 +116,10 @@ test("week plan: set a day → it moves → Undo; then add the week's missing in
   await sheet.getByRole("button", { name: /^Add \d+ to my list$/ }).click();
   await expect(sheet).toHaveCount(0);
   const note = page.locator("[data-week-needs-note]");
-  // Focus lands on the receipt (its Undo, once the sheet's own focus return has run).
-  await expect.poll(() => note.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+  // Focus lands on the receipt and stays there after the sheet's exit (as Restock, 0059 PF13).
+  await expect(note).toBeFocused();
+  await page.waitForTimeout(400);
+  await expect(note).toBeFocused();
   await expect(note.getByRole("button", { name: /^Undo/ })).toBeVisible();
   await expectAccessible(page, "after adding the week's needs");
 

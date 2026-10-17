@@ -31,7 +31,7 @@ import { actorName, itemName, sentenceCase } from "@/ui/fallbacks";
 import { LumiHalo } from "@/ui/lumi/Lumi";
 import { usePlaceMemory } from "@/ui/places/PlaceMemory";
 import { Checkbox } from "@/ui/primitives/Checkbox";
-import { Dialog } from "@/ui/primitives/Dialog";
+import { Dialog, SheetBackdrop, SheetPopup, useOpenKey } from "@/ui/primitives/Dialog";
 import { FoodTile, type TilePlace } from "@/ui/primitives/FoodTile";
 import { AddIcon, CloseIcon, MoreIcon, RestockIcon } from "@/ui/primitives/icons";
 import { Menu } from "@/ui/primitives/Menu";
@@ -73,6 +73,7 @@ export function RestockStaples({ onRetry }: { onRetry: () => void }) {
   // Restock needs a connection until KOS7 (0044); a stale kitchen means we're offline too.
   const offline = !online || snapshot.status === "stale";
   const [open, setOpen] = useState(false);
+  const sheetKey = useOpenKey(open);
   const [stored, setNote] = usePlaceMemory<RestockNote | null>("staples.restock.note", null);
   const note = stored && stored.turn === turn ? stored : null;
   const [offer, setOffer] = usePlaceMemory<OfferState>("staples.offer", { status: "idle" });
@@ -107,7 +108,10 @@ export function RestockStaples({ onRetry }: { onRetry: () => void }) {
     void undoReceipt(note.receipt, (undo) => setNote({ ...note, receipt: { ...note.receipt, undo } }));
   };
 
-  const finalFocus = useCallback(() => (justAdded.current && noteRef.current) || pillRef.current || true, []);
+  // After Add, the effect below has already put focus on the receipt: the dialog leaves it there
+  // (false), as handing it the receipt moved focus on to its Undo button once the sheet's exit
+  // finished (0059 PF13). Otherwise focus goes back to the pill.
+  const finalFocus = useCallback(() => (justAdded.current && noteRef.current ? false : pillRef.current || true), []);
   // After Add, focus goes to the receipt that replaced your choices (also after the sheet's own
   // focus return, which a closing dialog may do a frame later).
   const focusNote = useRef(false);
@@ -137,9 +141,9 @@ export function RestockStaples({ onRetry }: { onRetry: () => void }) {
       )}
       <Dialog.Root open={open} onOpenChange={(next) => !next && setOpen(false)}>
         <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
+          <SheetBackdrop />
           <SheetBody
-            key={open ? "open" : "closed"}
+            key={sheetKey}
             offline={offline || snapshot.status === "error"}
             offer={offer}
             onOfferAnswered={() => setOffer({ status: "ready", names: null })}
@@ -177,7 +181,7 @@ function SheetBody({
   onAdded: (result: ApplyResult) => void;
   onClose: () => void;
   onRetry: () => void;
-  finalFocus: () => HTMLElement | true;
+  finalFocus: () => HTMLElement | boolean;
 }) {
   const t = useTranslations("staples");
   const locale = useLocale();
@@ -277,11 +281,11 @@ function SheetBody({
   }
 
   return (
-    <Dialog.Popup
+    <SheetPopup
       finalFocus={finalFocus}
       aria-describedby={failed ? errorId : undefined}
       data-staples-sheet={showEdit ? "edit" : "restock"}
-      className="sheet fixed inset-x-0 bottom-(--keyboard-inset) z-50 flex max-h-[calc(85dvh-var(--keyboard-inset))] flex-col gap-3 rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop outline-none desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:max-h-[85dvh] desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
+      className="fixed inset-x-0 bottom-(--keyboard-inset) z-50 flex max-h-[calc(85dvh-var(--keyboard-inset))] flex-col gap-3 rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] outline-none desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:max-h-[85dvh] desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
     >
       <div className="flex items-start gap-2">
         <div className="flex-1">
@@ -339,7 +343,7 @@ function SheetBody({
           </button>
         </div>
       )}
-    </Dialog.Popup>
+    </SheetPopup>
   );
 }
 

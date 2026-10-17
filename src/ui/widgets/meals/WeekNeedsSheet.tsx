@@ -27,7 +27,7 @@ import { itemName } from "@/ui/fallbacks";
 import { LumiHalo } from "@/ui/lumi/Lumi";
 import { usePlaceMemory } from "@/ui/places/PlaceMemory";
 import { Checkbox } from "@/ui/primitives/Checkbox";
-import { Dialog } from "@/ui/primitives/Dialog";
+import { Dialog, SheetBackdrop, SheetPopup } from "@/ui/primitives/Dialog";
 import { CloseIcon, RestockIcon } from "@/ui/primitives/icons";
 import { Switch } from "@/ui/primitives/Switch";
 import { useKitchenActions } from "@/ui/sync/KitchenActionsContext";
@@ -74,7 +74,10 @@ export function WeekNeedsAdd() {
     announce(result.applied.map((a) => formatMsg(a.summary, "plain")).join(", "));
   };
 
-  const finalFocus = useCallback(() => (justAdded.current && noteRef.current) || pillRef.current || true, []);
+  // After Add, the effect below has already put focus on the receipt: the dialog leaves it there
+  // (false), as handing it the receipt moved focus on to its Undo button once the sheet's exit
+  // finished (0059 PF13). Otherwise focus goes back to the pill.
+  const finalFocus = useCallback(() => (justAdded.current && noteRef.current ? false : pillRef.current || true), []);
   useEffect(() => {
     if (open || !focusNote.current) return;
     focusNote.current = false;
@@ -121,7 +124,7 @@ export function WeekNeedsAdd() {
       )}
       <Dialog.Root open={open} onOpenChange={(next) => !next && setOpen(false)}>
         <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
+          <SheetBackdrop />
           {/* Always drawn while the dialog closes (Base UI finishes its exit on the popup; unmounting it
               early leaves the backdrop over the page). A new key per open starts it fresh. */}
           <SheetBody key={opens} offline={offline || snapshot.status === "error"} onAdded={onAdded} onClose={() => setOpen(false)} finalFocus={finalFocus} />
@@ -140,7 +143,7 @@ export function SheetBody({
   offline: boolean;
   onAdded: (result: ApplyResult) => void;
   onClose: () => void;
-  finalFocus?: () => HTMLElement | true;
+  finalFocus?: () => HTMLElement | boolean;
 }) {
   const t = useTranslations("meals.weekNeeds");
   const format = useFormatter();
@@ -259,11 +262,11 @@ export function SheetBody({
   const canAdd = needs !== null && needsGroups(needs).need.length > 0;
 
   return (
-    <Dialog.Popup
+    <SheetPopup
       finalFocus={finalFocus}
       aria-describedby={failed ? errorId : undefined}
       data-week-needs-sheet=""
-      className="sheet fixed inset-x-0 bottom-(--keyboard-inset) z-50 flex max-h-[calc(85dvh-var(--keyboard-inset))] flex-col gap-3 rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop outline-none desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:max-h-[85dvh] desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
+      className="fixed inset-x-0 bottom-(--keyboard-inset) z-50 flex max-h-[calc(85dvh-var(--keyboard-inset))] flex-col gap-3 rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] outline-none desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:max-h-[85dvh] desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
     >
       <div className="flex items-start gap-2">
         <div className="flex-1">
@@ -317,7 +320,7 @@ export function SheetBody({
           {busy ? t("adding") : t("add", { count: chosen.length })}
         </button>
       )}
-    </Dialog.Popup>
+    </SheetPopup>
   );
 }
 

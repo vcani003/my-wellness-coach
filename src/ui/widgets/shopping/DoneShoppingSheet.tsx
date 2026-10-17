@@ -12,7 +12,7 @@
 import { useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { Checkbox } from "@/ui/primitives/Checkbox";
-import { Dialog } from "@/ui/primitives/Dialog";
+import { Dialog, SheetBackdrop, SheetPopup, useOpenKey } from "@/ui/primitives/Dialog";
 
 export interface SheetItem {
   id: string;
@@ -37,12 +37,13 @@ export interface DoneShoppingSheetProps {
 export function DoneShoppingSheet(props: DoneShoppingSheetProps) {
   // Esc, swipe-down and tapping outside run the open sheet's Do later.
   const dismissRef = useRef(props.onClose);
+  const sheetKey = useOpenKey(props.open);
   return (
     <Dialog.Root open={props.open} onOpenChange={(open) => !open && dismissRef.current()}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
-        {/* A new key on each open, so the pre-selection is fresh each time. */}
-        <SheetBody key={props.open ? "open" : "closed"} {...props} dismissRef={dismissRef} />
+        <SheetBackdrop />
+        {/* A new key on each open (useOpenKey, not on close, so it can play its exit), so the pre-selection is fresh each time. */}
+        <SheetBody key={sheetKey} {...props} dismissRef={dismissRef} />
       </Dialog.Portal>
     </Dialog.Root>
   );
@@ -119,10 +120,10 @@ function SheetBody({
     );
 
   return (
-    <Dialog.Popup
+    <SheetPopup
       finalFocus={finalFocus}
       aria-describedby={failed ? errorId : undefined}
-      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[28rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
+      className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[28rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
     >
       <div className="flex items-start gap-2">
         <div>
@@ -162,6 +163,6 @@ function SheetBody({
           {t("skip")}
         </button>
       </div>
-    </Dialog.Popup>
+    </SheetPopup>
   );
 }

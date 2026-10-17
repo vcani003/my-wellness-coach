@@ -10,7 +10,7 @@
  * - `onConfirm` resolves false (or throws) → the sheet stays open with a plain error (0018).
  */
 import { useId, useRef, useState, type ReactNode } from "react";
-import { Dialog } from "@/ui/primitives/Dialog";
+import { Dialog, SheetBackdrop, SheetPopup, useOpenKey } from "@/ui/primitives/Dialog";
 
 export interface ConfirmSheetProps {
   open: boolean;
@@ -31,13 +31,14 @@ export interface ConfirmSheetProps {
 export const phraseMatches = (typed: string, phrase: string) => typed.trim().toLowerCase() === phrase.trim().toLowerCase();
 
 export function ConfirmSheet(props: ConfirmSheetProps) {
+  const sheetKey = useOpenKey(props.open);
   return (
     <Dialog.Root open={props.open} onOpenChange={(open) => props.onOpenChange(open)}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
+        <SheetBackdrop />
         {/* Always rendered: unmounting the Popup ourselves left Base UI's backdrop stuck closing,
-            blocking every tap after Cancel. A new key on each open gives a fresh, empty sheet. */}
-        <SheetBody key={props.open ? "open" : "closed"} {...props} />
+            blocking every tap after Cancel. A new key on each open (useOpenKey) gives a fresh, empty sheet. */}
+        <SheetBody key={sheetKey} {...props} />
       </Dialog.Portal>
     </Dialog.Root>
   );
@@ -71,10 +72,10 @@ function SheetBody({ onOpenChange, title, children, confirmLabel, busyLabel, can
   };
 
   return (
-    <Dialog.Popup
+    <SheetPopup
       initialFocus={phrase ? fieldRef : cancelRef}
       aria-describedby={failed ? errorId : undefined}
-      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 overflow-y-auto rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
+      className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 overflow-y-auto rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
     >
       <Dialog.Title className="font-heading text-title font-medium">{title}</Dialog.Title>
       <div className="flex flex-col gap-2 text-body">{children}</div>
@@ -125,6 +126,6 @@ function SheetBody({ onOpenChange, title, children, confirmLabel, busyLabel, can
       >
         {cancelLabel}
       </button>
-    </Dialog.Popup>
+    </SheetPopup>
   );
 }

@@ -14,7 +14,7 @@ import { useRef, useState, type FormEvent } from "react";
 import type { AuthFailure } from "@/lib/auth/invites";
 import { SecretField } from "@/ui/auth/fields";
 import { passphraseHint, passphraseProblemKey } from "@/ui/auth/strength";
-import { Dialog } from "@/ui/primitives/Dialog";
+import { Dialog, SheetBackdrop, SheetPopup, useOpenKey } from "@/ui/primitives/Dialog";
 
 export interface PassphraseSheetProps {
   open: boolean;
@@ -27,13 +27,14 @@ export interface PassphraseSheetProps {
 }
 
 export function PassphraseSheet(props: PassphraseSheetProps) {
+  const sheetKey = useOpenKey(props.open);
   return (
     <Dialog.Root open={props.open} onOpenChange={(open) => props.onOpenChange(open)}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
+        <SheetBackdrop />
         {/* Always rendered (Base UI needs its Popup to finish closing, or the backdrop stays and
-            blocks the page); a new key on each open gives a fresh, empty sheet. */}
-        <SheetBody key={props.open ? "open" : "closed"} {...props} />
+            blocks the page); a new key on each open (useOpenKey) gives a fresh, empty sheet. */}
+        <SheetBody key={sheetKey} {...props} />
       </Dialog.Portal>
     </Dialog.Root>
   );
@@ -90,9 +91,9 @@ function SheetBody({ onOpenChange, hasPassphrase, userName, change, onSaved }: P
   const hintText = hint.key === "more" ? tAuth("strength.more", { count: hint.count }) : tAuth(`strength.${hint.key}`);
 
   return (
-    <Dialog.Popup
+    <SheetPopup
       initialFocus={currentRef}
-      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col overflow-y-auto rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
+      className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col overflow-y-auto rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
     >
       <Dialog.Title className="font-heading text-title font-medium">{hasPassphrase ? t("changeTitle") : t("setTitle")}</Dialog.Title>
       <form onSubmit={(e) => void submit(e)} noValidate className="mt-3 flex flex-col">
@@ -158,6 +159,6 @@ function SheetBody({ onOpenChange, hasPassphrase, userName, change, onSaved }: P
           {t("cancel")}
         </button>
       </form>
-    </Dialog.Popup>
+    </SheetPopup>
   );
 }
