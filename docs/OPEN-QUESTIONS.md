@@ -11,7 +11,28 @@
 
 ## Outstanding
 
-*Nothing outstanding.*
+### Preview feedback (2026-10-17)
+Background: the local preview runs the free stand-in AI, whose recipes are a fixed template (no amounts, three generic steps), and it mistook a message for a recipe change. The real model is better but isn't required to give amounts and has no rule or test for "how much do I need?" questions.
+
+**PF1 🟡 Amounts in recipes.** Must every ingredient have an amount?
+- **Rec:** yes, for everything except pantry basics used "to taste" (salt, pepper, oil). Amounts match the servings shown. This becomes a model rule plus an eval check.
+> Answer:
+
+**PF2 🟡 "How much do I need?" in chat.** A question about a recipe's amounts or steps gets an answer in chat and changes nothing (no kitchen or list changes, no new recipe version).
+- **Rec:** yes, with a model rule, a code guard (a question never removes items) and evals.
+> Answer:
+
+**PF3 🟡 Chat at launch on phone.** Today the chat always opens in Peek (latest reply plus the typing box).
+- **Rec:** start Minimized on phone, with only the chat button showing, and open it when tapped. Desktop is unchanged. This updates 0017 UX3 and ux.md.
+> Answer:
+
+**PF4 ⚪ Where the fixes go.** These fixes touch code from both the Kitchen OS stack and idea-refine.
+- **Rec:** keep the combined branch as a real working branch (`feat/kitchen-os-next`, stack plus idea-refine) and build the fixes on it. It is still not merged into ui/kitchen-os until you say so.
+> Answer:
+
+**PF5 ⚪ Previewing with the real AI.** The stand-in AI can't show real recipe quality.
+- **Rec:** run your next preview with the real model (the staging key, so a few cents per recipe). That needs the staging key's spending limit raised or reset first (the 400 "spend limit" error from 2026-10-16).
+> Answer:
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
