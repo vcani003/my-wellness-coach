@@ -1,18 +1,16 @@
 /**
- * ⚠️ FAKE RECIPES (the stand-in AI, NOT the real one): templates so a preview on the stand-in
- * doesn't mislead (0059). Every ingredient that isn't a to-taste basic gets an amount for 2, the
- * steps are concrete for the kind of dish (eggs, pasta, curry or stew, stir-fry, anything else),
- * and the user's notes about HOW they want it ("season it with only hondashi", "a little sweet")
- * shape the recipe instead of becoming ingredient lines. Questions about an open recipe ("how much
- * eggs do I need?", "what are the measurements?") are answered from it with no change (PF2).
+ * ⚠️ FAKE RECIPES (the stand-in AI, NOT the real one): the templates behind "make me a sample
+ * recipe" (0059 PF10), so the recipe and week screens can be clicked through without the real AI.
+ * Every ingredient that isn't a to-taste basic gets an amount for 2, and the steps are concrete for
+ * the kind of dish (eggs, pasta, curry or stew, stir-fry, anything else). The stand-in never writes
+ * a recipe for a dish someone asks for, and never answers questions about one: only the real model
+ * does (PF10).
  *
- * Generic on purpose: word lists, not a recipe book. The real model writes the real recipes.
+ * Generic on purpose: word lists, not a recipe book.
  */
 import type { RecipeOutput } from "../meals/model-output";
-import type { RecipeInput } from "../meals/types";
 
 type Ingredient = RecipeOutput["ingredients"][number];
-type Current = NonNullable<RecipeInput["refine"]>["current"];
 
 export type DishKind = "eggs" | "pasta" | "curry" | "stir-fry" | "general";
 
@@ -64,50 +62,6 @@ export function fakeAmount(name: string): string {
   ];
   for (const [re, amount] of rules) if (re.test(n)) return amount;
   return /s$/.test(n.trim()) ? "2" : "100 g";
-}
-
-const LIST_LEAD = /^(?:and\s+)?(?:with|(?:i|we)\s+(?:also\s+)?(?:have|'ve got|have got|got)|use)\s+(?:also\s+)?/i;
-const LEAVE_OUT = /^(?:without|no|don'?t (?:want|use|add))\b/i;
-const COOK_VERB = /^(?:season|flavou?r|top|finish|serve|sprinkle|garnish|sweeten|cook|fry|make)\b/i;
-const NAMED_WITH = /\b(?:with|using)\s+(?:only\s+|just\s+|some\s+|a (?:little|bit of)\s+)?(?:the\s+)?([a-z][a-z' -]*?)\s*$/i;
-
-export interface ReadNotes {
-  /** Named as ingredients: "with coconut milk, lemongrass", "I have potatoes". */
-  listed: string[];
-  /** Named in how they want it: "season it with only hondashi" → hondashi. */
-  seasoning: string[];
-  /** How they want it, as said: shapes the summary and steps, never an ingredient line. */
-  guidance: string[];
-  /** "Only" a seasoning: no salt on top of it. */
-  onlySeasoning: boolean;
-  sweet: boolean;
-}
-
-/** Split the user's notes about a dish into ingredients and guidance. */
-export function readNotes(notes: string): ReadNotes {
-  const out: ReadNotes = { listed: [], seasoning: [], guidance: [], onlySeasoning: false, sweet: false };
-  for (const raw of notes.split(/[.!?;\n]+/)) {
-    const s = raw.trim();
-    if (!s || LEAVE_OUT.test(s)) continue;
-    if (LIST_LEAD.test(s)) {
-      out.listed.push(
-        ...s
-          .replace(LIST_LEAD, "")
-          .split(/\s*,\s*(?:and\s+)?|\s+and\s+/i)
-          .map((x) => x.trim().replace(/^(?:a|an|some|the)\s+/i, ""))
-          .filter(Boolean),
-      );
-      continue;
-    }
-    out.guidance.push(s);
-    if (/\bsweet/i.test(s)) out.sweet = true;
-    const named = COOK_VERB.test(s) ? NAMED_WITH.exec(s)?.[1]?.trim() : undefined;
-    if (named) {
-      out.seasoning.push(named);
-      if (/\b(?:only|just)\b/i.test(s)) out.onlySeasoning = true;
-    }
-  }
-  return out;
 }
 
 const list = (names: string[]) => new Intl.ListFormat("en", { type: "conjunction" }).format(names);
@@ -200,33 +154,22 @@ export function definingIngredient(title: string, ingredients: Ingredient[]): In
   return null;
 }
 
-// ─── Questions about an open recipe (0059 PF2) ─────────────────────────────────────────
-
-const ASKS_AMOUNT = /\b(how (?:much|many)|measurements?|amounts?|quantit(?:y|ies)|what are the ingredients)\b/i;
-const ASKS_TIME = /\b(how long|what (?:temperature|heat)|how hot)\b/i;
-/** "How much rice is left?" is about the kitchen, not the recipe. */
-const ABOUT_KITCHEN = /\b(left|do (?:we|i) (?:still )?have|have we got|in the (?:fridge|freezer|pantry|kitchen)|on (?:the|my) list)\b/i;
-
-/** A question about the recipe itself: answered from it, never a change. */
-export function isFakeRecipeQuestion(text: string): boolean {
-  const t = text.trim();
-  if (/^(?:no|without)\b.*\?$/i.test(t)) return true;
-  return (ASKS_AMOUNT.test(t) || ASKS_TIME.test(t)) && !ABOUT_KITCHEN.test(t);
-}
-
-const stem = (w: string) => w.toLowerCase().replace(/(?:es|s)$/, "");
-
-/** The answer, from the recipe as it stands. */
-export function answerRecipeQuestion(text: string, current: Current): string {
-  const n = current.servings?.trim();
-  const serves = n ? (/^\d+$/.test(n) ? `For ${n} servings` : `For ${n}`) : "For this recipe";
-  if (ASKS_TIME.test(text)) {
-    const timed = current.steps.filter((s) => /\b\d+(?:[–-]\d+)?\s*(?:minutes?|mins?|hours?|seconds?)\b|\bheat\b/i.test(s));
-    return timed.length ? `From the recipe: ${timed.join(" ")}` : "The recipe doesn't give a time for that. Cook it until it looks done.";
+/**
+ * A sample recipe's main ingredients when the kitchen doesn't name them (PF10): a few everyday ones
+ * for this kind of dish, each with an amount, so the In your kitchen / Need split has something in
+ * both (whatever matches the kitchen moves to In your kitchen through the same guard as the real one).
+ */
+export function sampleIngredients(dish: string): string[] {
+  switch (dishKind(dish)) {
+    case "eggs":
+      return ["eggs", "spring onions", "soy sauce"];
+    case "pasta":
+      return ["pasta", "garlic", "tomatoes", "parmesan"];
+    case "curry":
+      return ["chicken", "onions", "curry paste", "coconut milk", "rice"];
+    case "stir-fry":
+      return ["noodles", "chicken", "carrots", "soy sauce", "garlic"];
+    default:
+      return ["rice", "eggs", "spring onions", "soy sauce", "garlic"];
   }
-  const words = new Set((text.toLowerCase().match(/[a-zà-ỹ]+/g) ?? []).filter((w) => w.length >= 3).map(stem));
-  const asked = current.ingredients.filter((i) => i.name.toLowerCase().split(/[^a-zà-ỹ]+/).some((w) => w.length >= 3 && words.has(stem(w))));
-  const line = (i: Current["ingredients"][number]) => (i.amount ? `${i.amount} ${i.name}` : `${i.name} (no amount given)`);
-  const shown = asked.length ? asked : current.ingredients;
-  return `${serves}: ${shown.map(line).join(", ")}.`;
 }

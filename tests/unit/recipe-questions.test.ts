@@ -1,16 +1,17 @@
 /**
  * 0059 (2026-10-17 preview feedback): recipes have amounts (PF1), and a question about a recipe
- * changes nothing (PF2). Covers the code guard that a question never removes kitchen items, the
- * stand-in AI's recipes (amounts, real steps, notes as guidance, not ingredient lines) and its
- * answers to recipe questions. People are fictional (Ana).
+ * changes nothing (PF2). Covers the code guard that a question never removes kitchen items, and
+ * the stand-in AI (PF10): only clearly titled sample recipes (amounts, real steps), and the decline
+ * line for recipe questions and changes. People are fictional (Ana).
  */
 import { describe, expect, it } from "vitest";
 import type { Operation } from "@/contracts/operations";
 import { KitchenState } from "@/contracts/kitchen-state";
-import { FAKE_RECIPE_CHANGE, createFakeInterpreter } from "@/ai/fake";
-import { createFakeMealAI, fakeEdits } from "@/ai/fake/meals";
+import { createFakeInterpreter, STAND_IN_DECLINE_REPLY } from "@/ai/fake";
+import { sampleRecipeTitle } from "@/ai/fake/decline";
+import { createFakeMealAI } from "@/ai/fake/meals";
 import { matchIntent } from "@/ai/fake/patterns";
-import { answerRecipeQuestion, dishKind, fakeAmount, fakeSteps, isFakeRecipeQuestion, readNotes } from "@/ai/fake/recipes";
+import { dishKind, fakeAmount, fakeSteps } from "@/ai/fake/recipes";
 import { askedNotTold, guardQuestionRemovals, isQuestion, QUESTION_KEPT_REPLY } from "@/ai/question-guard";
 import type { InterpretRequest, InterpretResult } from "@/ai/interpreter";
 import { missingAmounts } from "@/ai/meals/to-recipe";
@@ -107,11 +108,10 @@ describe("PF1: the missing-amount check", () => {
   });
 });
 
-// ─── The stand-in AI ────────────────────────────────────────────────────────────────────
+// ─── The stand-in AI (0059 PF10: only sample recipes; questions need the real AI) ─────────
 
-async function fakeRecipe(title: string, notes: string | undefined, items = EGG_KITCHEN): Promise<Extract<RecipeResult, { ok: true }>> {
-  const meals = createFakeMealAI();
-  const r = await meals.generateRecipe({ ...mealContext(items), meal: { mealId: "meal-1", title, ...(notes ? { notes } : {}) } });
+async function sampleRecipe(dish: string, items = EGG_KITCHEN): Promise<Extract<RecipeResult, { ok: true }>> {
+  const r = await createFakeMealAI().generateRecipe({ ...mealContext(items), meal: { mealId: "meal-1", title: sampleRecipeTitle(dish) } });
   if (!r.ok) throw new Error(JSON.stringify(r));
   return r;
 }
@@ -121,21 +121,14 @@ function currentOf(r: Extract<RecipeResult, { ok: true }>): NonNullable<RecipeIn
   return { title, summary, servings, ingredients, steps };
 }
 
-describe("stand-in recipes (0059): amounts, real steps, notes as guidance", () => {
-  it("Ana's tamagoyaki: every non-basic has an amount; her notes are not ingredient lines; 4+ concrete steps", async () => {
-    const r = await fakeRecipe("Japanese rolled omelette", ANA_NOTES);
-    const names = r.recipe.ingredients.map((i) => i.name);
-    expect(names).toEqual(["eggs", "hondashi", "sugar", "cooking oil"]);
-    for (const i of r.recipe.ingredients) if (!isBasic(i.name)) expect(i.amount, i.name).toBeTruthy();
+describe("stand-in sample recipes (PF10): clearly titled templates with amounts and real steps", () => {
+  it("'Sample recipe (stand-in): Japanese rolled omelette': the eggs from the kitchen with an amount, rolled steps", async () => {
+    const r = await sampleRecipe("japanese rolled omelette");
+    expect(r.recipe.title).toBe("Sample recipe (stand-in): Japanese rolled omelette");
+    expect(r.recipe.summary).toMatch(/stand-in/);
     expect(r.recipe.ingredients.find((i) => i.name === "eggs")).toMatchObject({ amount: "4", group: "kitchen" });
-    // "Season it with only hondashi": no salt on top of it.
-    expect(names).not.toContain("salt");
-    for (const n of names) expect(n).not.toMatch(/season it|i like|sweet/i);
-    expect(r.recipe.steps.length).toBeGreaterThanOrEqual(4);
-    expect(r.recipe.steps.join(" ")).not.toMatch(/Prepare the ingredients|Cook everything/);
-    expect(r.recipe.steps[0]).toBe("Crack the 4 eggs into a bowl and beat until smooth, with 1 tsp hondashi and 1 tsp sugar.");
+    for (const i of r.recipe.ingredients) if (!isBasic(i.name)) expect(i.amount, i.name).toBeTruthy();
     expect(r.recipe.steps.join(" ")).toMatch(/roll/i);
-    expect(r.recipe.summary).toBe("A quick japanese rolled omelette for 2. Your way: season it with only hondashi; I like it a little sweet.");
     expect(r.recipe.servings).toBe("2");
   });
 
@@ -144,17 +137,17 @@ describe("stand-in recipes (0059): amounts, real steps, notes as guidance", () =
     ["Chicken curry", "curry", 4],
     ["Beef stir-fry", "stir-fry", 4],
     ["Shakshuka", "general", 4],
-  ])("%s → %s template, amounts everywhere, at least %d steps", async (title, kind, min) => {
-    expect(dishKind(title)).toBe(kind);
-    const r = await fakeRecipe(title, "with spinach, garlic and coconut milk", [{ name: "chicken thighs", location: "fridge" }, { name: "beef", location: "fridge" }]);
+    ["", "general", 4],
+  ])("'%s' → %s template, amounts everywhere, a Need list, at least %d steps", async (dish, kind, min) => {
+    expect(dishKind(dish)).toBe(kind);
+    const r = await sampleRecipe(dish, [{ name: "chicken thighs", location: "fridge" }, { name: "beef", location: "fridge" }]);
+    expect(r.recipe.title).toBe(dish ? `Sample recipe (stand-in): ${dish}` : "Sample recipe (stand-in)");
     expect(missingAmounts(r.recipe.ingredients)).toEqual([]);
+    expect(r.recipe.ingredients.some((i) => i.group === "need")).toBe(true);
     expect(r.recipe.steps.length).toBeGreaterThanOrEqual(min);
   });
 
-  it("MI1 lists still become ingredients (with amounts); 'I have X' too", () => {
-    const n = readNotes("with coconutt milk, lemon grass, kaffir. I have a curry base seasoning packet. i also have potatoes");
-    expect(n.listed).toEqual(["coconutt milk", "lemon grass", "kaffir", "curry base seasoning packet", "potatoes"]);
-    expect(n.guidance).toEqual([]);
+  it("amounts come from the name table", () => {
     expect(["coconut milk", "curry base seasoning packet", "potatoes", "hondashi", "eggs"].map(fakeAmount)).toEqual(["1 can (400 ml)", "1 packet", "2 medium", "1 tsp", "4"]);
   });
 
@@ -162,98 +155,40 @@ describe("stand-in recipes (0059): amounts, real steps, notes as guidance", () =
     const steps = fakeSteps("Toast", [{ name: "bread", amount: "2 slices", item: null, basic: false }], { salt: true });
     expect(steps.length).toBeGreaterThanOrEqual(4);
   });
-});
 
-describe("stand-in answers recipe questions with no change (PF2)", () => {
-  async function ask(text: string) {
-    const first = await fakeRecipe("Japanese rolled omelette", ANA_NOTES);
-    const meals = createFakeMealAI();
-    const r = await meals.generateRecipe({
-      ...mealContext(EGG_KITCHEN),
-      meal: { mealId: "meal-1", title: "Japanese rolled omelette" },
-      refine: { messageId: "m-2", text, current: currentOf(first) },
-    });
-    return { first, r };
-  }
-
-  it("'how much eggs do I need?' → the amount, unchanged (no new version)", async () => {
-    const { r } = await ask("how much eggs do I need?");
-    expect(r).toMatchObject({ ok: true, unchanged: true, reply: "For 2 servings: 4 eggs." });
-  });
-
-  it("'what are the measurements?' → every amount", async () => {
-    const { r } = await ask("what are the measurements?");
-    expect(r).toMatchObject({ ok: true, unchanged: true, reply: "For 2 servings: 4 eggs, 1 tsp hondashi, 1 tsp sugar, 1 tbsp cooking oil." });
-  });
-
-  it("'no measurements for the eggs?' (Ana's follow-up) → answered; nothing removed", async () => {
-    const { first, r } = await ask("no measurements for the eggs?");
-    expect(r.ok && r.unchanged).toBe(true);
-    expect(r.ok && r.recipe.ingredients.map((i) => i.name)).toEqual(first.recipe.ingredients.map((i) => i.name));
-    expect(r.reply).toBe("For 2 servings: 4 eggs.");
-  });
-
-  it("'how long do I cook it?' → the timed steps", async () => {
-    const { r } = await ask("how long do I cook it?");
-    expect(r.ok && r.unchanged).toBe(true);
-    expect(r.reply).toMatch(/^From the recipe: .*about 1 minute/);
-  });
-
-  it("an old recipe with no amounts says so instead of inventing one", () => {
-    const reply = answerRecipeQuestion("how much eggs do I need?", {
-      title: "Omelette",
-      servings: null,
-      ingredients: [{ name: "eggs", amount: null, itemId: null, group: "need", allergenFlags: [] }],
-      steps: ["Beat the eggs."],
-    });
-    expect(reply).toBe("For this recipe: eggs (no amount given).");
-  });
-
-  it("which messages count as recipe questions", () => {
-    for (const q of ["how much eggs do I need?", "what are the measurements?", "no measurements for the eggs?", "how long do I cook it", "how many eggs?", "I want to make it, how much eggs do I need?"]) {
-      expect(isFakeRecipeQuestion(q), q).toBe(true);
-    }
-    for (const q of ["how much rice is left?", "how many eggs do we have?", "no garlic", "use 3 eggs instead of 2", "what can I make?"]) {
-      expect(isFakeRecipeQuestion(q), q).toBe(false);
-    }
-  });
-
-  it("regression: 'no X?' is never a removal edit (it removed the eggs in the preview)", () => {
-    const first = { title: "Omelette", ingredients: [{ name: "eggs", amount: "4", itemId: null, group: "need" as const, allergenFlags: [] }], steps: ["Beat the eggs."] };
-    expect(fakeEdits("no measurements for the eggs?", first)).toBeNull();
-    expect(fakeEdits("no eggs", first)?.edits[0]).toMatchObject({ op: "remove_ingredient", at: 1 });
-    // Still routed to the recipe (so it's answered there), never to a kitchen change.
-    expect(FAKE_RECIPE_CHANGE.test("no measurements for the eggs?")).toBe(true);
+  it("a recipe that isn't a sample is never written by the stand-in", async () => {
+    const r = await createFakeMealAI().generateRecipe({ ...mealContext(EGG_KITCHEN), meal: { mealId: "meal-1", title: "Japanese rolled omelette", notes: ANA_NOTES } });
+    expect(r).toEqual({ ok: false, reason: "not-configured", reply: STAND_IN_DECLINE_REPLY });
   });
 });
 
-describe("stand-in interpreter (0059)", () => {
+describe("stand-in and recipe questions (PF10 replaces the stand-in's PF2 answers): the decline line, no change", () => {
   const now = new Date();
   const actor = { id: "u-ana", name: "Ana" };
   const at = new Date(now.getTime() - 60_000).toISOString();
-  const openMeal = { id: "meal-1", title: "Japanese rolled omelette", status: "chosen" as const, chosenAt: at, allergenFlags: [], recipe: { id: "r-1", version: 1, source: "ai" as const }, createdAt: at, createdBy: actor, updatedAt: at, updatedBy: actor };
+  const openMeal = { id: "meal-1", title: "Sample recipe (stand-in)", status: "chosen" as const, chosenAt: at, allergenFlags: [], recipe: { id: "r-1", version: 1, source: "ai" as const }, createdAt: at, createdBy: actor, updatedAt: at, updatedBy: actor };
   const req = (text: string, meals = [openMeal]): InterpretRequest => {
     const state = KitchenState.parse({ ...kitchen(EGG_KITCHEN), meals });
     return { kitchenId: state.kitchenId, userId: "u-ana", message: { id: "msg-1", text }, state, version: state.version, history: [] };
   };
 
-  it.each(["how much eggs do I need?", "what are the measurements?", "no measurements for the eggs?", "I want to make it, how much eggs do I need?", "how long do I cook it?"])(
-    "with a recipe open, '%s' → a recipe question: no kitchen or list change",
+  it.each(["how much eggs do I need?", "what are the measurements?", "no measurements for the eggs?", "I want to make it, how much eggs do I need?", "how long do I cook it?", "how much rice is left?", "no eggs", "skip step 2"])(
+    "with a recipe open, '%s' → declined: no proposal, no follow-up",
     async (text) => {
-      const r = await createFakeInterpreter().interpret(req(text));
-      expect(r.proposal).toBeNull();
-      expect(r.followUps).toEqual([{ kind: "recipe", meal: { mealId: "meal-1" }, refine: text }]);
+      expect(await createFakeInterpreter().interpret(req(text))).toEqual({ kind: "answer", proposal: null, reply: STAND_IN_DECLINE_REPLY });
     },
   );
 
-  it("'how much rice is left?' is not a recipe question", async () => {
-    const r = await createFakeInterpreter().interpret(req("how much rice is left?"));
-    expect(r.followUps ?? []).toEqual([]);
+  it("its meal AI declines a question or change about a sample recipe too (no new version)", async () => {
+    const first = await sampleRecipe("japanese rolled omelette");
+    for (const text of ["how much eggs do I need?", "no garlic"]) {
+      const r = await createFakeMealAI().generateRecipe({ ...mealContext(EGG_KITCHEN), meal: { mealId: "meal-1", title: first.recipe.title }, refine: { messageId: "m-2", text, current: currentOf(first) } });
+      expect(r, text).toEqual({ ok: false, reason: "not-configured", reply: STAND_IN_DECLINE_REPLY });
+    }
   });
 
-  it("regression: 'I want to make it, how much…' never names a dish called 'It'", () => {
-    expect(matchIntent("I want to make it, how much eggs do I need?").kind).not.toBe("dish");
-    expect(matchIntent("I want to make that").kind).not.toBe("dish");
-    expect(matchIntent(ANA_TAMAGOYAKI)).toMatchObject({ kind: "dish", title: "Japanese rolled omelette", notes: "Season it with only hondashi. I like it a little sweet" });
+  it("regression: 'I want to make it, how much…' and Ana's tamagoyaki message never name a dish", () => {
+    expect(matchIntent("I want to make it, how much eggs do I need?").kind).toBe("needsRealAI");
+    expect(matchIntent(ANA_TAMAGOYAKI).kind).toBe("needsRealAI");
   });
 });

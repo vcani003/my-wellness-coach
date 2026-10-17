@@ -1,7 +1,7 @@
 /**
  * 0052: a chat edit of a saved recipe shows a "What changed" receipt with Undo; the receipt's Undo
  * button brings the previous version back, and the idea card follows it. End to end on an
- * embedded Postgres with the FAKE interpreter and FAKE meal AI → `handleChatTurn` /
+ * embedded Postgres with the SCRIPTED test interpreter and meal AI (tests/support/scripted-ai) → `handleChatTurn` /
  * `handleChooseMeal` / `undoWithFollow` (what the `undoChange` server action runs) → the real stores.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -10,8 +10,8 @@ import type { Db } from "@/db/client";
 import { mealIdeas } from "@/db/schema";
 import type { ApplyResult } from "@/contracts/apply-result";
 import { StreamEvent } from "@/contracts/stream";
-import { createFakeInterpreter } from "@/ai/fake";
-import { createFakeMealAI } from "@/ai/fake/meals";
+import { createScriptedInterpreter } from "../support/scripted-ai/interpreter";
+import { createScriptedMealAI } from "../support/scripted-ai/meals";
 import { handleChatTurn, handleChooseMeal, undoWithFollow } from "@/ai/turn";
 import { listChatHistory } from "@/domains/chat/queries";
 import { getChangesSince, getKitchenState, getRecipe } from "@/domains/kitchen/queries";
@@ -45,15 +45,15 @@ async function collect(gen: AsyncGenerator<StreamEvent>) {
 const deps = (scope: KitchenScope) => ({
   db,
   scope,
-  interpreter: createFakeInterpreter(async (req) => {
+  interpreter: createScriptedInterpreter(async (req) => {
     const recent = await getChangesSince(db, scope, Math.max(0, req.version - 30));
     return recent.filter((c) => !("missing" in c.actor) && c.actor.id === req.userId).reverse();
   }),
-  meals: createFakeMealAI(),
+  meals: createScriptedMealAI(),
 });
 const turn = (scope: KitchenScope, text: string, id = `edit-${++n}`) => collect(handleChatTurn(deps(scope), { clientMessageId: id, text }));
 const choose = (scope: KitchenScope, ideaId: string) =>
-  collect(handleChooseMeal({ db, scope, meals: createFakeMealAI() }, { clientMessageId: `tap-${++n}`, target: { ideaId } }));
+  collect(handleChooseMeal({ db, scope, meals: createScriptedMealAI() }, { clientMessageId: `tap-${++n}`, target: { ideaId } }));
 const undoTap = async (scope: KitchenScope, changeSetId: string) =>
   undoWithFollow({ db, scope }, { changeSetId, tapId: `undo-${++n}`, basedOnVersion: (await getKitchenState(db, scope)).version });
 

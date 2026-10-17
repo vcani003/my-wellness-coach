@@ -1,14 +1,14 @@
 /**
- * A dish named in chat (MI1 Rec, 0013 M1) end to end on an embedded Postgres: the FAKE
- * interpreter and FAKE meal AI → `handleChatTurn` → the real validate → apply path → the recipe
+ * A dish named in chat (MI1 Rec, 0013 M1) end to end on an embedded Postgres: the SCRIPTED
+ * test interpreter and meal AI (tests/support/scripted-ai, not the app's stand-in, 0059 PF10) → `handleChatTurn` → the real validate → apply path → the recipe
  * follow-up. Vero's real message: her kitchen adds and the chosen dish are one change set, and
  * the recipe's In your kitchen / Need come from the kitchen including what she just added.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Db } from "@/db/client";
 import { StreamEvent } from "@/contracts/stream";
-import { createFakeInterpreter } from "@/ai/fake";
-import { createFakeMealAI } from "@/ai/fake/meals";
+import { createScriptedInterpreter } from "../support/scripted-ai/interpreter";
+import { createScriptedMealAI } from "../support/scripted-ai/meals";
 import { handleChatTurn } from "@/ai/turn";
 import { addRecipeNeedsToShoppingList } from "@/domains/kitchen/commands";
 import { getKitchenState, getRecipe } from "@/domains/kitchen/queries";
@@ -29,7 +29,7 @@ const VERO = "i was thinking a chicken curry, with coconutt milk, lemon grass, k
 let n = 0;
 async function turn(scope: KitchenScope, text: string) {
   const events: StreamEvent[] = [];
-  const deps = { db, scope, interpreter: createFakeInterpreter(), meals: createFakeMealAI() };
+  const deps = { db, scope, interpreter: createScriptedInterpreter(), meals: createScriptedMealAI() };
   for await (const e of handleChatTurn(deps, { clientMessageId: `dish-${++n}`, text })) {
     StreamEvent.parse(e);
     events.push(e);
@@ -70,7 +70,7 @@ describe("a named dish through handleChatTurn (MI1)", () => {
     const inKitchen = recipe!.ingredients.filter((i) => i.item && !("missing" in i.item)).map((i) => i.name);
     const need = recipe!.ingredients.filter((i) => !(i.item && !("missing" in i.item)) && !i.basic).map((i) => i.name);
     expect(inKitchen).toEqual(["chicken thighs", "curry base seasoning packet", "potatoes"]);
-    expect(need).toEqual(["coconutt milk", "lemon grass", "kaffir"]); // the stand-in keeps her words as typed
+    expect(need).toEqual(["coconutt milk", "lemon grass", "kaffir"]); // the scripted double keeps her words as typed
 
     // "Add Need items to shopping list" (0027) works on it as on any recipe.
     const listed = await addRecipeNeedsToShoppingList(db, vero, { tapId: "tap-needs", basedOnVersion: state.version, mealId });

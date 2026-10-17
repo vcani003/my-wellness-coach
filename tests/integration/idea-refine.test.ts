@@ -1,6 +1,6 @@
 /**
- * Refining an idea card, end to end on an embedded Postgres (ai.md §5, Vero 2026-10-15): the FAKE
- * interpreter and FAKE meal AI → `handleChatTurn` / `handleChooseMeal` → the real stores.
+ * Refining an idea card, end to end on an embedded Postgres (ai.md §5, Vero 2026-10-15): the SCRIPTED
+ * test interpreter and meal AI (tests/support/scripted-ai, not the app's stand-in, 0059 PF10) → `handleChatTurn` / `handleChooseMeal` → the real stores.
  * - B: "remove the yogurt from the chicken curry" changes the stored card in place (one
  *   `idea.updated`, no change set, no recipe), and the recipe written when she later chooses it
  *   leaves the yogurt out.
@@ -17,8 +17,8 @@ import type { Db } from "@/db/client";
 import { MIGRATIONS_FOLDER } from "@/db/client";
 import { mealIdeas } from "@/db/schema";
 import { StreamEvent, type MealIdea } from "@/contracts/stream";
-import { createFakeInterpreter } from "@/ai/fake";
-import { createFakeMealAI } from "@/ai/fake/meals";
+import { createScriptedInterpreter } from "../support/scripted-ai/interpreter";
+import { createScriptedMealAI } from "../support/scripted-ai/meals";
 import { handleChatTurn, handleChooseMeal } from "@/ai/turn";
 import { getChangesSince, getKitchenState, getRecipe } from "@/domains/kitchen/queries";
 import type { KitchenScope } from "@/shared/membership";
@@ -48,19 +48,19 @@ async function collect(gen: AsyncGenerator<StreamEvent>) {
     reply: events.flatMap((e) => (e.type === "text" ? [e.delta] : [])).join(""),
   };
 }
-/** The fake as the app wires it, so "undo" finds the speaker's own latest change set. */
+/** The scripted double with the app's undo lookup, so "undo" finds the speaker's own latest change set. */
 const deps = (scope: KitchenScope) => ({
   db,
   scope,
-  interpreter: createFakeInterpreter(async (req) => {
+  interpreter: createScriptedInterpreter(async (req) => {
     const recent = await getChangesSince(db, scope, Math.max(0, req.version - 30));
     return recent.filter((c) => !("missing" in c.actor) && c.actor.id === req.userId).reverse();
   }),
-  meals: createFakeMealAI(),
+  meals: createScriptedMealAI(),
 });
 const turn = (scope: KitchenScope, text: string) => collect(handleChatTurn(deps(scope), { clientMessageId: `idea-${++n}`, text }));
 const choose = (scope: KitchenScope, ideaId: string) =>
-  collect(handleChooseMeal({ db, scope, meals: createFakeMealAI() }, { clientMessageId: `tap-${++n}`, target: { ideaId } }));
+  collect(handleChooseMeal({ db, scope, meals: createScriptedMealAI() }, { clientMessageId: `tap-${++n}`, target: { ideaId } }));
 
 async function anaWithCurryIdea() {
   const k = await newKitchen(db, ["Ana", "Ben"]);

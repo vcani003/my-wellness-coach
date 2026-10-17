@@ -234,8 +234,9 @@ describe("more than 5 removals in one message (0045 KOS16)", () => {
 
   it("'plan the curry for Tuesday' + six removals: held, and the yes plans it for that day (0059: the day survives the hold)", async () => {
     const { ana } = await anaWithSix();
-    await turn(ana, "I want to make a chicken curry");
-    const meal = (await getKitchenState(db, ana)).meals.find((m) => m.title === "Chicken curry")!;
+    // A meal to plan: the stand-in's sample recipe (0059 PF10; it no longer writes a named dish's recipe).
+    await turn(ana, "make me a sample recipe for chicken curry");
+    const meal = (await getKitchenState(db, ana)).meals.find((m) => m.title === "Sample recipe (stand-in): Chicken curry")!;
     expect(meal.status).toBe("chosen");
     const day = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
     const said = <T>(value: T) => ({ value, basis: "said" as const, confidence: "high" as const });

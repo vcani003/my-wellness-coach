@@ -2,7 +2,7 @@
  * Edit mode for refinements (ai.md §5): code applies the model's edits to the current recipe.
  * Positions are checked, unchanged lines stay byte-for-byte, flags are recomputed, and anything
  * that doesn't check out returns `ok: false` (the caller then rewrites the whole recipe).
- * Also: the fake's edit phrasings, and the "Here's a recipe" duplicate in the chat reply.
+ * Also: the scripted test double's edit phrasings, and the "Here's a recipe" duplicate in the chat reply.
  */
 import { describe, expect, it } from "vitest";
 import { RecipeSave } from "@/contracts/operations";
@@ -12,8 +12,8 @@ import { labelMaps } from "@/ai/meals/context";
 import type { RecipeEditOut } from "@/ai/meals/model-output";
 import type { RecipeBuild } from "@/ai/meals/to-recipe";
 import type { RecipeIngredientOut, RecipeInput } from "@/ai/meals/types";
-import { fakeEdits } from "@/ai/fake/meals";
-import { FAKE_RECIPE_CHANGE } from "@/ai/fake";
+import { fakeEdits } from "../support/scripted-ai/meals";
+import { SCRIPTED_RECIPE_CHANGE } from "../support/scripted-ai/interpreter";
 import { LEVI_SEAFOOD, mealContext, PASTA_KITCHEN, SHRIMP_KITCHEN } from "@/ai/eval/fixtures";
 
 // PASTA_KITCHEN labels: i1 penne · i2 spinach · i3 milk · i4 cheddar · i5 garlic · i6 tomatoes · i7 beef mince · i8 honey
@@ -124,7 +124,7 @@ describe("applying edits", () => {
   });
 });
 
-describe("the fake's edit phrasings (e2e and testers)", () => {
+describe("the scripted test double's edit phrasings go through the same apply code", () => {
   it.each([
     ["I'm using baby carrots too", ["add_ingredient", "change_step"]],
     ["no garlic", ["remove_ingredient"]],
@@ -134,7 +134,7 @@ describe("the fake's edit phrasings (e2e and testers)", () => {
   ])("%s → %j", (text, ops) => {
     const out = fakeEdits(text, current);
     expect(out?.edits.map((x) => x.op)).toEqual(ops);
-    expect(FAKE_RECIPE_CHANGE.test(text)).toBe(true);
+    expect(SCRIPTED_RECIPE_CHANGE.test(text)).toBe(true);
     expect(applyRecipeEdits(current, out!.edits, out!.reply, build).ok).toBe(true);
   });
 

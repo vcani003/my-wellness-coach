@@ -1,6 +1,6 @@
 /** The FAKE interpreter's message patterns (milestone 2 stand-in, not the real AI). */
 import { describe, expect, it } from "vitest";
-import { createFakeInterpreter } from "@/ai/fake";
+import { createFakeInterpreter, FALLBACK_REPLY, SAMPLE_REPLY, STAND_IN_DECLINE_REPLY } from "@/ai/fake";
 import { matchIntent, splitList } from "@/ai/fake/patterns";
 import { request } from "@/ai/eval/fixtures";
 
@@ -44,17 +44,112 @@ describe("fake interpreter patterns", () => {
   it("undo, and anything else is not understood", () => {
     expect(matchIntent("undo").kind).toBe("undo");
     expect(matchIntent("Undo that.").kind).toBe("undo");
-    expect(matchIntent("Is it going to rain?").kind).toBe("unknown");
     expect(matchIntent("hello").kind).toBe("unknown");
   });
 
-  it("meal phrases (0005, 0013): ideas, the Nth one, add that to my plan, start cooking, I made it", () => {
-    expect(matchIntent("What can I make tonight?").kind).toBe("mealIdeas");
-    expect(matchIntent("the second one")).toEqual({ kind: "meal", action: "meal_choose", label: "d2" });
-    expect(matchIntent("Let's do the first one!")).toEqual({ kind: "meal", action: "meal_choose", label: "d1" });
+  it("meal phrases it still does (0005, 0013): add that to my plan, start cooking, I made it", () => {
     expect(matchIntent("add that to my meal plan")).toEqual({ kind: "meal", action: "meal_plan", label: "last_chosen" });
     expect(matchIntent("start cooking")).toEqual({ kind: "meal", action: "meal_start_cooking", label: "last_chosen" });
     expect(matchIntent("I made it!")).toEqual({ kind: "meal", action: "meal_done", label: "last_chosen" });
+  });
+
+  // 0059 PF10: "stand in ai shouldnt be able to answer. only the real model can."
+  it.each([
+    "Is it going to rain?",
+    "How much eggs do I need?",
+    "what are the measurements?",
+    "When should I start cooking?",
+    "What can I make tonight?",
+    "any other ideas?",
+    "suggest something for dinner",
+    "the second one",
+    "Let's do the first one!",
+    "I want to make pad thai",
+    "i was thinking a chicken curry, with coconut milk. I have potatoes",
+    "let's make a chicken curry",
+    "give me a recipe for banana bread",
+    "remove the yogurt from the curry",
+  ])("PF10: %s → needs the real AI", (text) => {
+    expect(matchIntent(text).kind).toBe("needsRealAI");
+  });
+
+  it.each([
+    ["make me a sample recipe", undefined],
+    ["Make me a sample recipe.", undefined],
+    ["sample recipe for chicken curry", "chicken curry"],
+    ["can you make a sample recipe for a pasta bake?", "pasta bake"],
+    ["give me a sample stir-fry recipe", "stir-fry"],
+  ])("PF10: %s → a sample recipe (%s)", (text, dish) => {
+    expect(matchIntent(text)).toEqual(dish ? { kind: "sample", dish } : { kind: "sample" });
+  });
+
+  it("the staples and week questions it answers by code are not declined", () => {
+    expect(matchIntent("what staples do I need?").kind).toBe("staplesQuestion");
+    expect(matchIntent("What are we eating this week?").kind).toBe("weekPlan");
+    expect(matchIntent("what do we need for this week?").kind).toBe("weekNeeds");
+  });
+
+  // Regression (preview, 2026-10-17): "5-6 large eggs" kept the amount in the name, and
+  // "the ingredients needed to make this" became an item.
+  it.each([
+    ["I bought 5-6 large eggs", "large eggs", { asSaid: "5-6" }],
+    ["I bought 5 - 6 large eggs", "large eggs", { asSaid: "5-6" }],
+    ["I got 2 x eggs", "eggs", { asSaid: "2", amount: 2 }],
+    ["I got 2x avocados", "avocados", { asSaid: "2", amount: 2 }],
+    ["I bought a dozen eggs", "eggs", { asSaid: "a dozen", amount: 12 }],
+    ["I bought half a dozen eggs", "eggs", { asSaid: "half a dozen", amount: 6 }],
+    ["I bought two avocados", "avocados", { asSaid: "two", amount: 2 }],
+    ["I bought 1.5 kg of rice", "rice", { asSaid: "1.5 kg", amount: 1.5, unit: "kg" }],
+  ])("PF10: %s → %s with the amount as quantity", (text, name, quantity) => {
+    const intent = matchIntent(text);
+    expect(intent.kind === "bought" && intent.items.map((i) => ({ name: i.name, quantity: i.quantity }))).toEqual([{ name, quantity }]);
+  });
+
+  it.each(["I got the ingredients needed to make this", "I bought everything", "we got all the stuff", "I bought groceries"])(
+    "PF10: %s names no food → no item",
+    (text) => {
+      const intent = matchIntent(text);
+      expect(intent.kind === "bought" && intent.items).toEqual([]);
+    },
+  );
+
+  it("'remove the milk from the fridge' is still a kitchen removal", () => {
+    const intent = matchIntent("remove the milk from the fridge");
+    expect(intent.kind === "throwOut" && intent.targets.map((t) => t.name)).toEqual(["milk"]);
+  });
+
+  it("PF10: a real food next to a non-food phrase is still added", () => {
+    const intent = matchIntent("I bought milk and the ingredients for the curry");
+    expect(intent.kind === "bought" && intent.items.map((i) => i.name)).toEqual(["milk"]);
+  });
+});
+
+describe("the stand-in's replies (0059 PF10)", () => {
+  it.each(["How much eggs do I need?", "What can I make tonight?", "I want to make pad thai", "no garlic", "skip step 2", "swap the chicken for tofu", "make it vegetarian"])(
+    "%s → the decline line, no change",
+    async (text) => {
+      expect(await createFakeInterpreter().interpret(request(text))).toEqual({ kind: "answer", proposal: null, reply: STAND_IN_DECLINE_REPLY });
+    },
+  );
+
+  it("the decline line is exactly Vero's wording", () => {
+    expect(STAND_IN_DECLINE_REPLY).toBe("That needs the real AI (Claude). I'm only the stand-in.");
+  });
+
+  it("'I got the ingredients needed to make this' → the help text, no change (regression)", async () => {
+    expect(await createFakeInterpreter().interpret(request("I got the ingredients needed to make this"))).toEqual({ kind: "answer", proposal: null, reply: FALLBACK_REPLY });
+  });
+
+  it("the help text lists what it does and mentions the sample recipe", () => {
+    expect(FALLBACK_REPLY).toMatch(/stand-in/);
+    expect(FALLBACK_REPLY).toMatch(/make me a sample recipe/);
+  });
+
+  it("'make me a sample recipe' → chooses a meal titled 'Sample recipe (stand-in)', and its recipe follows", async () => {
+    const r = await createFakeInterpreter().interpret(request("make me a sample recipe"));
+    expect(r.reply).toBe(SAMPLE_REPLY);
+    expect(r.proposal?.operations).toMatchObject([{ type: "meal.choose", target: { title: "Sample recipe (stand-in)" } }]);
+    expect(r.followUps).toMatchObject([{ kind: "recipe" }]);
   });
 });
 

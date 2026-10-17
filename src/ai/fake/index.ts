@@ -1,32 +1,30 @@
 /**
- * ⚠️ FAKE INTERPRETER (milestone 2 stand-in, NOT the real AI).
+ * ⚠️ FAKE INTERPRETER (the stand-in AI, NOT the real AI).
  *
  * Deterministic and tiny, so the app runs locally with no accounts and the end-to-end tests are
- * repeatable (backend-data.md §8). It understands only:
- *   "I bought X, Y and Z" · "I froze the X" · "I used the rest of the X" · "X is running low" ·
- *   "we have plenty of X" · "there's some X left" (KOS4) ·
+ * repeatable (backend-data.md §8). It only does simple kitchen updates (0059 PF10):
+ *   "I bought X, Y and Z" (a leading "5-6", "2 x" or "a dozen" is the quantity) · "I froze the X" ·
+ *   "I used the rest of the X" · "X is running low" · "we have plenty of X" · "there's some X left" (KOS4) ·
  *   "add X and Y to the list [for Store]" · "take X off the list" · "clear the list" ·
  *   "throw out X, Y and Z" (KOS16: more than 5 removals and the turn asks first) ·
  *   "the old X are gone" · "I defrosted the X" · "undo" ·
  *   "X goes under <category>" (CAT1; adds also get the shared keyword guess) ·
  *   "X goes in the pantry" / "put X in the fridge" (0041; adds get their place from the backend) ·
- *   "I was thinking a <dish>, with … I have X" / "I want to make <dish>" (MI1) ·
- *   with a recipe open: "I'm using X too", "no X", "use 3 X instead of 2", "skip step 2", "make it …",
- *   and questions about it ("how much X do I need?", "what are the measurements?", "how long?"),
- *   answered from the recipe with no change (0059 PF2) ·
  *   staples (0054): "X is a staple [from Store]", "we always keep X", "X isn't a staple any more",
  *   "what staples do I need?" / "restock", and "yes" to its own "remember these as your staples?" ·
  *   the dated plan (0045 KOS1, KOS12): "plan the curry for Tuesday", "move the pasta to Friday",
  *   "take the day off the pasta", "what are we eating this week?", "add what we need for this week's meals" ·
- *   on idea cards: "remove the X from the <idea>", "swap the X for Y in the first one", "make the <idea> without X"
- * and answers anything else politely with no changes. Everything it proposes still goes through
- * the real backend validate → apply path. The AI specialist replaces this folder (ai.md §9).
+ *   for the last chosen meal: "add that to my plan", "start cooking", "I made it" ·
+ *   "make me a sample recipe [for <dish>]": a template titled "Sample recipe (stand-in)", so the
+ *   recipe and week screens can be clicked through.
+ * Questions, recipes, meal ideas and recipe changes get STAND_IN_DECLINE_REPLY and change nothing:
+ * only the real model answers those (PF10). Anything else gets FALLBACK_REPLY. Everything it
+ * proposes still goes through the real backend validate → apply path.
  */
 import type { ChangeSetSummary } from "@/contracts/apply-result";
 import type { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult, Interpreter } from "../interpreter";
-import { CHANGES_A_DISH, mealOperations, WANTS_RECIPE } from "../real/meal-ops";
-import { nameTokens } from "@/shared/text";
+import { CHANGES_A_DISH, mealOperations } from "../real/meal-ops";
 import type { ModelOutput } from "../real/model-output";
 import { CATEGORY_LABEL_EN, guessCategory } from "@/shared/item-category";
 import { mentionsAllergen } from "@/shared/profile/allergens";
@@ -36,11 +34,13 @@ import { STAPLES_OFFER, staplesAnswer } from "../staples";
 import { WEEK_NEEDS_ADD, weekPlanAnswer } from "../week-plan";
 import { isIsoDay } from "@/shared/plan-dates";
 import { matchIntent, splitList, type Segment } from "./patterns";
-import { isFakeRecipeQuestion } from "./recipes";
+import { sampleRecipeTitle, STAND_IN_DECLINE_REPLY } from "./decline";
 
-/** The recipe changes the fake understands (fake/meals.ts `fakeEdits`), plus "make it vegetarian" (a rewrite). */
-export const FAKE_RECIPE_CHANGE =
-  /^(skip step \d+|use \d+ .+ instead of \d+|(no|without|i don'?t have( any)?) [a-z].*|i'?m (also )?using .+ too|make it .+)[.!?]*$/i;
+export { STAND_IN_DECLINE_REPLY } from "./decline";
+
+/** A change to a recipe or an idea ("skip step 2", "no garlic", "make it vegetarian"): the real AI's job (PF10). */
+const RECIPE_CHANGE =
+  /^(skip step \d+|use \d+ .+ instead of \d+|(no|without|i don'?t have( any)?) [a-z].*|i'?m (also )?using .+ too|make it .+|add .+ (to|in) (the|my|this) (recipe|curry|dish|one)\b.*)[.!?]*$/i;
 
 /**
  * Replies use verb-first wording ("moved the chicken thighs to the freezer"), never "the X is/are",
@@ -56,9 +56,12 @@ function guessedCategory(name: string) {
 }
 
 export const FALLBACK_REPLY =
-  "Sorry, I didn't catch that. I'm a simple stand-in for now, so I only understand things like " +
+  "Sorry, I didn't catch that. I'm only the stand-in AI, so I just do simple kitchen updates like " +
   "“I bought eggs and milk”, “I froze the chicken”, “I used the rest of the spinach”, " +
-  "“the yogurt is running low” and “undo”.";
+  "“the yogurt is running low”, “add rice to the list”, “plan the curry for Tuesday” and “undo”. " +
+  "Say “make me a sample recipe” to try the recipe screens.";
+/** PF10: said with every sample recipe, so nobody mistakes it for a real one. */
+export const SAMPLE_REPLY = "Here's a sample recipe from the stand-in: a template for trying the screens, not a real recipe.";
 export const NOTHING_TO_UNDO_REPLY = "There's nothing of yours to undo right now.";
 
 type Op = ProposedChange["operations"][number];
@@ -96,75 +99,9 @@ function itemOps(targets: Segment[], type: "item.update" | "item.use" | "item.st
   return targets.map((s) => ({ opId: "", type, evidence: s.raw, target: { name: s.name }, fields }) as Op);
 }
 
-const ORDINALS: Record<string, number> = { first: 0, "1st": 0, second: 1, "2nd": 1, third: 2, "3rd": 2 };
-
-/**
- * A change to an idea card (ai.md §5 "Refining an idea"): "remove the yogurt from the chicken
- * curry", "swap the chicken for tofu in the first one", "use potatoes in the second one", and
- * "make the curry without yogurt" (which also chooses it). The card is "the first/second/third one"
- * or the one whose name shares the most words with the message. Routed through the same code as
- * the real interpreter (meal-ops.ts), so the same rules decide edit vs choose.
- */
-function ideaChange(req: InterpretRequest): InterpretResult | null {
-  const ideas = req.ideas ?? [];
-  const text = req.message.text.trim();
-  if (!ideas.length || !(CHANGES_A_DISH.test(text) || /\b(use|add)\s+.+\s+(in|to)\s+(the|my)\b/i.test(text))) return null;
-  const ordinal = /\b(first|second|third|1st|2nd|3rd)\s+one\b/i.exec(text);
-  let index = ordinal ? ORDINALS[ordinal[1].toLowerCase()] : -1;
-  if (index < 0) {
-    const words = new Set(nameTokens(text));
-    const scores = ideas.map((i) => nameTokens(i.name).filter((w) => words.has(w)).length);
-    const best = Math.max(...scores);
-    index = best > 0 && scores.filter((s) => s === best).length === 1 ? scores.indexOf(best) : -1;
-  }
-  if (index < 0 || index >= ideas.length) return null;
-  const label = `d${index + 1}`;
-  const choose = WANTS_RECIPE.test(text);
-  const out: ModelOutput = {
-    kind: choose ? "change" : "answer",
-    reply: "",
-    clarification: null,
-    rememberPreference: null,
-    listOfferAccepted: null,
-    generate: { what: "recipe_change", meal: label },
-    dish: null,
-    operations: choose
-      ? [{ action: "meal_choose", meal: label, evidence: text, item: null, name: null, quantity: null, location: null, frozen: null, stock: null, amountUsed: null, batch: null, store: null }]
-      : [],
-  };
-  const m = mealOperations(out, req, new Date());
-  if (m.operations.length === 0) return { kind: "answer", proposal: null, reply: "", followUps: m.followUps };
-  return {
-    kind: "change",
-    reply: "Good choice.",
-    proposal: { proposalId: req.message.id, kitchenId: req.kitchenId, basedOnVersion: req.version, source: { via: "chat", messageId: req.message.id }, operations: m.operations },
-    followUps: m.followUps,
-  };
-}
-
 export function createFakeInterpreter(recentChanges: RecentChangesLookup = async () => []): Interpreter {
   return {
     async interpret(req): Promise<InterpretResult> {
-      const changed = ideaChange(req);
-      if (changed) return changed;
-      // A change to a recipe you have open ("no garlic", "skip step 2"), or a question about it
-      // ("how much eggs do I need?", "no measurements for the eggs?", 0059 PF2): only when one
-      // exists. A question goes the same way and the recipe step answers it with no change.
-      const text = req.message.text.trim();
-      if ((isFakeRecipeQuestion(text) || FAKE_RECIPE_CHANGE.test(text)) && req.state.meals.some((m) => m.recipe)) {
-        const out: ModelOutput = {
-          kind: "answer",
-          reply: "",
-          clarification: null,
-          rememberPreference: null,
-          listOfferAccepted: null,
-          generate: { what: "recipe_change", meal: "last_chosen" },
-          dish: null,
-          operations: [],
-        };
-        const m = mealOperations(out, req, new Date());
-        if (m.followUps.length) return { kind: "answer", proposal: null, reply: "", followUps: m.followUps };
-      }
       const intent = matchIntent(req.message.text);
       let operations: Op[] = [];
       let reply = "";
@@ -258,8 +195,27 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
           reply = "No problem, that's undone.";
           break;
         }
-        case "mealIdeas":
-          return { kind: "answer", proposal: null, reply: "Let me look at what you have.", followUps: [{ kind: "ideas", request: req.message.text.trim() }] };
+        case "needsRealAI":
+          return { kind: "answer", proposal: null, reply: STAND_IN_DECLINE_REPLY };
+        case "sample": {
+          // PF10: a template recipe, clearly titled, chosen through the same code as the real
+          // interpreter's named dish (meal-ops.ts); the stand-in meal AI writes it.
+          const title = sampleRecipeTitle(intent.dish);
+          const out: ModelOutput = {
+            kind: "change",
+            reply: "",
+            clarification: null,
+            rememberPreference: null,
+            listOfferAccepted: null,
+            generate: null,
+            dish: { title, notes: null, evidence: req.message.text.trim() },
+            operations: [],
+          };
+          const m = mealOperations(out, req, new Date());
+          if (m.operations.length === 0) return { kind: "answer", proposal: null, reply: STAND_IN_DECLINE_REPLY };
+          const base = { proposalId: req.message.id, kitchenId: req.kitchenId, basedOnVersion: req.version, source: { via: "chat" as const, messageId: req.message.id } };
+          return { kind: "change", reply: SAMPLE_REPLY, proposal: { ...base, operations: m.operations }, followUps: m.followUps };
+        }
         case "meal": {
           // The same code resolution as the real interpreter (labels, "last chosen", follow-ups).
           const out: ModelOutput = {
@@ -280,7 +236,6 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
             return { kind: "clarify", reply: m.clarification.question, proposal: { ...base, operations: [], clarification: m.clarification } };
           }
           const replies = {
-            meal_choose: "Good choice. Here's the recipe.",
             meal_plan: intent.when ? "Done, it's on the plan." : "Added it to your plan.",
             meal_start_cooking: "Enjoy cooking!",
             meal_done: "Enjoy! Let me know what's left.",
@@ -297,38 +252,6 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
         case "weekNeeds":
           // KOS12: the turn reads the week's needs and adds them (or lists them, for a question).
           return { kind: "answer", proposal: null, reply: "Let me check this week's meals.", weekNeeds: { add: WEEK_NEEDS_ADD.test(req.message.text) } };
-        case "dish": {
-          // MI1: what they say they have goes into the kitchen, then the dish is chosen directly
-          // through the same code as the real interpreter (meal-ops.ts) and its recipe follows.
-          const out: ModelOutput = {
-            kind: "change",
-            reply: "",
-            clarification: null,
-            rememberPreference: null,
-            listOfferAccepted: null,
-            generate: null,
-            dish: { title: intent.title, notes: intent.notes || null, evidence: intent.evidence },
-            operations: [],
-          };
-          const m = mealOperations(out, req, new Date());
-          const adds: Op[] = intent.have.map((s, i) => ({
-            opId: `${req.message.id}:have${i + 1}`,
-            type: "item.add",
-            evidence: s.raw,
-            fields: { name: said(s.name), ...(s.quantity ? { quantity: said(s.quantity) } : {}) },
-          }));
-          const base = { proposalId: req.message.id, kitchenId: req.kitchenId, basedOnVersion: req.version, source: { via: "chat" as const, messageId: req.message.id } };
-          if (m.operations.length === 0) {
-            return { kind: "answer", proposal: null, reply: "Let me look at what you have.", followUps: m.followUps };
-          }
-          const added = adds.length ? ` I added ${list(intent.have.map((s) => s.name))}.` : "";
-          return {
-            kind: "change",
-            reply: `${intent.title} it is.${added} Here's a recipe.`,
-            proposal: { ...base, operations: [...adds, ...m.operations] },
-            followUps: m.followUps,
-          };
-        }
         case "stapleAdd":
           // 0054 SS2: said in the user's own words; the store only when they say one (SS5).
           operations = intent.items.map((s) => ({
@@ -362,9 +285,15 @@ export function createFakeInterpreter(recentChanges: RecentChangesLookup = async
           reply = `Saved ${list(offered)} as your staples.`;
           break;
         }
-        case "unknown":
-          return { kind: "answer", proposal: null, reply: FALLBACK_REPLY };
+        case "unknown": {
+          // "No garlic", "skip step 2", "swap the chicken for tofu": a recipe or idea change (PF10).
+          const text = req.message.text.trim();
+          const reply = RECIPE_CHANGE.test(text) || CHANGES_A_DISH.test(text) ? STAND_IN_DECLINE_REPLY : FALLBACK_REPLY;
+          return { kind: "answer", proposal: null, reply };
+        }
       }
+      // "I got the ingredients needed to make this" names no food (PF10): nothing to do.
+      if (operations.length === 0) return { kind: "answer", proposal: null, reply: FALLBACK_REPLY };
       return {
         kind: "change",
         reply,

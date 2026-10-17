@@ -13,8 +13,10 @@ import { toWire, type ModelOp, type ModelOutput } from "@/ai/real/model-output";
 import { mealOperations } from "@/ai/real/meal-ops";
 import { renderIdeas } from "@/ai/real/prompt";
 import { createRealMealAI, type MealLog, type StreamingMessagesApi } from "@/ai/real/meals";
-import { createFakeMealAI, fakeIdeaChange } from "@/ai/fake/meals";
-import { createFakeInterpreter } from "@/ai/fake";
+import { createFakeMealAI } from "@/ai/fake/meals";
+import { createFakeInterpreter, STAND_IN_DECLINE_REPLY } from "@/ai/fake";
+import { createScriptedMealAI, fakeIdeaChange } from "../support/scripted-ai/meals";
+import { createScriptedInterpreter } from "../support/scripted-ai/interpreter";
 import { withoutIdeaRefineDraft } from "@/ai/follow-ups";
 import { IDEA_ALLERGEN_REPLY, toRefinedIdea } from "@/ai/meals/refine-idea";
 import { IDEA_REFINE_INSTRUCTIONS, RECIPE_INSTRUCTIONS } from "@/ai/meals/prompts";
@@ -379,7 +381,7 @@ describe("the recipe for an edited idea honours it", () => {
   });
 });
 
-describe("the fake (repeatable e2e)", () => {
+describe("the scripted test double: the same routing (meal-ops) and guards (toRefinedIdea) as the real one", () => {
   const card = SHOWN_IDEAS[0];
 
   it.each([
@@ -390,7 +392,7 @@ describe("the fake (repeatable e2e)", () => {
     ["use the beef mince instead of the chicken", ["item-2", "item-3", "item-4", "item-6"], ["lemongrass"], "Lemongrass Beef mince potato coconut curry"],
     ["add ginger to the curry", ["item-1", "item-2", "item-3", "item-4"], ["lemongrass", "ginger"], card.name],
   ])("%s", async (text, uses, missing, name) => {
-    const r = await createFakeMealAI(() => NOW).refineIdea(refineInput(text));
+    const r = await createScriptedMealAI(() => NOW).refineIdea(refineInput(text));
     if (!r.ok || r.unchanged) throw new Error(`expected a change for "${text}"`);
     expect(r.idea.uses).toEqual(uses);
     expect(r.idea.missing).toEqual(missing);
@@ -398,13 +400,13 @@ describe("the fake (repeatable e2e)", () => {
   });
 
   it("an ingredient that isn't on the card changes nothing", async () => {
-    const r = await createFakeMealAI(() => NOW).refineIdea(refineInput("remove the cheese from the curry"));
+    const r = await createScriptedMealAI(() => NOW).refineIdea(refineInput("remove the cheese from the curry"));
     expect(r).toMatchObject({ ok: true, unchanged: true });
     expect(fakeIdeaChange("remove the cheese", refineInput("x").idea, refineInput("x")).reply).toBe("");
   });
 
   it("the fake follows 0051 like the eval cases: Vero's message → card; your recipe → recipe edit; another member's meal → card", async () => {
-    const fake = createFakeInterpreter();
+    const fake = createScriptedInterpreter();
     const exact = await fake.interpret(ideasViewRequest(IDEA_REFINE_MESSAGE));
     expect(exact.proposal).toBeNull();
     expect(exact.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: IDEA_REFINE_MESSAGE }]);
@@ -421,7 +423,7 @@ describe("the fake (repeatable e2e)", () => {
   });
 
   it("the fake interpreter routes edits to the card and 'make … without' to choose + recipe", async () => {
-    const fake = createFakeInterpreter();
+    const fake = createScriptedInterpreter();
     const edit = await fake.interpret(ideasViewRequest("remove the yogurt from the lemongrass curry"));
     expect(edit.proposal).toBeNull();
     expect(edit.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: "remove the yogurt from the lemongrass curry" }]);
@@ -430,5 +432,18 @@ describe("the fake (repeatable e2e)", () => {
     const make = await fake.interpret(ideasViewRequest("make the curry without yogurt"));
     expect(make.proposal?.operations).toMatchObject([{ type: "meal.choose", target: { ideaId: "idea-curry" } }]);
     expect(make.followUps).toMatchObject([{ kind: "recipe", notes: "make the curry without yogurt" }]);
+  });
+});
+
+describe("the stand-in AI never refines an idea (0059 PF10)", () => {
+  it("in chat, an idea change gets the decline line and no follow-up", async () => {
+    for (const text of [IDEA_REFINE_MESSAGE, "remove the yogurt from the curry", "swap the beef for tofu in the second one", "make the curry without yogurt"]) {
+      const r = await createFakeInterpreter().interpret(ideasViewRequest(text));
+      expect(r, text).toEqual({ kind: "answer", proposal: null, reply: STAND_IN_DECLINE_REPLY });
+    }
+  });
+
+  it("its meal AI declines a refine too, changing nothing", async () => {
+    expect(await createFakeMealAI().refineIdea(refineInput("remove the yogurt from the curry"))).toEqual({ ok: false, reason: "not-configured", reply: STAND_IN_DECLINE_REPLY });
   });
 });

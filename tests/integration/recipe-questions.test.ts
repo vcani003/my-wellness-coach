@@ -1,6 +1,7 @@
 /**
  * The 2026-10-17 preview flow (0059 PF1, PF2), end to end on an embedded Postgres with the
- * stand-in AI: a named dish with notes gets a recipe with amounts and real steps; questions about
+ * scripted test double for the model (tests/support/scripted-ai; the app's stand-in declines these,
+ * PF10): a named dish with notes gets a recipe with amounts and real steps; questions about
  * it are answered in chat and change nothing (no kitchen change, no new recipe version). Also the
  * turn's code guard: a question never removes kitchen items, whatever the interpreter proposed.
  * People are fictional (Ana).
@@ -9,8 +10,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Db } from "@/db/client";
 import { StreamEvent } from "@/contracts/stream";
 import type { ProposedChange } from "@/contracts/proposed-change";
-import { createFakeInterpreter } from "@/ai/fake";
-import { createFakeMealAI } from "@/ai/fake/meals";
+import { createScriptedInterpreter } from "../support/scripted-ai/interpreter";
+import { createScriptedMealAI } from "../support/scripted-ai/meals";
 import type { Interpreter } from "@/ai/interpreter";
 import { QUESTION_KEPT_REPLY } from "@/ai/question-guard";
 import { handleChatTurn } from "@/ai/turn";
@@ -28,9 +29,9 @@ afterAll(async () => {
 });
 
 let n = 0;
-async function turn(scope: KitchenScope, text: string, interpreter: Interpreter = createFakeInterpreter()) {
+async function turn(scope: KitchenScope, text: string, interpreter: Interpreter = createScriptedInterpreter()) {
   const events: StreamEvent[] = [];
-  for await (const e of handleChatTurn({ db, scope, interpreter, meals: createFakeMealAI() }, { clientMessageId: `pf-${++n}`, text })) {
+  for await (const e of handleChatTurn({ db, scope, interpreter, meals: createScriptedMealAI() }, { clientMessageId: `pf-${++n}`, text })) {
     StreamEvent.parse(e);
     events.push(e);
   }

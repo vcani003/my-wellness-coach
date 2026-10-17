@@ -17,6 +17,7 @@ import {
   type StreamingMessagesApi,
 } from "@/ai/real/meals";
 import { createFakeMealAI } from "@/ai/fake/meals";
+import { sampleRecipeTitle, STAND_IN_DECLINE_REPLY } from "@/ai/fake/decline";
 import { getMealAI, notConfiguredMealAI } from "@/ai/meals";
 import { isBasic } from "@/ai/meals/basics";
 import { allergenExcusedIds, LOW_EXCUSES_ALLERGEN, rankUseItUp } from "@/ai/meals/use-it-up";
@@ -610,15 +611,26 @@ describe("which meal AI runs is a server setting", () => {
     expect(await notConfiguredMealAI.generateMealIdeas(ideasInput([], null))).toMatchObject({ ok: false, reason: "not-configured" });
   });
 
-  it("the fake runs through the same guards: allergen ideas left out unless used up, recipe.save valid", async () => {
-    const fake = createFakeMealAI(() => NOW);
-    const result = await fake.generateMealIdeas(ideasInput([{ name: "canned tuna", location: "pantry" }, ...SHRIMP_KITCHEN.slice(1)], null, { restrictions: [LEVI_SEAFOOD] }));
-    expect(result.ok && result.ideas.some((i) => /tuna/i.test(i.name))).toBe(false);
-    const withShrimp = await fake.generateMealIdeas(ideasInput(SHRIMP_KITCHEN, null, { restrictions: [LEVI_SEAFOOD] }));
-    expect(withShrimp.ok && withShrimp.ideas[0]).toMatchObject({ name: "Shrimp rice bowl", useItUp: ["item-1"] });
-    expect(withShrimp.ok && withShrimp.ideas[0].allergenFlags).not.toEqual([]);
-    const recipe = await fake.generateRecipe(recipeInput());
-    expect(recipe.ok && RecipeSave.safeParse(recipe.operation).success).toBe(true);
+  it("the stand-in declines ideas, a dish's recipe and recipe changes (0059 PF10)", async () => {
+    const fake = createFakeMealAI();
+    const declined = { ok: false, reason: "not-configured", reply: STAND_IN_DECLINE_REPLY };
+    expect(await fake.generateMealIdeas(ideasInput(SHRIMP_KITCHEN, null))).toEqual(declined);
+    expect(await fake.generateRecipe(recipeInput())).toEqual(declined);
+    const sample = { mealId: "meal-s", title: sampleRecipeTitle("shrimp stir-fry") };
+    const current = { title: sample.title, servings: "2", ingredients: [], steps: ["Cook."] };
+    expect(await fake.generateRecipe(recipeInput({ meal: sample, refine: { messageId: "m-r", text: "no garlic", current } }))).toEqual(declined);
+  });
+
+  it("a sample recipe goes through the same guards: amounts, In your kitchen / Need, allergen flags, a valid recipe.save", async () => {
+    const recipe = await createFakeMealAI().generateRecipe(recipeInput({ meal: { mealId: "meal-s", title: sampleRecipeTitle("shrimp stir-fry") } }));
+    if (!recipe.ok || recipe.unchanged) throw new Error("expected a sample recipe");
+    expect(RecipeSave.safeParse(recipe.operation).success).toBe(true);
+    expect(recipe.recipe.title).toBe("Sample recipe (stand-in): Shrimp stir-fry");
+    expect(recipe.recipe.ingredients.filter((i) => i.group !== "basic").every((i) => i.amount)).toBe(true);
+    expect(recipe.recipe.ingredients.find((i) => i.name === "shrimp")).toMatchObject({ group: "kitchen" });
+    expect(recipe.recipe.ingredients.some((i) => i.group === "need")).toBe(true);
+    expect(recipe.recipe.allergenFlags).not.toEqual([]);
+    expect(recipe.recipe.steps.length).toBeGreaterThanOrEqual(4);
   });
 
   it("restriction() fixture builds a diet the asker owns, which is never shown for other members", async () => {
