@@ -236,6 +236,75 @@ describe("The sheet's fields", () => {
   });
 });
 
+describe("A level picked next to a typed amount (Vero's iPhone: \"it doesn't allow me to save\")", () => {
+  const low = () => fishSauce({ stock: said("low" as const) });
+  const levelSaved = (version: number) => ok(applied(kitchen([low()], version), [{ code: "ITEM_LOW", params: { name: "fish sauce" } }]));
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+
+  it("Save tapped while Running low is still saving waits for it, then saves the typed amount on the version it moved to", async () => {
+    const level = deferred<ActionResult>();
+    const setStockLevel = vi.fn(() => level.promise);
+    const editItem = vi.fn(async () => ok(applied(kitchen([low()], 5), [{ code: "ITEM_UPDATED", params: { name: "fish sauce" } }])));
+    show(kitchen([fishSauce()], 3), { setStockLevel, editItem });
+    const sheet = await open();
+    await userEvent.clear(field(sheet, "Amount (optional)"));
+    await userEvent.type(field(sheet, "Amount (optional)"), "half a bottle");
+    await userEvent.click(within(sheet).getByRole("button", { name: "Running low" }));
+    expect(setStockLevel).toHaveBeenCalledWith("fs", "low", undefined, 3);
+    expect(sheet.querySelector("[data-level-status]")).toHaveTextContent("Saving…");
+    // Save is still Save, and the tap isn't lost.
+    expect(save(sheet)).toBeEnabled();
+    expect(save(sheet)).not.toHaveAttribute("aria-disabled");
+    await userEvent.click(save(sheet));
+    expect(editItem).not.toHaveBeenCalled();
+    level.resolve(levelSaved(4));
+    await waitFor(() => expect(editItem).toHaveBeenCalledWith("fs", { amount: "half a bottle" }, { basedOnVersion: 4 }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("with nothing typed, Running low says 'Saved' by the question and Done is the one button (no greyed-out Save)", async () => {
+    const setStockLevel = vi.fn(async () => levelSaved(4));
+    show(kitchen([fishSauce()], 3), { setStockLevel });
+    const sheet = await open();
+    expect(save(sheet)).toBeDisabled();
+    await userEvent.click(within(sheet).getByRole("button", { name: "Running low" }));
+    await waitFor(() => expect(sheet.querySelector("[data-level-status]")).toHaveTextContent("Saved"));
+    expect(within(sheet).getByRole("button", { name: "Running low" })).toHaveAttribute("aria-pressed", "true");
+    expect(field(sheet, "Amount (optional)")).toHaveValue("1 bottle");
+    expect(within(sheet).queryByRole("button", { name: "Save" })).toBeNull();
+    // Typing something brings Save back; the level stays saved.
+    await userEvent.type(field(sheet, "Name"), "!");
+    expect(save(sheet)).toBeEnabled();
+    expect(within(sheet).getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    await userEvent.clear(field(sheet, "Name"));
+    await userEvent.type(field(sheet, "Name"), "fish sauce");
+    await userEvent.click(within(sheet).getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("if that level change fails, the waiting Save sends nothing, says so, and keeps the typing", async () => {
+    const level = deferred<ActionResult>();
+    const setStockLevel = vi.fn(() => level.promise);
+    const editItem = vi.fn();
+    show(kitchen([fishSauce()], 3), { setStockLevel, editItem });
+    const sheet = await open();
+    await userEvent.clear(field(sheet, "Amount (optional)"));
+    await userEvent.type(field(sheet, "Amount (optional)"), "half a bottle");
+    await userEvent.click(within(sheet).getByRole("button", { name: "Running low" }));
+    await userEvent.click(save(sheet));
+    level.resolve({ ok: false, reason: m("SAVE_FAILED"), retryable: true });
+    await waitFor(() => expect(within(sheet).getByRole("alert")).toHaveTextContent("I couldn't save that, so nothing changed."));
+    expect(editItem).not.toHaveBeenCalled();
+    expect(field(sheet, "Amount (optional)")).toHaveValue("half a bottle");
+    expect(sheet.querySelector("[data-level-status]")).toBeNull();
+    expect(save(sheet)).toBeEnabled();
+  });
+});
+
 describe("Several batches (KOS4-e, 0036)", () => {
   const twoBatches = () =>
     kitchen([

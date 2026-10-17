@@ -67,6 +67,7 @@
       "amountTooLong": "Keep the amount under {max} characters.",
       "levelLabel": "How much is left?",
       "levelHint": "Saved as soon as you pick it.",
+      "levelSaved": "Saved",
       "placeLabel": "Where is it?",
       "now": "now",
       "typeLabel": "What kind of thing is it?",

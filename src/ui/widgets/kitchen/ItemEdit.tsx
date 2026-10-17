@@ -137,6 +137,7 @@ export function useItemEditControl(offline: boolean) {
 
   const close = useCallback((toNote = false) => {
     closingToNote.current = toNote;
+    editingRef.current = null;
     setEditing(null);
   }, []);
 
@@ -144,7 +145,9 @@ export function useItemEditControl(offline: boolean) {
   const run = useCallback(
     async (item: ItemRow, call: (version: number) => Promise<ActionResult>, how: { closeOnSave: boolean; focusUndo: boolean }): Promise<SheetAnswer> => {
       const open = editingRef.current;
-      if (!open || offline) return "failed";
+      if (offline) return "failed";
+      // The sheet closed meanwhile (e.g. a Save that waited for a level change that then closed it).
+      if (!open) return "done";
       setBusyId(item.id);
       const base = { itemId: item.id, before: item, turn, key: newId(), sheet: open.sheet };
       try {
@@ -171,7 +174,13 @@ export function useItemEditControl(offline: boolean) {
         show({ ...base, kind: "receipt", receipt, ...(closes ? { sheet: undefined } : {}) }, closes || how.focusUndo ? { undo: true } : null);
         announce(t("kitchen.edit.announce", { changes: receipt.applied.map((a) => formatMsg(a.summary, "plain")).join(", ") }));
         if (closes) close(true);
-        else setEditing((e) => (e && e.sheet === open.sheet ? { ...e, version: Math.max(e.version, result.newVersion) } : e));
+        else {
+          // Move the sheet's version on now, not after the next render: a Save tapped while this
+          // was saving runs right after it, and must be based on it (not refused as stale).
+          const moved = (e: Editing | null) => (e && e.sheet === open.sheet ? { ...e, version: Math.max(e.version, result.newVersion) } : e);
+          editingRef.current = moved(editingRef.current);
+          setEditing(moved);
+        }
         return "done";
       } catch {
         return "failed";
@@ -216,7 +225,9 @@ export function useItemEditControl(offline: boolean) {
       open(item, el) {
         opener.current = el;
         closingToNote.current = false;
-        setEditing({ itemId: item.id, item, version, sheet: newId() });
+        const next = { itemId: item.id, item, version, sheet: newId() };
+        editingRef.current = next;
+        setEditing(next);
       },
       close: () => close(),
       save: (item, edit, batchId) => run(item, (v) => actions.editItem(item.id, edit, { basedOnVersion: v, ...(batchId ? { batchId } : {}) }), { closeOnSave: true, focusUndo: true }),

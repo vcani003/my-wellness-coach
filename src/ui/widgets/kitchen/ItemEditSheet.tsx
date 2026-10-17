@@ -21,6 +21,7 @@ import { actorName, byOther, sentenceCase } from "@/ui/fallbacks";
 import { AlertDialog, Dialog } from "@/ui/primitives/Dialog";
 import { FoodTile } from "@/ui/primitives/FoodTile";
 import {
+  CheckIcon,
   CloseIcon,
   CounterIcon,
   FreezerIcon,
@@ -30,7 +31,12 @@ import {
 import { ChoiceTiles, type ChoiceOption } from "@/ui/primitives/RadioGroup";
 import { Switch } from "@/ui/primitives/Switch";
 import { useKitchenData } from "@/ui/sync/KitchenDataContext";
-import { SheetNoteView, useItemEdit, type ItemEditControl } from "./ItemEdit";
+import {
+  SheetNoteView,
+  useItemEdit,
+  type ItemEditControl,
+  type SheetAnswer,
+} from "./ItemEdit";
 import {
   ALL_BATCHES,
   AMOUNT_MAX,
@@ -110,6 +116,14 @@ function SheetBody({
   const [error, setError] = useState<FieldError | null>(null);
   const [failed, setFailed] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // Your own Save, from the tap until its answer (it may first wait for a level change, below).
+  const [submitting, setSubmitting] = useState(false);
+  // How much is left? / Staple act at once; what they're doing, so the sheet can say so.
+  const [atOnce, setAtOnce] = useState<{
+    what: "level" | "staple";
+    status: "saving" | "saved";
+  } | null>(null);
+  const inflight = useRef<Promise<SheetAnswer> | null>(null);
 
   const batches = pickableBatches(item);
   // A batch picked and then used up (Out on it) is gone: back to all of them.
@@ -130,20 +144,40 @@ function SheetBody({
     setFailed(false);
   };
 
+  // Save tapped while a level (or Staple) change is still saving used to be dropped without a
+  // word (Vero's "it doesn't allow me to save"). It now waits for that change, then saves what was
+  // typed, based on the version that change moved the sheet to.
   const submit = async (e?: FormEvent) => {
     e?.preventDefault();
-    if (off || busy || !dirty) return;
+    if (off || submitting || !dirty) return;
     const problem = validate(draft, base);
     setError(problem);
     if (problem) {
       (problem.field === "name" ? nameRef : amountRef).current?.focus();
       return;
     }
-    setFailed((await control.save(item, edit, batchArg)) === "failed");
+    setSubmitting(true);
+    try {
+      const before = inflight.current;
+      // That change failed: its message shows and the typing stays, for another try.
+      if (before && (await before) === "failed") return;
+      setFailed((await control.save(item, edit, batchArg)) === "failed");
+    } finally {
+      setSubmitting(false);
+    }
   };
-  const act = async (run: () => Promise<"failed" | "done">) => {
-    if (off || busy) return;
-    setFailed((await run()) === "failed");
+  const act = async (
+    what: "level" | "staple",
+    run: () => Promise<SheetAnswer>,
+  ) => {
+    if (off || busy || submitting) return;
+    setAtOnce({ what, status: "saving" });
+    const pending = run();
+    inflight.current = pending;
+    const answer = await pending;
+    if (inflight.current === pending) inflight.current = null;
+    setFailed(answer === "failed");
+    setAtOnce(answer === "failed" ? null : { what, status: "saved" });
   };
 
   const placeOptions: ChoiceOption<Location>[] = PLACES.map((place) => {
@@ -228,7 +262,7 @@ function SheetBody({
                 hint={t("batchHint")}
                 value={picked}
                 onChange={(v) => setBatchId(v)}
-                disabled={off || busy}
+                disabled={off || busy || submitting}
                 layout="list"
                 data-batch-choice=""
                 options={[
@@ -310,10 +344,13 @@ function SheetBody({
 
             <LevelButtons
               current={base.level}
-              disabled={off || busy}
+              disabled={off || busy || submitting}
+              status={atOnce?.what === "level" ? atOnce.status : null}
               onPick={(level) => {
                 if (level !== base.level)
-                  void act(() => control.setLevel(item, level, batchArg));
+                  void act("level", () =>
+                    control.setLevel(item, level, batchArg),
+                  );
               }}
             />
 
@@ -323,7 +360,7 @@ function SheetBody({
               label={t("placeLabel")}
               value={draft.place ?? base.place}
               onChange={(place) => set({ place })}
-              disabled={off || busy}
+              disabled={off || submitting}
               data-place-choices=""
               options={placeOptions}
             />
@@ -332,7 +369,7 @@ function SheetBody({
               label={t("typeLabel")}
               value={draft.category ?? base.category}
               onChange={(category) => set({ category })}
-              disabled={off || busy}
+              disabled={off || submitting}
               layout="wrap"
               data-type-choices=""
               options={typeOptions}
@@ -352,8 +389,10 @@ function SheetBody({
               </div>
               <Switch
                 checked={Boolean(item.stapleId)}
-                onChange={(on) => void act(() => control.setStaple(item, on))}
-                disabled={off || busy}
+                onChange={(on) =>
+                  void act("staple", () => control.setStaple(item, on))
+                }
+                disabled={off || busy || submitting}
                 labelledBy={ids.staple}
                 describedBy={ids.stapleHint}
                 data-staple-switch=""
@@ -363,7 +402,7 @@ function SheetBody({
             <button
               type="button"
               onClick={() => setConfirming(true)}
-              disabled={off || busy}
+              disabled={off || busy || submitting}
               className="btn-quiet self-start px-0 text-error-text"
             >
               {t("remove")}
@@ -382,18 +421,33 @@ function SheetBody({
         )}
 
         <div className="flex items-center justify-end gap-2 border-t border-border-default px-5 pt-3">
-          <button type="button" onClick={control.close} className="btn">
-            {dirty ? t("cancel") : t("done")}
-          </button>
-          <button
-            type="submit"
-            disabled={off || !dirty}
-            aria-disabled={busy || undefined}
-            data-edit-save=""
-            className="btn btn-primary"
-          >
-            {busy ? t("saving") : t("save")}
-          </button>
+          {!dirty && atOnce ? (
+            // A level or Staple change is already saved (or saving) and nothing else waits: Done
+            // is the one way out, so a greyed-out Save doesn't read as "it won't let me save".
+            <button
+              type="button"
+              onClick={control.close}
+              data-edit-done=""
+              className="btn btn-primary"
+            >
+              {t("done")}
+            </button>
+          ) : (
+            <>
+              <button type="button" onClick={control.close} className="btn">
+                {dirty ? t("cancel") : t("done")}
+              </button>
+              <button
+                type="submit"
+                disabled={off || !dirty}
+                aria-disabled={submitting || undefined}
+                data-edit-save=""
+                className="btn btn-primary"
+              >
+                {submitting ? t("saving") : t("save")}
+              </button>
+            </>
+          )}
         </div>
       </form>
 
@@ -420,10 +474,13 @@ function SheetBody({
 function LevelButtons({
   current,
   disabled,
+  status,
   onPick,
 }: {
   current: StockLevel | null;
   disabled: boolean;
+  /** A pick in this sheet: "Saving…", then "Saved" beside the question (the receipt is below). */
+  status: "saving" | "saved" | null;
   onPick: (level: StockLevel) => void;
 }) {
   const t = useTranslations();
@@ -432,8 +489,24 @@ function LevelButtons({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-col">
-        <span id={labelId} className="text-body font-medium">
-          {t("kitchen.edit.levelLabel")}
+        <span className="flex items-baseline justify-between gap-3">
+          <span id={labelId} className="text-body font-medium">
+            {t("kitchen.edit.levelLabel")}
+          </span>
+          {/* Not a live region: the announcer already says "Done. Fish sauce: running low". */}
+          {status && (
+            <span
+              data-level-status={status}
+              className={`inline-flex shrink-0 items-center gap-1 text-small font-medium ${status === "saved" ? "text-success-text" : "text-text-muted"}`}
+            >
+              {status === "saved" && (
+                <CheckIcon aria-hidden="true" className="size-icon-sm" />
+              )}
+              {status === "saved"
+                ? t("kitchen.edit.levelSaved")
+                : t("kitchen.edit.saving")}
+            </span>
+          )}
         </span>
         <span id={hintId} className="text-caption text-text-muted">
           {t("kitchen.edit.levelHint")}
