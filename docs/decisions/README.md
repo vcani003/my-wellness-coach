@@ -62,3 +62,4 @@ One line per decision. Read the full record only when it's relevant to your task
 | [0056](0056-bulk-remove-confirm.md) | KOS16: >5 removals in one chat message asks first (Yes/No, one Undo); mixed messages wait whole; any kitchen change cancels a pending yes; old batches count |
 | [0057](0057-item-edit-details.md) | KOS3: Counter guessed for counter food; staple follows a rename; rename onto existing name allowed; Freezer moves not remembered |
 | [0058](0058-week-plan-details.md) | KOS1/12: calendar days in your zone, yesterday→21 days; week needs include undated meals; "next Tuesday" = coming one; rolling 7-day view; staple stores for week needs later |
+| [0059](0059-preview-feedback-recipes-and-phone-chat.md) | Preview feedback: every recipe ingredient has an amount; recipe questions change nothing; phone chat starts Minimized; work continues on feat/kitchen-os-next; previews use real AI; stand-in AI labelled; phone keyboard tested for real |
