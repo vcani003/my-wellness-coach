@@ -8,6 +8,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
+import { openChat } from "../support/places";
 
 const COOKIE = "dev_acting_as";
 
@@ -16,6 +17,7 @@ async function resetAndActAs(page: Page, baseURL: string) {
   expect(res.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: "demo-vero", url: baseURL }]);
   await page.goto("/list");
+  await openChat(page);
 }
 
 const list = (page: Page) => page.getByRole("region", { name: "Shopping list" });

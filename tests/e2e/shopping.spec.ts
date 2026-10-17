@@ -10,7 +10,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
-import { goTo } from "../support/places";
+import { goTo, openChat } from "../support/places";
 
 const COOKIE = "dev_acting_as";
 
@@ -19,6 +19,7 @@ async function resetAndActAs(page: Page, baseURL: string) {
   expect(res.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: "demo-vero", url: baseURL }]);
   await page.goto("/list");
+  await openChat(page);
 }
 
 const list = (page: Page) => page.getByRole("region", { name: "Shopping list" });
@@ -67,6 +68,7 @@ test("shopping list: add in chat → tick → remove → Done shopping moves it 
   await expect(list(page)).toContainText("6 · 2 got");
   await expect(list(page).getByText("Not synced yet")).toHaveCount(0);
   await page.reload();
+  await openChat(page);
   await expect(box(page, "Garlic")).toBeChecked();
   await expect(box(page, "Ginger")).toBeChecked();
   if (process.env.SHOPPING_SCREENSHOTS && testInfo.project.name === "phone") {
@@ -157,6 +159,7 @@ test("Do later: Done shopping → Do later → To review in the Kitchen → Add 
 
   // To review in the Kitchen shows them, and it's saved (survives a reload).
   await page.reload();
+  await openChat(page);
   await goTo(page, "Kitchen");
   const review = kitchen(page).getByRole("region", { name: "To review" });
   const card = review.getByRole("button", { name: "2 items to add · Shopping list" });
@@ -208,6 +211,7 @@ test("SL4: a tick made with no signal is kept on the phone, marked 'Not synced y
   await context.setOffline(false);
   await expect(list(page).getByText("Not synced yet")).toHaveCount(0);
   await page.reload();
+  await openChat(page);
   await expect(box(page, "Oatmilk")).toBeChecked();
 });
 
@@ -218,14 +222,17 @@ test("a phone opened fresh goes back to the List when it was used last (ux.md §
   await expect(box(page, "Limes")).toBeVisible();
   // A reload is the same visit: it stays where it is.
   await page.reload();
+  await openChat(page);
   await expect(page).toHaveURL(/\/list$/);
   // Opening the app again (a new tab: a fresh session, the same phone) on Today goes back to the List.
   const again = await context.newPage();
   await again.goto("/");
+  await openChat(again);
   await expect(again).toHaveURL(/\/list$/);
   await expect(again.getByRole("region", { name: "Shopping list" }).getByRole("checkbox", { name: /^Limes, got it/ })).toBeVisible();
   // Going to Today on purpose afterwards stays on Today.
   await goTo(again, "Today");
   await again.reload();
+  await openChat(again);
   await expect(again).toHaveURL(/\/$/);
 });

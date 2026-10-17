@@ -210,6 +210,8 @@
     "minimize": "Minimize chat",
     "openChat": "Open chat",
     "openChatNewReply": "Open chat, new reply",
+    "standIn": "Stand-in AI · not Claude",
+    "standInDetail": "Replies are canned, for testing.",
     "kitchenUpdated": "Kitchen updated",
     "messagesLabel": "Conversation",
     "you": "You",

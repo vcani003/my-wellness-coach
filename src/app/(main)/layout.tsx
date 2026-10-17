@@ -7,8 +7,10 @@
  * itself (with "Try again") instead of the page failing (0018). It also reads which of your
  * allergies or diets someone else added and you haven't confirmed (AI7), for the home banner;
  * if that fails, there's simply no banner. Before reading, it sorts "Not sure where" once (0041).
+ * It also tells the chat whether the stand-in AI is answering, so the screen can say so (0059 PF6).
  */
 import { Suspense, type ReactNode } from "react";
+import { selectInterpreterKind } from "@/ai";
 import type { ChatHistoryPage } from "@/contracts/chat-history";
 import type { KitchenState } from "@/contracts/kitchen-state";
 import { listChatHistory } from "@/domains/chat/queries";
@@ -18,6 +20,7 @@ import { getSettingsView } from "@/server/account/settings";
 import { getScope, getSession } from "@/server/session";
 import { KitchenApp } from "@/ui/app/KitchenApp";
 import { AppLoading, NoSession } from "@/ui/app/StatusScreens";
+import { isStandIn } from "@/ui/chat/StandInBadge";
 import { pendingConfirms, type PendingConfirm } from "@/ui/settings/model";
 
 export default function MainLayout({ children }: { children: ReactNode }) {
@@ -64,6 +67,7 @@ async function Main({ children }: { children: ReactNode }) {
       initialState={state}
       initialHistory={history}
       initialPendingConfirm={pending}
+      standInAI={isStandIn(selectInterpreterKind())}
     >
       {children}
     </KitchenApp>

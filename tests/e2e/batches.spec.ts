@@ -8,6 +8,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
+import { openChat } from "../support/places";
 
 const COOKIE = "dev_acting_as";
 
@@ -16,6 +17,7 @@ async function resetAndActAs(page: Page, baseURL: string) {
   expect(res.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: "demo-vero", url: baseURL }]);
   await page.goto("/kitchen");
+  await openChat(page);
 }
 
 const kitchen = (page: Page) => page.getByRole("region", { name: "Kitchen" });
@@ -111,6 +113,7 @@ test("batches: Those are gone → reload → the line and its Undo are still the
   await expect(goneUndo()).toBeFocused();
 
   await page.reload();
+  await openChat(page);
   await expect(lastReceipt(page)).toContainText("Added eggs (2 batches)");
   await expect(lastReceipt(page)).toContainText("Eggs: those are gone (1 batch left)");
   await expect(goneUndo()).toBeVisible();
@@ -127,6 +130,7 @@ test("batches: Those are gone → reload → the line and its Undo are still the
 
   // And a reload now shows the open choice, not the undone answer.
   await page.reload();
+  await openChat(page);
   await expect(choice(page)).toBeVisible();
   await expect(lastReceipt(page).getByRole("button", { name: "Undo: Added eggs (2 batches)" })).toBeVisible();
   expect(loops).toEqual([]);

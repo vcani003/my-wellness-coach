@@ -11,7 +11,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
-import { cueShow, goTo } from "../support/places";
+import { cueShow, goTo, openChat } from "../support/places";
 
 const COOKIE = "dev_acting_as";
 const KITCHEN_ID = "test-kitchen-demo";
@@ -21,6 +21,7 @@ async function resetAndActAs(page: Page, baseURL: string, path = "/") {
   expect(res.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: "demo-vero", url: baseURL }]);
   await page.goto(path);
+  await openChat(page);
 }
 
 const ideas = (page: Page) => page.getByRole("region", { name: "Meal ideas" });
@@ -103,6 +104,7 @@ test("journey 5–7: ideas → Choose → Recipe → plan → cook → Update yo
   await expectAccessible(page, "recipe");
   await screenshot(page, isPhone, "m-recipe-phone.png");
   await page.reload();
+  await openChat(page);
   await expect(recipe(page).getByRole("checkbox", { name: "Salt" })).toBeChecked();
 
   // "Use my own recipe" readies the composer for a paste.

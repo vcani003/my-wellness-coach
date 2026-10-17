@@ -10,7 +10,7 @@
  */
 import { expect, request, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
-import { cueShow, goTo } from "../support/places";
+import { cueShow, goTo, openChat } from "../support/places";
 
 const KITCHEN_ID = "test-kitchen-demo";
 const COOKIE = "dev_acting_as"; // DEV_ACTING_AS_COOKIE (src/lib/auth/current-user.ts)
@@ -20,6 +20,7 @@ async function resetAndActAs(page: Page, baseURL: string, userId: "demo-vero" | 
   expect(res.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: userId, url: baseURL }]);
   await page.goto("/");
+  await openChat(page);
 }
 
 const kitchen = (page: Page) => page.getByRole("region", { name: "Kitchen" });

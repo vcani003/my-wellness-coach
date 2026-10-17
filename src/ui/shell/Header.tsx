@@ -11,6 +11,7 @@ import { forwardRef, type Ref } from "react";
 import { sentenceCase } from "@/ui/fallbacks";
 import { NotSyncedIcon } from "@/ui/primitives/icons";
 import type { SyncStatus } from "@/ui/sync/kitchen-sync";
+import { StandInBadge } from "@/ui/chat/StandInBadge";
 import { DevBar } from "./DevBar";
 
 export const PLACE_TITLE_ID = "place-title";
@@ -24,10 +25,12 @@ export interface HeaderProps {
   /** The phone has a connection (chat is online only, 0044). */
   online?: boolean;
   settingsOpen: boolean;
+  /** The stand-in AI is answering (0059 PF6). Shown here only while the chat is minimized (globals.css). */
+  standInAI?: boolean;
 }
 
 export const Header = forwardRef(function Header(
-  { title, me, members, devActingAs, sync, online = true, settingsOpen }: HeaderProps,
+  { title, me, members, devActingAs, sync, online = true, settingsOpen, standInAI = false }: HeaderProps,
   ref: Ref<HTMLElement>,
 ) {
   const t = useTranslations("app");
@@ -46,6 +49,7 @@ export const Header = forwardRef(function Header(
         <h1 id={PLACE_TITLE_ID} tabIndex={-1} className="min-w-0 flex-1 truncate text-heading font-medium outline-none">
           {title}
         </h1>
+        {standInAI && <StandInBadge className="standin-minimized shrink-0" />}
         {offline && (
           <span data-sync="offline" className="flex items-center gap-1 rounded-button bg-surface-sunken px-3 py-1 text-caption font-strong text-text-muted">
             <NotSyncedIcon aria-hidden="true" className="size-icon-sm" />

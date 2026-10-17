@@ -803,6 +803,14 @@
   padding-top: env(safe-area-inset-top);
 }
 
+/* The header's "Stand-in AI" label (0059 PF6) shows only while the chat (which has its own) is minimized. */
+.standin-minimized {
+  display: none;
+}
+.app-shell[data-chat="minimized"] .standin-minimized {
+  display: block;
+}
+
 @media (width < 56.25rem) {
   html {
     scroll-padding-top: var(--topbar-height);
@@ -830,7 +838,9 @@
     flex: 1;
     min-height: 0;
   }
-  .chat-dock[data-dock="minimized"] {
+  /* "launch": before hydration the phone starts Minimized, only the chat button (0059 PF3). */
+  .chat-dock[data-dock="minimized"],
+  .chat-dock[data-dock="launch"] {
     display: none;
   }
   /* Peek: only the latest reply (and its receipt), kept to a share of the screen. */
@@ -839,6 +849,9 @@
   }
   .chat-dock[data-dock="peek"] [data-peek="false"] {
     display: none;
+  }
+  .app-shell[data-chat="launch"] .standin-minimized {
+    display: block;
   }
   /* While the iPhone keyboard is up, the dock steps aside so the message box keeps its room. */
   :root[data-keyboard="open"] .dock-nav {
@@ -883,5 +896,9 @@
   }
   .chat-fab {
     bottom: var(--spacing-5);
+  }
+  /* "launch": desktop starts with the chat column open, so no chat button (0059 PF3). */
+  .chat-fab[data-launch] {
+    display: none;
   }
 }

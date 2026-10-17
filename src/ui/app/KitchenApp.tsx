@@ -16,7 +16,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLocale, useNow, useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   acceptStaplesOffer,
   addStaples,
@@ -51,6 +51,7 @@ import { offersOf, openOlder, useBatchOfferWords } from "@/ui/chat/BatchOffers";
 import { useFormatMsg } from "@/ui/chat/format-msg";
 import { listOffersOf } from "@/ui/chat/ListOffers";
 import { LumiFace, MessageList } from "@/ui/chat/MessageList";
+import { StandInBadge } from "@/ui/chat/StandInBadge";
 import { useChat } from "@/ui/chat/useChat";
 import { cueTarget, parseLastPlace, placeForHost, placeForPath, resumePlace } from "@/ui/places/model";
 import { PlaceRetryProvider } from "@/ui/places/Place";
@@ -60,6 +61,7 @@ import { CaretDownIcon, CaretUpIcon, ChatIcon, GoIcon, MinusIcon } from "@/ui/pr
 import { ConfirmPromptProvider } from "@/ui/settings/ConfirmPrompt";
 import type { PendingConfirm } from "@/ui/settings/model";
 import { Dock } from "@/ui/shell/Dock";
+import { launchDock, type DockState } from "@/ui/shell/dock-state";
 import { Header, PLACE_TITLE_ID } from "@/ui/shell/Header";
 import { DESKTOP_QUERY, useMediaQuery } from "@/ui/shell/useMediaQuery";
 import { useKeyboardInset } from "@/ui/shell/viewport";
@@ -86,11 +88,23 @@ export interface KitchenAppProps {
   initialHistory?: ChatHistoryPage | null;
   /** Your allergies or diets someone else added that you haven't confirmed (AI7): the Today banner. */
   initialPendingConfirm?: PendingConfirm[];
+  /** The stand-in AI is answering, not Claude (0059 PF6): the chat says so. */
+  standInAI?: boolean;
   /** The route's page: a place, the Recipe or Settings. */
   children?: ReactNode;
 }
 
-export type DockState = "peek" | "full" | "minimized";
+/**
+ * Before hydration the server can't know the screen width, so the dock renders as "launch" and CSS
+ * picks the start state (0059 PF3): Minimized on phone (only the chat button), the open column on
+ * desktop. Once hydrated, the same rule is applied from the same breakpoint, so nothing flashes.
+ */
+type DockView = DockState | "launch";
+const noSubscribe = () => () => {};
+/** False while rendering on the server and hydrating; true after. */
+function useHydrated(): boolean {
+  return useSyncExternalStore(noSubscribe, () => true, () => false);
+}
 
 /**
  * "Reopen where you left off" (ux.md §10: the list is waiting at the store). This phone keeps the
@@ -145,6 +159,7 @@ function KitchenScreen({
   initialState,
   initialHistory = null,
   initialPendingConfirm = NO_PENDING,
+  standInAI = false,
   children,
 }: KitchenAppProps) {
   const t = useTranslations();
@@ -169,7 +184,10 @@ function KitchenScreen({
   const cueWords = useCueWords();
   const [marks, setMarks] = useState<Record<string, ChangeMark>>({});
   const [remoteIds, setRemoteIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [dock, setDock] = useState<DockState>("peek");
+  // Until you open, minimize or expand the chat, it follows the launch rule for this screen width.
+  const [chosenDock, setDock] = useState<DockState | null>(null);
+  const hydrated = useHydrated();
+  const dock: DockView = chosenDock ?? (hydrated ? launchDock(isDesktop) : "launch");
   const [newReply, setNewReply] = useState(false);
   const [turn, setTurn] = useState(0);
   const [cue, setCue] = useState<Cue | null>(null);
@@ -455,7 +473,7 @@ function KitchenScreen({
 
   /** Open the chat with text in the composer (Use my own recipe, Edit note in Settings). */
   const fillComposer = (text: string) => {
-    if (dockNow.current === "minimized") changeDock("peek");
+    if (dockNow.current === "minimized" || dockNow.current === "launch") changeDock("peek");
     composerRef.current?.fill(text);
   };
 
@@ -506,7 +524,7 @@ function KitchenScreen({
     <PlaceMemoryProvider>
     <ConfirmPromptProvider initial={initialPendingConfirm} fillComposer={fillComposer}>
       <TickQueueFlusher />
-      <div className="app-shell min-h-dvh" data-chat={dock === "minimized" ? "minimized" : "open"}>
+      <div className="app-shell min-h-dvh" data-chat={dock === "minimized" || dock === "launch" ? dock : "open"}>
         <a href="#workspace" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-surface-raised focus:p-2">
           {t("app.skipToWorkspace")}
         </a>
@@ -523,6 +541,7 @@ function KitchenScreen({
           sync={snapshot.status}
           online={online}
           settingsOpen={settingsOpen}
+          standInAI={standInAI}
         />
 
         <main id="workspace" tabIndex={-1} aria-label={t("workspace.label")} inert={phoneFull} className="stage px-4 pt-4 outline-none desk:px-7 desk:pt-6">
@@ -557,6 +576,7 @@ function KitchenScreen({
               <p aria-hidden="true" className="hidden font-heading text-title font-medium desk:block">
                 {t("chat.heading")}
               </p>
+              {standInAI && <StandInBadge className="min-w-0 truncate desk:ml-2" />}
               <button type="button" aria-label={t("chat.minimize")} onClick={() => changeDock("minimized", "fab")} className="btn-icon ml-auto">
                 <MinusIcon aria-hidden="true" className="size-icon" />
               </button>
@@ -604,9 +624,10 @@ function KitchenScreen({
           }} />
         </div>
 
-        {dock === "minimized" && (
+        {(dock === "minimized" || dock === "launch") && (
           <button
             ref={fabRef}
+            data-launch={dock === "launch" ? "" : undefined}
             type="button"
             onClick={() => changeDock("peek", "composer")}
             aria-label={newReply ? t("chat.openChatNewReply") : t("chat.openChat")}
