@@ -60,6 +60,7 @@ import {
 } from "./follow-ups";
 import type { InterpretRequest, Interpreter } from "./interpreter";
 import { notConfiguredMealAI, type MealAI } from "./meals";
+import { guardQuestionRemovals } from "./question-guard";
 import { replyFromReceipt } from "./receipt-reply";
 
 export interface ChatTurnInput {
@@ -146,7 +147,12 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
       ...(allergies.length ? { allergies } : {}),
       today,
     };
-    const interpretation = await interpreter.interpret(req);
+    // 0059 PF2: a question never removes anything, whatever the interpreter proposed.
+    const guarded = guardQuestionRemovals(await interpreter.interpret(req), input.text);
+    const interpretation = guarded.result;
+    if (guarded.dropped.length > 0) {
+      console.warn("ai.guard: dropped removals asked as a question", { count: guarded.dropped.length, types: guarded.dropped.map((o) => o.type) });
+    }
     const folded = foldMealSteps(interpretation.proposal?.operations ?? [], interpretation.followUps ?? [], input.text);
     let proposal = interpretation.proposal ? { ...interpretation.proposal, operations: folded.operations } : null;
 
@@ -238,7 +244,10 @@ export async function* handleChatTurn(deps: ChatTurnDeps, input: ChatTurnInput):
     if (proposal?.clarification) yield { type: "clarification", ...proposal.clarification };
     yield { type: "status", phase: "writing" };
     let reply = interpretation.reply;
-    if (result && (result.rejected.length > 0 || result.applied.length === 0)) {
+    if (result && guarded.dropped.length > 0) {
+      // The draft was written with the dropped removal in mind: say only what saved (no model call).
+      reply = replyFromReceipt(result);
+    } else if (result && (result.rejected.length > 0 || result.applied.length === 0)) {
       reply = interpreter.reword ? await interpreter.reword(req, interpretation, result) : replyFromReceipt(result);
     }
     if (interpretation.weekNeeds) {
