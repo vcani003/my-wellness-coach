@@ -11,7 +11,14 @@
 
 ## Outstanding
 
-*Nothing outstanding.*
+### Item sheet follow-ups (2026-10-17)
+**PF12 ⚪ The footer after an instant change.** After you tap a level or Staple and type nothing, the sheet's footer shows a single "Done" button instead of "Done" plus a greyed-out Save. Typing anything brings Save back.
+- **Rec:** keep the single Done.
+> Answer:
+
+**PF13 ⚪ The same motion on other sheets.** Only the item edit sheet bounces. The other sheets (Restock staples, Done shopping, the week's missing ingredients, the day menu) still open plainly.
+- **Rec:** use the same motion on every bottom sheet, for consistency. It's a small change.
+> Answer:
 
 ## Setup tasks
 *All done (S1–S3 and S5–S7, 2026-10-14). S4 isn't needed (0029).*
