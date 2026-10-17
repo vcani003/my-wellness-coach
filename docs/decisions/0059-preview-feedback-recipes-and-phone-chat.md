@@ -1,6 +1,6 @@
 # 0059: Preview feedback: recipe amounts, recipe questions, phone chat, stand-in AI label
 
-**Status:** Accepted · 2026-10-17 · Decided by Vero (PF1–PF5: "go with recs"; PF6 and PF7 in her own words). Amends [0017](0017-shared-kitchen-and-layout.md) UX3 (the dock's default on phone).
+**Status:** Accepted · 2026-10-17 · Decided by Vero (PF1–PF5, PF8, PF9: "go with recs"; PF6 and PF7 in her own words). Amends [0017](0017-shared-kitchen-and-layout.md) UX3 (the dock's default on phone).
 
 Context: in the 2026-10-17 local preview, a Japanese rolled omelette recipe came with no amounts and generic steps. A question about the measurements removed ingredients. On her phone, messages didn't send, and chat was open at launch. The preview ran the stand-in AI.
 
@@ -11,3 +11,5 @@ Context: in the 2026-10-17 local preview, a Japanese rolled omelette recipe came
 - **PF5. Previews use the real AI** (the staging key) whenever its budget allows.
 - **PF6. When the stand-in AI is answering, the app says so on screen.** Vero: "Just make it apparent when its a stand in ai."
 - **PF7. Phone chat is tested with a real phone keyboard,** not only desktop Chrome with Enter. Vero: "You should be testing real phone capability with keyboard."
+- **PF8. A missing amount isn't written into the recipe** when someone asks about it. It is answered in chat only, as in PF2.
+- **PF9. When a removal is skipped because it was asked as a question,** Lumi says: "I didn't change anything, since that sounded like a question. Tell me if you meant it as a change."
