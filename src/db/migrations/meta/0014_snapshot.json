@@ -1,6 +1,6 @@
 {
   "id": "29b63779-4849-462c-9909-aa980f8f836e",
-  "prevId": "5dd516f5-8179-49b2-97a8-46609ec06a4f",
+  "prevId": "7b4d5de0-bc94-4d2b-a066-044f5758b1da",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1330,6 +1330,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {

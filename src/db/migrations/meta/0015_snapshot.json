@@ -1336,6 +1336,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
