@@ -34,6 +34,9 @@ export const notConfiguredMealAI: MealAI = {
   async readPastedRecipe() {
     return { ok: false, reason: "not-configured", reply: MEALS_NOT_CONFIGURED_REPLY };
   },
+  async refineIdea() {
+    return { ok: false, reason: "not-configured", reply: MEALS_NOT_CONFIGURED_REPLY };
+  },
 };
 
 let real: MealAI | undefined;

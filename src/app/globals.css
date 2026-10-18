@@ -63,6 +63,7 @@
   --color-place-fridge: #e3f0ff; /* place tints (0048): sky */
   --color-place-freezer: #efeaff; /* lavender */
   --color-place-pantry: #fff4d0; /* lemon */
+  --color-place-counter: #ffe6d2; /* apricot: fruit on the counter (KOS3); never berry */
   --color-hero-start: #ffe3ec; /* Today's hero card: soft pink → peach (ink text stays AA) */
   --color-hero-end: #fff0da;
   --color-scrim: rgb(51 38 58 / 0.35); /* behind sheets */
@@ -142,6 +143,14 @@
   --ease-gentle: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
   --ease-pop: cubic-bezier(0.3, 1.6, 0.5, 1); /* overshoot: Lumi and celebrations only (0046) */
+  /*
+   * A soft spring, as a curve (a damped spring sampled into linear()): the item sheet rising in
+   * and the food tile springing back after a press (Vero, 0059 preview feedback: "something fun
+   * like a bounce"). Rises ~3% past its end and settles; never used for leaving.
+   */
+  --ease-spring: linear(0, 0.07, 0.224, 0.405, 0.577, 0.723, 0.836, 0.918, 0.972, 1.004, 1.021, 1.028, 1.028, 1.024, 1.019, 1.014, 1.01, 1.006, 1.003, 1.001, 1);
+  /* A livelier spring for the desktop dialog's small scale-in (0.94 → ~1.006 → 1). */
+  --ease-spring-pop: linear(0, 0.108, 0.34, 0.594, 0.809, 0.962, 1.052, 1.09, 1.093, 1.076, 1.052, 1.029, 1.011, 0.999, 0.993, 0.991, 0.992, 0.994, 0.996, 0.998, 1);
 
   /* ── Layout ───────────────────────────────────────────────────────── */
   --breakpoint-*: initial;
@@ -153,6 +162,28 @@
   --motion-duration-gentle: 300ms;
   --motion-duration-slow: 560ms;
   --motion-distance: 10px; /* how far things rise when they enter */
+  /* Sheets (every bottom sheet, 0059 PF13): rise in on the spring, leave quicker and plainly; the
+     scrim fades. Desktop dialogs and menus pop in on --ease-spring-pop over --motion-duration-pop-in. */
+  --motion-duration-sheet-in: 420ms;
+  --motion-duration-pop-in: 380ms;
+  --motion-duration-sheet-out: 200ms;
+  --motion-duration-sheet-fade: 220ms;
+  /*
+   * Everything else that comes and goes (0059 PF16; inventory in frontend.md §6a). Pop-ups (the
+   * chat dock rising, the chat button popping back) use the springs above; everything else is a
+   * calm ease, and leaving is always quicker than arriving.
+   * - enter / exit: messages, receipts, cues, banners, rows and cards (fade + a small rise).
+   * - dock-in / dock-out: the phone chat rising from behind the dock, and dropping back.
+   * - morph: Peek <-> Full (the chat's top edge slides; a view transition).
+   * - place-in / place-out: switching places (a cross-fade; the content also rises, .place-enter).
+   */
+  --motion-duration-enter: 240ms;
+  --motion-duration-exit: 160ms;
+  --motion-duration-dock-in: 440ms;
+  --motion-duration-dock-out: 200ms;
+  --motion-duration-morph: 320ms;
+  --motion-duration-place-in: 220ms;
+  --motion-duration-place-out: 120ms;
   --icon-stroke: 2px;
 
   /* The primary gradient (prototype `.btn.primary`): coral → orange, ink text. */
@@ -171,6 +202,8 @@
   --keyboard-inset: 0px;
   /* Set by the dock (ResizeObserver) so the workspace never hides behind it (WCAG 2.4.11). */
   --dock-height: 0px;
+  /* The places dock alone (phone), for the chat button: KitchenApp. */
+  --nav-height: 0px;
   --topbar-height: 56px;
 
   color-scheme: light;
@@ -184,6 +217,21 @@
     --motion-duration-slow: 0ms;
     --motion-distance: 0px;
     --ease-pop: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --ease-spring-pop: cubic-bezier(0.2, 0.8, 0.2, 1);
+    /* Sheets just fade (no movement, see .sheet-motion); a short fade, not a jump. */
+    --motion-duration-sheet-in: 150ms;
+    --motion-duration-pop-in: 150ms;
+    --motion-duration-sheet-out: 150ms;
+    --motion-duration-sheet-fade: 150ms;
+    /* PF16: things still come and go, but only fade (no movement; see the motion section). */
+    --motion-duration-enter: 150ms;
+    --motion-duration-exit: 120ms;
+    --motion-duration-dock-in: 150ms;
+    --motion-duration-dock-out: 120ms;
+    --motion-duration-morph: 150ms;
+    --motion-duration-place-in: 150ms;
+    --motion-duration-place-out: 100ms;
   }
 }
 
@@ -490,6 +538,12 @@
     text-transform: uppercase;
     color: var(--color-text-muted);
   }
+  /* Today's date tile in the week plan (KOS1): the primary gradient, ink text (AA), the coral glow. */
+  .day-tile-today {
+    background: var(--gradient-accent);
+    color: var(--color-text-on-accent);
+    box-shadow: var(--shadow-fab);
+  }
   /* Place / food tile (prototype `.tile`): a soft square, tinted by place, holding an icon or emoji. */
   .place-tile {
     display: grid;
@@ -511,6 +565,39 @@
   }
   .place-tile[data-place="pantry"] {
     background: var(--color-place-pantry);
+  }
+  .place-tile[data-place="counter"] {
+    background: var(--color-place-counter);
+  }
+  /*
+   * Stock level meter (KOS4): three rising bars filled to the level (Plenty 3, Some 2, Low 1,
+   * Out 0), in the label's own colour. Decorative: the word beside it always says the level.
+   */
+  .level-meter {
+    display: inline-flex;
+    flex: none;
+    align-items: flex-end;
+    gap: var(--spacing-px);
+    height: var(--spacing-3);
+  }
+  .level-meter > span {
+    width: calc(var(--spacing-0_5) + var(--spacing-px));
+    border-radius: var(--radius-full);
+    background: var(--color-border-strong);
+    opacity: 0.35;
+  }
+  .level-meter > span:nth-child(1) {
+    height: var(--spacing-1);
+  }
+  .level-meter > span:nth-child(2) {
+    height: var(--spacing-2);
+  }
+  .level-meter > span:nth-child(3) {
+    height: var(--spacing-3);
+  }
+  .level-meter > span[data-on] {
+    background: currentColor;
+    opacity: 1;
   }
   /* FoodTile: the emoji is generated content, so it never joins the row's text (src/ui/primitives/FoodTile.tsx). */
   .place-tile[data-emoji]::before {
@@ -586,9 +673,223 @@
     opacity: 0.6;
   }
 
+  /*
+   * A choice tile (src/ui/primitives/RadioGroup.tsx `ChoiceTiles`): a white tile with a faint edge.
+   * The chosen one is coral-soft, ringed and bolder (never colour alone, 1.4.1), like `.seg-option`.
+   */
+  .choice {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    min-height: var(--spacing-tap);
+    padding: var(--spacing-1) var(--spacing-3);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-raised);
+    box-shadow:
+      inset 0 0 0 1.5px var(--color-border-default),
+      var(--shadow-soft);
+    color: var(--color-text-default);
+    font-weight: var(--font-weight-medium);
+    font-size: var(--text-small);
+    line-height: var(--text-small--line-height);
+    cursor: pointer;
+    transition: background-color var(--motion-duration-quick) var(--ease-gentle);
+  }
+  .choice:has([data-checked]),
+  .choice[aria-pressed="true"] {
+    background: var(--color-selected-bg);
+    color: var(--color-accent-text);
+    font-weight: 900;
+    box-shadow:
+      inset 0 0 0 2px var(--color-selected-border),
+      var(--shadow-soft);
+  }
+  .choice:has(:focus-visible),
+  .choice:focus-visible {
+    outline: 3px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+  .choice:has([data-disabled]),
+  .choice:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  /* "now" on the current place / type: the lemon wash, like "Updated". */
+  .choice-tag {
+    flex: none;
+    border-radius: var(--radius-button);
+    background: var(--color-highlight-bg);
+    padding: 0 var(--spacing-2);
+    color: var(--color-highlight-text);
+    font-size: var(--text-caption);
+    line-height: var(--text-caption--line-height);
+    font-weight: var(--font-weight-strong);
+  }
+
+  /* On/off switch (src/ui/primitives/Switch.tsx): the thumb moves and the on track is mint-green. */
+  .switch {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    width: 52px;
+    height: 32px;
+    padding: 3px;
+    border-radius: var(--radius-full);
+    background: var(--color-border-strong);
+    transition: background-color var(--motion-duration-quick) var(--ease-gentle);
+  }
+  /* The hit area grows to 44 px tall without changing the drawing. */
+  .switch::before {
+    content: "";
+    position: absolute;
+    inset: -6px -2px;
+  }
+  .switch[data-checked] {
+    background: var(--color-success-fill);
+  }
+  .switch:focus-visible {
+    outline: 3px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+  .switch[data-disabled] {
+    opacity: 0.6;
+  }
+  .switch-thumb {
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-full);
+    background: var(--color-surface-raised);
+    box-shadow: var(--shadow-soft);
+    transition: transform var(--motion-duration-quick) var(--ease-gentle);
+  }
+  .switch-thumb[data-checked] {
+    transform: translateX(20px);
+  }
+
   /* Sheets (Base UI dialog): white, rising from the bottom on a phone, on the large soft shadow. */
   .sheet {
     box-shadow: var(--shadow-pop);
+  }
+
+  /*
+   * Every sheet's entrance and exit (0059 PF11, PF13), on Base UI's own transition hooks: a popup
+   * and its backdrop carry [data-starting-style] for their first frame and [data-ending-style]
+   * while closing, and Base UI keeps them drawn until the transition ends. Used through
+   * SheetPopup / SheetBackdrop (src/ui/primitives/Dialog.tsx) and Menu.Popup.
+   * - .sheet-motion (bottom sheets). Phone: slides up on the spring and drops away quicker without
+   *   one. Desktop (where the sheet is a centred dialog): the pop below.
+   * - .pop-motion (menus anchored to a button, and dialogs centred on every screen): pops in from
+   *   0.94 towards its button (Base UI's --transform-origin) and fades out.
+   * Only transform and opacity move (never the layout). Tailwind's centring uses the separate
+   * `translate` property, so it's untouched. While closing, nothing takes taps, so a closing sheet
+   * never sits over the thing you tap next (the lingering-overlay bug).
+   */
+  .sheet-motion,
+  .pop-motion {
+    transition-property: transform, opacity;
+  }
+  .sheet-motion {
+    transition-duration: var(--motion-duration-sheet-in), var(--motion-duration-sheet-fade);
+    transition-timing-function: var(--ease-spring), var(--ease-gentle);
+  }
+  .sheet-motion[data-starting-style],
+  .sheet-motion[data-ending-style] {
+    transform: translateY(100%);
+  }
+  .pop-motion {
+    transform-origin: var(--transform-origin, center);
+    transition-duration: var(--motion-duration-pop-in), var(--motion-duration-sheet-fade);
+    transition-timing-function: var(--ease-spring-pop), var(--ease-gentle);
+  }
+  .pop-motion[data-starting-style] {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  .pop-motion[data-ending-style] {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  .sheet-motion[data-ending-style],
+  .pop-motion[data-ending-style] {
+    pointer-events: none;
+    transition-duration: var(--motion-duration-sheet-out);
+    transition-timing-function: var(--ease-exit);
+  }
+  @media (width < 56.25rem) {
+    /*
+     * The spring lifts a sheet a little past its place: its own colour fills in under it. A
+     * shadow, not a pseudo-element, so it never adds to a scrolling sheet's scroll height (this
+     * replaces .sheet's own shadow, so sheets don't also carry the shadow-pop utility).
+     */
+    .sheet-motion {
+      box-shadow: var(--shadow-pop), 0 64px 0 0 var(--color-surface-raised);
+    }
+  }
+  @media (width >= 56.25rem) {
+    .sheet-motion {
+      transition-duration: var(--motion-duration-pop-in), var(--motion-duration-sheet-fade);
+      transition-timing-function: var(--ease-spring-pop), var(--ease-gentle);
+    }
+    .sheet-motion[data-starting-style] {
+      opacity: 0;
+      transform: scale(0.94);
+    }
+    .sheet-motion[data-ending-style] {
+      opacity: 0;
+      transform: scale(0.97);
+      transition-duration: var(--motion-duration-sheet-out);
+    }
+  }
+  .scrim-motion {
+    transition: opacity var(--motion-duration-sheet-fade) var(--ease-gentle);
+  }
+  .scrim-motion[data-starting-style],
+  .scrim-motion[data-ending-style] {
+    opacity: 0;
+  }
+  .scrim-motion[data-ending-style] {
+    pointer-events: none;
+    transition-duration: var(--motion-duration-sheet-out);
+    transition-timing-function: var(--ease-exit);
+  }
+
+  /* A tap on an item's row: its food tile gives a small squish, and springs back on release. */
+  [data-food-tile] {
+    transition: transform var(--motion-duration-gentle) var(--ease-spring);
+  }
+  .row-card:has([data-item-edit]:active) [data-food-tile] {
+    transform: scale(0.88);
+    transition-duration: var(--motion-duration-quick);
+    transition-timing-function: var(--ease-gentle);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /* No movement: sheets, menus and their scrims only fade; the tile doesn't squish. */
+    .sheet-motion,
+    .sheet-motion[data-starting-style],
+    .sheet-motion[data-ending-style],
+    .pop-motion,
+    .pop-motion[data-starting-style],
+    .pop-motion[data-ending-style] {
+      transform: none;
+    }
+    .sheet-motion[data-starting-style],
+    .sheet-motion[data-ending-style] {
+      opacity: 0;
+    }
+    .sheet-motion,
+    .pop-motion {
+      transition-property: opacity;
+      transition-duration: var(--motion-duration-sheet-fade);
+    }
+    .sheet-motion[data-ending-style],
+    .pop-motion[data-ending-style] {
+      transition-duration: var(--motion-duration-sheet-out);
+    }
+    .row-card:has([data-item-edit]:active) [data-food-tile] {
+      transform: none;
+    }
   }
 
   /* A place's content rises in once when you arrive (gentle, never the pop; 0 with reduced motion). */
@@ -643,8 +944,9 @@
 .dock-nav {
   padding-bottom: max(var(--spacing-2), calc(env(safe-area-inset-bottom) - var(--keyboard-inset)));
 }
+/* Measured from the places dock alone, so the button never jumps while the chat drops away (PF16). */
 .chat-fab {
-  bottom: calc(var(--dock-height) + var(--spacing-3));
+  bottom: calc(var(--nav-height) + var(--spacing-3));
 }
 
 /*
@@ -667,6 +969,14 @@
 
 .app-header {
   padding-top: env(safe-area-inset-top);
+}
+
+/* The header's "Stand-in AI" label (0059 PF6) shows only while the chat (which has its own) is minimized. */
+.standin-minimized {
+  display: none;
+}
+.app-shell[data-chat="minimized"] .standin-minimized {
+  display: block;
 }
 
 @media (width < 56.25rem) {
@@ -696,7 +1006,9 @@
     flex: 1;
     min-height: 0;
   }
-  .chat-dock[data-dock="minimized"] {
+  /* "launch": before hydration the phone starts Minimized, only the chat button (0059 PF3). */
+  .chat-dock[data-dock="minimized"],
+  .chat-dock[data-dock="launch"] {
     display: none;
   }
   /* Peek: only the latest reply (and its receipt), kept to a share of the screen. */
@@ -705,6 +1017,9 @@
   }
   .chat-dock[data-dock="peek"] [data-peek="false"] {
     display: none;
+  }
+  .app-shell[data-chat="launch"] .standin-minimized {
+    display: block;
   }
   /* While the iPhone keyboard is up, the dock steps aside so the message box keeps its room. */
   :root[data-keyboard="open"] .dock-nav {
@@ -749,5 +1064,273 @@
   }
   .chat-fab {
     bottom: var(--spacing-5);
+  }
+  /* "launch": desktop starts with the chat column open, so no chat button (0059 PF3). */
+  .chat-fab[data-launch] {
+    display: none;
+  }
+}
+
+/*
+ * The chat's own motion (0059 PF16). Unlayered, after the shell layout, so it wins there.
+ * Transitions only switch on once the app has settled ([data-motion] on .app-shell, set a moment
+ * after hydration), so opening the app never animates the dock or the chat button into place.
+ * Hiding still uses display: none (no layout change while it's hidden, nothing focusable), and the
+ * hidden dock is also `inert`; `transition-behavior: allow-discrete` keeps it drawn while it leaves,
+ * and @starting-style gives it a place to come in from. A browser without them just shows and hides.
+ */
+@media (width < 56.25rem) {
+  /* The dock of places sits in front, so the chat rises from behind it and drops back behind it. */
+  .dock-nav {
+    position: relative;
+    z-index: 1;
+    view-transition-name: dock-nav;
+  }
+  .chat-dock {
+    view-transition-name: chat-dock;
+    /* The spring lifts the chat a little past its place: its own colour fills in under it. */
+    box-shadow: var(--shadow-dock), 0 48px 0 0 var(--color-surface-default);
+  }
+  /* Opening: springs up like the sheets. Minimizing: drops quickly, without the spring. */
+  .app-shell[data-motion] .chat-dock {
+    transition:
+      transform var(--motion-duration-dock-in) var(--ease-spring),
+      opacity var(--motion-duration-dock-in) var(--ease-gentle),
+      display var(--motion-duration-dock-in) allow-discrete;
+  }
+  @starting-style {
+    .app-shell[data-motion] .chat-dock {
+      transform: translateY(100%);
+    }
+  }
+  .chat-dock[data-dock="minimized"] {
+    transform: translateY(100%);
+    pointer-events: none;
+  }
+  .app-shell[data-motion] .chat-dock[data-dock="minimized"] {
+    transition-duration: var(--motion-duration-dock-out);
+    transition-timing-function: var(--ease-exit);
+  }
+  /* The places reappear after the keyboard closes: a short fade in. (Hiding stays instant: PF7.) */
+  .app-shell[data-motion] .dock-nav {
+    transition: opacity var(--motion-duration-enter) var(--ease-gentle);
+  }
+  @starting-style {
+    .app-shell[data-motion] .dock-nav {
+      opacity: 0;
+    }
+  }
+}
+
+@media (width >= 56.25rem) {
+  /* The chat column fades and slides in a little when you open it; it leaves at once. */
+  .app-shell[data-motion] .chat-dock:not([data-dock="minimized"]) {
+    transition:
+      opacity var(--motion-duration-enter) var(--ease-gentle),
+      transform var(--motion-duration-enter) var(--ease-gentle);
+  }
+  @starting-style {
+    .app-shell[data-motion] .chat-dock {
+      opacity: 0;
+      transform: translateX(calc(var(--motion-distance) * 2));
+    }
+  }
+}
+
+/* The round chat button pops in on the livelier spring and shrinks away quickly. */
+.chat-fab[data-hidden] {
+  display: none;
+  opacity: 0;
+  transform: scale(0.6);
+  pointer-events: none;
+}
+.app-shell[data-motion] .chat-fab {
+  transition:
+    transform var(--motion-duration-pop-in) var(--ease-spring-pop),
+    opacity var(--motion-duration-sheet-fade) var(--ease-gentle),
+    box-shadow var(--motion-duration-quick) var(--ease-gentle),
+    background-color var(--motion-duration-quick) var(--ease-gentle),
+    display var(--motion-duration-pop-in) allow-discrete;
+}
+.app-shell[data-motion] .chat-fab[data-hidden] {
+  transition-duration: var(--motion-duration-exit);
+  transition-timing-function: var(--ease-exit);
+}
+@starting-style {
+  .app-shell[data-motion] .chat-fab {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+/*
+ * Peek <-> Full on a phone: a view transition (KitchenApp's changeDock). The chat's box grows or
+ * shrinks from its top edge while the message box at the bottom stays put: both pictures are pinned
+ * to the bottom and clipped to the moving box. The overlay never takes taps.
+ */
+::view-transition {
+  pointer-events: none;
+}
+::view-transition-group(chat-dock) {
+  animation-duration: var(--motion-duration-morph);
+  animation-timing-function: var(--ease-gentle);
+}
+::view-transition-image-pair(chat-dock) {
+  clip-path: inset(0 round var(--radius-sheet) var(--radius-sheet) 0 0);
+}
+::view-transition-old(chat-dock),
+::view-transition-new(chat-dock) {
+  inset-block-start: auto;
+  inset-block-end: 0;
+  animation-duration: var(--motion-duration-morph);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Fades only: the chat, the button and the morph don't move. */
+  .chat-dock[data-dock="minimized"],
+  .chat-fab[data-hidden] {
+    transform: none;
+    opacity: 0;
+  }
+  @starting-style {
+    .app-shell[data-motion] .chat-dock,
+    .app-shell[data-motion] .chat-fab {
+      transform: none;
+      opacity: 0;
+    }
+  }
+  .app-shell[data-motion] .chat-fab {
+    transition:
+      opacity var(--motion-duration-sheet-fade) var(--ease-gentle),
+      display var(--motion-duration-sheet-fade) allow-discrete;
+  }
+  .app-shell[data-motion] .chat-fab[data-hidden] {
+    transition-duration: var(--motion-duration-exit);
+  }
+  ::view-transition-group(chat-dock) {
+    animation: none;
+  }
+}
+
+/*
+ * Arrivals (src/ui/primitives/Appear.tsx): whatever turns up after a part of the screen opened (a
+ * new message, a receipt, a row someone added, a cue, a "Saved" note) eases in once. rise: fade +
+ * a small lift; fade: opacity only; grow: a row in a list also opens its own height where the
+ * browser can animate to `auto` (elsewhere it just rises), so the rows below slide down instead of
+ * jumping. Reduced motion: --motion-distance is 0 and the height doesn't animate, so all of them
+ * just fade.
+ */
+[data-appear] {
+  animation: appear-rise var(--motion-duration-enter) var(--ease-gentle) both;
+}
+[data-appear="fade"] {
+  animation-name: appear-fade;
+}
+@keyframes appear-rise {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-distance));
+  }
+}
+@keyframes appear-fade {
+  from {
+    opacity: 0;
+  }
+}
+@supports (interpolate-size: allow-keywords) {
+  @media (prefers-reduced-motion: no-preference) {
+    [data-appear="grow"] {
+      interpolate-size: allow-keywords;
+      overflow: clip;
+      animation-name: appear-grow;
+    }
+    @keyframes appear-grow {
+      from {
+        height: 0;
+        opacity: 0;
+        transform: translateY(calc(var(--motion-distance) * -0.5));
+      }
+    }
+  }
+}
+/* Undo on a receipt: the lines dim into "Undone" instead of switching. */
+.receipt-line {
+  transition: color var(--motion-duration-enter) var(--ease-gentle);
+}
+
+/*
+ * Leaving (useLeaving in Appear.tsx): a row that's gone fades and drops a little, quicker than it
+ * came; where the browser can animate to `auto` its height closes too, so the rows below slide up.
+ * It never takes taps while leaving.
+ */
+[data-leave] {
+  pointer-events: none;
+  animation: leave-fade var(--motion-duration-exit) var(--ease-exit) both;
+}
+@keyframes leave-fade {
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--motion-distance) * 0.5));
+  }
+}
+@supports (interpolate-size: allow-keywords) {
+  @media (prefers-reduced-motion: no-preference) {
+    [data-leave] {
+      interpolate-size: allow-keywords;
+      overflow: clip;
+      animation-name: leave-close;
+    }
+    @keyframes leave-close {
+      from {
+        height: auto;
+      }
+      to {
+        height: 0;
+        opacity: 0;
+        transform: scale(0.98);
+      }
+    }
+  }
+}
+
+/*
+ * Disclosures that open with the `hidden` attribute ("See all" under a cue, the allergen details)
+ * and the header's stand-in label: they fade in as they appear; closing stays instant.
+ */
+.disclose,
+.standin-minimized {
+  transition:
+    opacity var(--motion-duration-enter) var(--ease-gentle),
+    transform var(--motion-duration-enter) var(--ease-gentle);
+}
+@starting-style {
+  .disclose {
+    opacity: 0;
+    transform: translateY(calc(var(--motion-distance) * -0.5));
+  }
+  .standin-minimized {
+    opacity: 0;
+  }
+}
+
+/*
+ * Switching places (KitchenApp's <ViewTransition>): the old place fades out quickly, the new one
+ * fades in (it also rises, .place-enter). The chat and the places dock have their own names, so
+ * they hold still.
+ */
+::view-transition-old(.place-out) {
+  animation: place-out var(--motion-duration-place-out) var(--ease-exit) both;
+}
+::view-transition-new(.place-in) {
+  animation: place-in var(--motion-duration-place-in) var(--ease-gentle) both;
+}
+@keyframes place-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes place-in {
+  from {
+    opacity: 0;
   }
 }

@@ -9,13 +9,13 @@
 import type { Db } from "@/db/client";
 import { getChangesSince } from "@/domains/kitchen/queries";
 import type { KitchenScope } from "@/shared/membership";
-import { createFakeInterpreter } from "./fake";
+import { createFakeInterpreter, type RecentChangesLookup } from "./fake";
 import type { Interpreter } from "./interpreter";
 import { getMealAI } from "./meals";
 import type { MealAI } from "./meals";
 import { createRealInterpreter } from "./real";
 
-export { handleChatTurn, handleChooseMeal, type ChatTurnInput, type ChooseMealInput } from "./turn";
+export { handleChatTurn, handleChooseMeal, undoWithFollow, type ChatTurnInput, type ChooseMealInput } from "./turn";
 export type { Interpreter, InterpretRequest, InterpretResult } from "./interpreter";
 
 export const NOT_CONFIGURED_REPLY =
@@ -54,9 +54,14 @@ export function getInterpreter(ctx: { db: Db; scope: KitchenScope }, env: Env = 
     case "not-configured":
       return notConfiguredInterpreter;
     case "fake":
-      return createFakeInterpreter(async (req) => {
-        const recent = await getChangesSince(ctx.db, ctx.scope, Math.max(0, req.version - RECENT_CHANGES));
-        return recent.filter((c) => !("missing" in c.actor) && c.actor.id === req.userId).reverse();
-      });
+      return createFakeInterpreter(recentChangesFor(ctx));
   }
+}
+
+/** For the stand-in's "undo": the speaker's own recent change sets, newest first. */
+export function recentChangesFor(ctx: { db: Db; scope: KitchenScope }): RecentChangesLookup {
+  return async (req) => {
+    const recent = await getChangesSince(ctx.db, ctx.scope, Math.max(0, req.version - RECENT_CHANGES));
+    return recent.filter((c) => !("missing" in c.actor) && c.actor.id === req.userId).reverse();
+  };
 }

@@ -59,7 +59,7 @@ export function AllergenBadge({ flags, startOpen = false }: { flags: AllergenFla
       <div
         id={panelId}
         hidden={!open}
-        className="rounded-md border-l-4 border-allergy-border bg-allergy-bg px-3 py-2 text-small text-allergy-text"
+        className="disclose rounded-md border-l-4 border-allergy-border bg-allergy-bg px-3 py-2 text-small text-allergy-text"
       >
         {lines.map((l) => (
           <p key={l.key}>

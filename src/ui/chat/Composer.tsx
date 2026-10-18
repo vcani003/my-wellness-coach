@@ -1,10 +1,10 @@
 "use client";
 /**
  * The message box (ux.md §4). Enter sends, Shift+Enter adds a line. Focus stays here after Send
- * (frontend.md §6). 16 px text, so iPhone doesn't zoom in.
+ * (frontend.md §6). 16 px text, so iPhone doesn't zoom in. Tapping Send keeps the keyboard up (PF7).
  */
 import { useTranslations } from "next-intl";
-import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState, type KeyboardEvent } from "react";
+import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { SendIcon } from "@/ui/primitives/icons";
 
 export interface ComposerHandle {
@@ -54,6 +54,11 @@ export const Composer = forwardRef<ComposerHandle, { busy: boolean; onSend: (tex
       box.current?.focus();
     };
 
+    /** Keep focus (and the phone keyboard) in the message box while Send is pressed. */
+    const keepTyping = (e: MouseEvent<HTMLButtonElement>) => {
+      if (document.activeElement === box.current) e.preventDefault();
+    };
+
     const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
@@ -91,6 +96,10 @@ export const Composer = forwardRef<ComposerHandle, { busy: boolean; onSend: (tex
           type="submit"
           aria-label={t("send")}
           disabled={busy || text.trim() === ""}
+          // Phone (0059 PF7): a tap on Send mustn't take focus from the message box. That would
+          // close the keyboard mid-tap, the chat would drop and the tap would miss. Keyboard and
+          // screen-reader activation still reach the button as normal (it's a real submit button).
+          onMouseDown={keepTyping}
           className="btn btn-primary size-tap shrink-0 p-0"
         >
           <SendIcon aria-hidden="true" className="size-icon" />

@@ -9,7 +9,7 @@
  */
 import { expect, request, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
-import { goTo } from "../support/places";
+import { goTo, openChat } from "../support/places";
 
 const KITCHEN_ID = "test-kitchen-demo";
 const COOKIE = "dev_acting_as"; // DEV_ACTING_AS_COOKIE (src/lib/auth/current-user.ts)
@@ -24,6 +24,7 @@ async function resetAndActAs(page: Page, baseURL: string, userId: "demo-vero" | 
   expect(res.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: userId, url: baseURL }]);
   await page.goto("/kitchen");
+  await openChat(page);
 }
 
 async function say(page: Page, text: string) {
@@ -37,6 +38,7 @@ async function switchTo(page: Page, name: "Vero" | "Levi") {
   await page.getByRole("radiogroup", { name: "Acting as" }).getByText(name, { exact: true }).click();
   await expect(page.getByRole("link", { name: `Settings, signed in as ${name}` })).toBeVisible();
   await expect(kitchen(page)).toBeVisible();
+  await openChat(page); // a fresh load: on phone the chat starts Minimized (0059 PF3)
 }
 
 test("Since your last visit: Vero sees that Levi used up the eggs, and can dismiss it", async ({ page, baseURL }) => {
@@ -57,6 +59,7 @@ test("Since your last visit: Vero sees that Levi used up the eggs, and can dismi
   await expectAccessible(page, "since your last visit");
   // It stays until dismissed, even across a reload, and Today (where you usually land) shows it too.
   await page.reload();
+  await openChat(page);
   await expect(sinceLine(page)).toContainText("Levi used up the eggs.");
   await goTo(page, "Today");
   await expect(page.getByRole("region", { name: "Today" }).getByRole("region", { name: "Since your last visit" })).toContainText(
@@ -71,6 +74,7 @@ test("Since your last visit: Vero sees that Levi used up the eggs, and can dismi
 
   // Seen is seen: the next visit doesn't repeat it.
   await page.reload();
+  await openChat(page);
   await expect(kitchen(page).getByRole("listitem").filter({ hasText: "Milk" })).toBeVisible();
   await expect(sinceLine(page)).toHaveCount(0);
 });

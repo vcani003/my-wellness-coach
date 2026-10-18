@@ -7,7 +7,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
-import { dock, goTo, type PlaceName } from "../support/places";
+import { dock, goTo, openChat, type PlaceName } from "../support/places";
 
 const COOKIE = "dev_acting_as";
 
@@ -16,6 +16,7 @@ async function resetAndActAs(page: Page, baseURL: string) {
   expect(res.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: "demo-vero", url: baseURL }]);
   await page.goto("/");
+  await openChat(page);
 }
 
 const composer = (page: Page) => page.getByRole("textbox", { name: "Message Lumi" });
@@ -35,8 +36,9 @@ async function fill(page: Page) {
   await expect(lastReceipt(page)).toContainText("Added eggs");
   await say(page, "Add garlic, ginger and lemongrass to the list for MD Oriental Market");
   await expect(lastReceipt(page)).toContainText("On your list, MD Oriental Market");
-  await say(page, "What can I make tonight?");
-  await expect(page.getByText("Meal ideas are ready", { exact: true })).toBeVisible();
+  // The stand-in has no meal ideas (0059 PF10); its sample recipe gives the Plan and Meals content.
+  await say(page, "make me a sample recipe");
+  await expect(page.getByRole("article").getByRole("heading", { level: 2, name: "Sample recipe (stand-in)" })).toBeVisible();
 }
 
 const PLACES: { name: PlaceName; url: RegExp; title: string; region: string }[] = [
@@ -109,14 +111,16 @@ test("the dock moves between the five places; the chat stays mounted; settings o
   await expect(composer(page)).toHaveValue("half a thought");
 });
 
-test("a place's own button asks Lumi: Use it up / Get ideas send a chat message (online only)", async ({ page, baseURL }) => {
+test("a place's own button asks Lumi: Get ideas sends a chat message (online only); the stand-in says it needs the real AI", async ({ page, baseURL }) => {
   await resetAndActAs(page, baseURL!);
   await say(page, "I bought eggs and spinach");
   await expect(lastReceipt(page)).toContainText("Added eggs");
   await goTo(page, "Meals");
   await page.getByRole("button", { name: "Get ideas" }).click();
-  await expect(page.getByRole("region", { name: "Meal ideas" }).getByRole("listitem")).toHaveCount(2);
-  await expectAccessible(page, "meals with ideas");
+  // 0059 PF10: no fake ideas, the same decline line as in chat.
+  await expect(page.getByRole("log").getByText("That needs the real AI (Claude). I'm only the stand-in.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Meal ideas" }).getByRole("listitem")).toHaveCount(0);
+  await expectAccessible(page, "meals after asking for ideas");
 });
 
 test.describe("phone width 390×844", () => {

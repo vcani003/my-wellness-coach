@@ -1,11 +1,16 @@
 /**
  * Real-model eval for the interpreter (ai.md §8), scored by exact rules, not by another AI.
  * Run with `npm run eval`; skipped unless ANTHROPIC_API_KEY is set. Costs real money: about
- * 44 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list
+ * 68 calls at ~3–6¢ each. Includes the first grocery-trip test (0026), the shopping list
  * (0027), older and newer batches (0025), a dish named in chat (MI1), item categories (CAT1) and
- * inferred places (0041).
+ * inferred places (0041), stock levels (0045 KOS4), smart staples (0054, `staples-cases.ts`) and
+ * the dated week plan (0045 KOS1/KOS12, `week-plan-cases.ts`) and questions about an open recipe
+ * (0059 PF2).
  */
 import { afterAll, describe, expect, it } from "vitest";
+import { STAPLE_CASES, stapleCaseRequest } from "./staples-cases";
+import { BULK_REMOVE_CASES, bulkCaseRequest, checkBulkCase } from "./bulk-remove-cases";
+import { WEEK_PLAN_CASES, opsOf as weekPlanOps, weekPlanCaseRequest } from "./week-plan-cases";
 import type { Operation, OperationOf, OperationType } from "@/contracts/operations";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult } from "../interpreter";
@@ -14,7 +19,10 @@ import {
   PASTA_KITCHEN,
   CURRY_KITCHEN,
   FIRST_TEST_MESSAGE,
+  IDEA_REFINE_MESSAGE,
+  ideasViewRequest,
   mealInProgress,
+  SHOWN_IDEAS,
   NAMED_DISH_MESSAGE,
   request,
   VERO_LIST,
@@ -38,6 +46,8 @@ type Case = {
   history?: InterpretRequest["history"];
   list?: ListSpec[];
   meals?: ReturnType<typeof mealInProgress>[];
+  /** A whole request instead (e.g. with idea cards shown). */
+  req?: InterpretRequest;
   check: (r: InterpretResult, ops: Operation[]) => void;
 };
 
@@ -140,6 +150,62 @@ const cases: Case[] = [
       const [use] = only(ops, "item.use");
       targets(use, "item-1");
       expect(use.fields.stock?.value).toBe("low");
+    },
+  },
+  // Stock levels (0045 KOS4): a level said without a use is item.stock.set; Low/Out stay a use.
+  {
+    name: "levels: we have plenty of rice → plenty, no list offer",
+    text: "we have plenty of rice",
+    items: VERO_PANTRY,
+    check: (r, ops) => {
+      const [set] = only(ops, "item.stock.set");
+      targets(set, "item-2");
+      expect(set.fields.stock).toMatchObject({ value: "plenty", basis: "said" });
+      expect(only(ops, "item.use")).toHaveLength(0);
+      expect(listAdds(ops)).toHaveLength(0);
+      expect(r.reply).not.toMatch(/\blist\b/i);
+    },
+  },
+  {
+    name: "levels: there's some milk left (not in the kitchen) → some, by name",
+    text: "there's some milk left",
+    items: VERO_PANTRY,
+    check: (r, ops) => {
+      const [set] = only(ops, "item.stock.set");
+      expect(set.target).toMatchObject({ name: expect.stringMatching(/milk/i) });
+      expect(set.fields.stock.value).toBe("some");
+      expect(only(ops, "item.add")).toHaveLength(0);
+    },
+  },
+  {
+    name: "levels: we're low on eggs → use with low (Low still offers the list)",
+    text: "we're low on eggs",
+    items: [{ name: "eggs", location: "fridge" }],
+    check: (r, ops) => {
+      const [use] = only(ops, "item.use");
+      targets(use, "item-1");
+      expect(use.fields.stock?.value).toBe("low");
+      expect(listAdds(ops)).toHaveLength(0);
+    },
+  },
+  {
+    name: "levels: used some flour is a use, not a level",
+    text: "I used some flour",
+    items: [{ name: "flour", location: "pantry" }],
+    check: (r, ops) => {
+      expect(only(ops, "item.stock.set")).toHaveLength(0);
+      const [use] = only(ops, "item.use");
+      targets(use, "item-1");
+      expect(use.fields.stock?.value ?? null).not.toBe("out");
+    },
+  },
+  {
+    name: "levels: do we have jasmine rice? (yes, plenty)",
+    text: "do we have jasmine rice?",
+    items: [{ name: "jasmine rice", location: "pantry", stock: "plenty" }],
+    check: (r) => {
+      answerOnly(r);
+      expect(r.reply).toMatch(/plenty/i);
     },
   },
   {
@@ -330,6 +396,7 @@ const cases: Case[] = [
     },
   },
   {
+    // 0054 SS2: a yes saves staples (with the stores the offer named), never a "Staples:" preference.
     name: "yes to remembering staples",
     text: "yes, remember those",
     history: [
@@ -337,9 +404,12 @@ const cases: Case[] = [
       { role: "assistant", text: "MD Oriental: fish sauce, rice noodles. Publix: eggs. Want me to remember these as your staples?" },
     ],
     check: (r, ops) => {
-      const [save] = only(ops, "profile.preference.save");
-      expect(save.fields.statement.value).toMatch(/fish sauce/i);
-      expect(save.confirmedByMessageId).toBe("msg-1");
+      expect(only(ops, "profile.preference.save")).toHaveLength(0);
+      const adds = only(ops, "staple.add");
+      const store = (n: string) => adds.find((o) => o.fields.name.value.toLowerCase().includes(n))?.fields.store?.value;
+      expect(adds).toHaveLength(3);
+      expect(store("fish sauce")).toBe("MD Oriental");
+      expect(store("egg")).toBe("Publix");
     },
   },
   // ─── Shopping list (0027) ─── VERO_LIST: shop-1 garlic … shop-8 coconut milk (MD Oriental) · shop-9 oatmilk (Publix)
@@ -456,6 +526,103 @@ const cases: Case[] = [
       },
     }),
   ),
+  // 0059 PF2: a question about the open recipe is answered by the recipe step and changes nothing
+  // (no kitchen, list or staple operation), even when it starts with "no" or names an ingredient.
+  ...["how much eggs do I need?", "what are the measurements?", "no measurements for the eggs?", "how long do I cook it?"].map(
+    (text, i): Case => ({
+      name: `recipe question ${i + 1}: '${text}' with an omelette open → recipe_change, no kitchen changes`,
+      text,
+      items: EGGS,
+      meals: [mealInProgress("meal-1", "Japanese rolled omelette", "cooking")],
+      history: [
+        { role: "user", text: "I want to make japanese rolled omelette. Season it with only hondashi. I like it a little sweet" },
+        { role: "assistant", text: "Japanese rolled omelette it is. Here's a recipe." },
+      ],
+      check: (r, ops) => {
+        expect(ops).toHaveLength(0);
+        expect(r.followUps).toEqual([expect.objectContaining({ kind: "recipe", meal: { mealId: "meal-1" }, refine: text })]);
+      },
+    }),
+  ),
+  {
+    name: "recipe question contrast: 'how much rice is left?' with a recipe open → a kitchen answer, no recipe change",
+    text: "how much rice is left?",
+    items: [...EGGS, { name: "jasmine rice", location: "pantry", stock: "some" }],
+    meals: [mealInProgress("meal-1", "Japanese rolled omelette", "cooking")],
+    check: (r, ops) => {
+      expect(ops).toHaveLength(0);
+      expect(r.followUps?.some((f) => f.kind === "recipe") ?? false).toBe(false);
+      expect(r.reply).toMatch(/rice/i);
+    },
+  },
+  // Refining an idea card (ai.md §5, Vero 2026-10-15). SHOWN_IDEAS: d1 the lemongrass curry
+  // (uses chicken thighs, potatoes, coconut milk, Greek yogurt; missing lemongrass), d2 beef mince
+  // fried rice, d3 crispy tofu rice bowl.
+  {
+    name: "idea refine: Vero's exact message on Meal ideas → the curry card is edited; nothing chosen, no recipe",
+    text: IDEA_REFINE_MESSAGE,
+    req: ideasViewRequest(IDEA_REFINE_MESSAGE),
+    check: (r, ops) => {
+      expect(only(ops, "meal.choose")).toHaveLength(0);
+      expect(r.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: IDEA_REFINE_MESSAGE }]);
+      expect(ops.filter((o) => o.type.startsWith("item."))).toHaveLength(0);
+    },
+  },
+  {
+    name: "idea refine: 'swap the chicken for tofu in the first one' → d1 edited, nothing chosen",
+    text: "swap the chicken for tofu in the first one",
+    req: ideasViewRequest("swap the chicken for tofu in the first one"),
+    check: (r, ops) => {
+      expect(only(ops, "meal.choose")).toHaveLength(0);
+      expect(r.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: "swap the chicken for tofu in the first one" }]);
+    },
+  },
+  {
+    name: "idea refine: 'make the curry without yogurt' → chooses the curry card and writes its recipe with the change",
+    text: "make the curry without yogurt",
+    req: ideasViewRequest("make the curry without yogurt"),
+    check: (r, ops) => {
+      const [choose] = only(ops, "meal.choose");
+      expect(choose?.target).toEqual({ ideaId: "idea-curry" });
+      expect(r.followUps).toEqual([expect.objectContaining({ kind: "recipe", notes: expect.stringMatching(/yogurt/i) })]);
+      expect(r.followUps?.some((f) => f.kind === "idea-refine")).toBe(false);
+    },
+  },
+  {
+    name: "idea refine: with the curry's recipe open, 'actually leave out the yogurt' → recipe edit mode on that meal",
+    text: "actually leave out the yogurt",
+    req: {
+      ...ideasViewRequest("actually leave out the yogurt", [{ ...mealInProgress("meal-curry", SHOWN_IDEAS[0].name), ideaId: "idea-curry" }]),
+      history: [
+        { role: "user", text: "the first one" },
+        { role: "assistant", text: `Good choice. Here's a recipe for ${SHOWN_IDEAS[0].name}.` },
+      ],
+    },
+    check: (r, ops) => {
+      expect(only(ops, "meal.choose")).toHaveLength(0);
+      expect(r.followUps).toEqual([{ kind: "recipe", meal: { mealId: "meal-curry" }, refine: "actually leave out the yogurt" }]);
+    },
+  },
+  {
+    name: "idea refine (0051 IR2): on Meal ideas, the curry card already has your recipe → 'remove the yogurt from the curry' edits that recipe",
+    text: "remove the yogurt from the curry",
+    req: ideasViewRequest("remove the yogurt from the curry", [{ ...mealInProgress("meal-curry", SHOWN_IDEAS[0].name), ideaId: "idea-curry" }]),
+    check: (r, ops) => {
+      expect(only(ops, "meal.choose")).toHaveLength(0);
+      expect(r.followUps).toEqual([{ kind: "recipe", meal: { mealId: "meal-curry" }, refine: "remove the yogurt from the curry" }]);
+    },
+  },
+  {
+    name: "idea refine (0051 IR4): the curry card was chosen by another member → only this card changes, never their recipe",
+    text: "remove the yogurt from the curry",
+    req: ideasViewRequest("remove the yogurt from the curry", [
+      { ...mealInProgress("meal-curry", SHOWN_IDEAS[0].name), ideaId: "idea-curry", createdBy: { id: "u-ben", name: "Ben" } },
+    ]),
+    check: (r, ops) => {
+      expect(only(ops, "meal.choose")).toHaveLength(0);
+      expect(r.followUps).toEqual([{ kind: "idea-refine", ideaId: "idea-curry", request: "remove the yogurt from the curry" }]);
+    },
+  },
   {
     name: "a named dish 'or something else?' → ideas, nothing chosen",
     text: "i was thinking a chicken curry, or something else?",
@@ -558,11 +725,20 @@ const cases: Case[] = [
   },
   {
     name: "places: genuinely ambiguous things stay unsorted",
+    text: "I bought sparkling water and beer",
+    check: (r, ops) => {
+      expect(r.kind).toBe("change");
+      expect(addNamed(ops, "sparkling water")?.fields.location ?? null).toBeNull();
+      expect(addNamed(ops, "beer")?.fields.location ?? null).toBeNull();
+    },
+  },
+  {
+    name: "places: counter food goes on the Counter (0057 KOS3-a)",
     text: "I bought bananas and avocados",
     check: (r, ops) => {
       expect(r.kind).toBe("change");
-      expect(addNamed(ops, "banana")?.fields.location ?? null).toBeNull();
-      expect(addNamed(ops, "avocado")?.fields.location ?? null).toBeNull();
+      expect(addNamed(ops, "banana")?.fields.location).toMatchObject({ value: "counter", basis: "inferred" });
+      expect(addNamed(ops, "avocado")?.fields.location).toMatchObject({ value: "counter", basis: "inferred" });
     },
   },
   {
@@ -592,9 +768,37 @@ const cases: Case[] = [
 describe.skipIf(!process.env.ANTHROPIC_API_KEY)("interpreter eval (real model)", () => {
   for (const c of cases) {
     it(c.name, async () => {
-      const result = await interpreter.interpret(request(c.text, c.items, c.history, c.list, c.meals));
+      const result = await interpreter.interpret(c.req ?? request(c.text, c.items, c.history, c.list, c.meals));
       console.info(`[${c.name}] ${result.kind}: ${result.reply}`);
       c.check(result, opsOf(result));
+    });
+  }
+
+  // Smart staples (0054): the same cases the fake passes in tests/unit/staples-ai.test.ts.
+  for (const c of STAPLE_CASES) {
+    it(c.name, async () => {
+      const result = await interpreter.interpret(stapleCaseRequest(c));
+      console.info(`[${c.name}] ${result.kind}: ${result.reply}`);
+      c.check(result, opsOf(result));
+    });
+  }
+
+  // Ask before removing more than 5 (0045 KOS16): the same cases the fake passes in tests/unit/bulk-remove.test.ts.
+  for (const c of BULK_REMOVE_CASES) {
+    it(c.name, async () => {
+      const req = bulkCaseRequest(c);
+      const result = await interpreter.interpret(req);
+      console.info(`[${c.name}] ${result.kind}: ${result.reply}`);
+      checkBulkCase(c, req, result);
+    });
+  }
+
+  // Dated week plan (0045 KOS1, KOS12): the same cases the fake passes in tests/unit/week-plan-ai.test.ts.
+  for (const c of WEEK_PLAN_CASES) {
+    it(c.name, async () => {
+      const result = await interpreter.interpret(weekPlanCaseRequest(c));
+      console.info(`[${c.name}] ${result.kind}: ${result.reply}`);
+      c.check(result, weekPlanOps(result));
     });
   }
 

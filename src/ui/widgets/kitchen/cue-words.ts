@@ -28,11 +28,11 @@ export function useCueWords() {
       const params: Record<string, string | number> = {};
       for (const [k, v] of Object.entries(m.params)) params[k] = typeof v === "boolean" ? String(v) : v;
       if (typeof params.name === "string" && !params.name.trim()) params.name = t("fallback.unknownItem");
-      localizeParams(params, t);
+      localizeParams(params, t, locale);
       const key = `kitchen.since.did.${m.code}`;
       return t.has(key) ? t(key, params) : t("kitchen.since.did.other");
     },
-    [t],
+    [t, locale],
   );
 
   const who = useCallback((entry: CueEntry) => sentenceCase(actorName(entry.actor, t), locale), [t, locale]);

@@ -7,6 +7,7 @@
 import type { AppliedOp, ApplyResult, RejectedOp } from "@/contracts/apply-result";
 import type { BatchAnswer, ChatHistoryMessage, ChatReceipt } from "@/contracts/chat-history";
 import type { Msg } from "@/contracts/common";
+import type { BulkConfirm, StaplesAnswer } from "@/contracts/stream";
 
 export interface UserMessage {
   kind: "user";
@@ -37,6 +38,16 @@ export interface AssistantMessage {
   status: "pending" | "done" | "error" | "interrupted";
   receipt?: Receipt;
   error?: { reason: Msg; retryable: boolean };
+  /**
+   * A staples answer's needed staples (0054 SS6), for **Add these to my list** under the reply.
+   * Live only: saved chat doesn't keep it (SS9), so a reloaded answer has no button.
+   */
+  staples?: StaplesAnswer["items"];
+  /**
+   * "Remove them all?" (0045 KOS16): this reply holds a bulk removal. Yes / No show only while it's
+   * the last message. Saved chat keeps it, so the buttons come back on reload.
+   */
+  confirm?: BulkConfirm;
 }
 
 export type ChatMessage = UserMessage | AssistantMessage;
@@ -68,6 +79,8 @@ export type ChatAction =
   | { type: "ack"; id: string }
   | { type: "applied"; id: string; result: ApplyResult }
   | { type: "text"; id: string; delta: string }
+  | { type: "staples"; id: string; items: StaplesAnswer["items"] }
+  | { type: "confirm"; id: string; confirm: BulkConfirm }
   | { type: "done"; id: string }
   | { type: "error"; id: string; reason: Msg; retryable: boolean; changed: boolean }
   | { type: "notSent"; id: string }
@@ -113,6 +126,7 @@ export function fromSaved(m: ChatHistoryMessage): ChatMessage {
     text: m.text,
     status: "done",
     ...(m.receipt ? { receipt: toReceipt(m.receipt) } : {}),
+    ...(m.confirm ? { confirm: m.confirm } : {}),
   };
 }
 
@@ -163,6 +177,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, messages: withReply(state, action.id, (m) => ({ ...m, receipt: toReceipt(action.result) })) };
     case "text":
       return { ...state, messages: withReply(state, action.id, (m) => ({ ...m, text: m.text + action.delta })) };
+    case "staples":
+      return action.items.length ? { ...state, messages: withReply(state, action.id, (m) => ({ ...m, staples: action.items })) } : state;
+    case "confirm":
+      return { ...state, messages: withReply(state, action.id, (m) => ({ ...m, confirm: action.confirm })) };
     case "done":
       return { ...state, busy: false, messages: withReply(state, action.id, (m) => ({ ...m, status: "done" })) };
     case "error":

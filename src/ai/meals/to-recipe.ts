@@ -28,6 +28,14 @@ export function toIngredient(raw: RawIngredient, ctx: MealContext, labels: Map<s
   return { name, amount, itemId: item?.id ?? null, group, allergenFlags: flagsFor(flagNames, ctx.restrictions) };
 }
 
+/**
+ * 0059 PF1: every ingredient has an amount, except basics used to taste (salt, pepper, oil). The
+ * names of the ones that don't, for a quality log; code never makes an amount up.
+ */
+export function missingAmounts(ingredients: Pick<RecipeIngredientOut, "name" | "amount">[]): string[] {
+  return ingredients.filter((i) => !i.amount?.trim() && !isBasic(i.name)).map((i) => i.name);
+}
+
 /** "1. Heat the pan" → "Heat the pan". */
 export function toStep(raw: string): string | null {
   const s = raw.trim().replace(/^(step\s*)?\d+\s*[.):-]\s*/i, "").trim();

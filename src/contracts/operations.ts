@@ -9,6 +9,7 @@ import {
   ItemCategory,
   Location,
   MealStatus,
+  PlanDate,
   Quantity,
   RestrictionKind,
   ReviewKind,
@@ -106,7 +107,8 @@ export const ItemUpdate = z.object({
 /**
  * Without a batch: an amount comes off the oldest batch first (spilling into the next when the
  * units match), and `stock` applies to the whole item (Out closes every batch). With a batch:
- * only that batch (Out closes it; the item is Out once its last batch closes, 0011).
+ * only that batch (Out closes it; the item is Out once its last batch closes, 0011). A level
+ * without a use ("we have plenty of rice") is `item.stock.set` instead.
  */
 export const ItemUse = z.object({
   ...common,
@@ -116,6 +118,21 @@ export const ItemUse = z.object({
     stock: optionalFact(StockLevel),
     amountUsed: optionalFact(Quantity),
   }),
+});
+
+/**
+ * Set how much is left (0045 KOS4): "we have plenty of rice", "there's some milk left", or the
+ * level buttons. Not a use (no amount, no "last used"). Without a batch: every open batch (the
+ * whole item, like 0036 IA2); with a batch: only that one. `out` closes them (the item is Out once
+ * its last batch closes, 0011). Same level already set → no change. An Out item set to
+ * plenty/some/low is back in stock (a new batch with that level); one the kitchen never heard
+ * about is recorded first (0011).
+ */
+export const ItemStockSet = z.object({
+  ...common,
+  type: z.literal("item.stock.set"),
+  target: ItemBatchTarget,
+  fields: z.object({ stock: fact(StockLevel) }),
 });
 
 export const ItemRemove = z.object({
@@ -190,10 +207,28 @@ export const MealMakeAgain = z.object({
   fromMealId: Id,
 });
 
+/**
+ * Add to the plan. `date` (0045 KOS1) plans it for that day; a meal already in the plan just gets
+ * the day (like `meal.date`). Without one it stays undated, as before. The day must be in the plan
+ * window (yesterday to 21 days ahead), else DATE_OUT_OF_WINDOW.
+ */
 export const MealPlan = z.object({
   ...common,
   type: z.literal("meal.plan"),
   target: MealStepTarget,
+  date: PlanDate.optional(),
+});
+
+/**
+ * Set, change or clear a planned meal's day (0045 KOS1): "move the pasta to Friday", the date
+ * picker. `null` clears it (undated). A chosen meal given a day is planned for it, in the same
+ * change set. Done or cancelled meals → INVALID_TRANSITION.
+ */
+export const MealDate = z.object({
+  ...common,
+  type: z.literal("meal.date"),
+  target: MealStepTarget,
+  date: PlanDate.nullable(),
 });
 
 export const MealTransition = z.object({
@@ -402,6 +437,48 @@ export const ShoppingDone = z.object({
   items: z.array(ShoppingDoneItem).min(1).max(100),
 });
 
+// ─── Staples (0054, SS1–SS5) ─────────────────────────────────────────────────────────
+
+/**
+ * A staple: `{stapleId}` (exact; a staple's ID is its standard name) or `{name}` (as said; matched
+ * like list items: exact standard name, then all the words).
+ */
+export const StapleTarget = z.union([
+  z.strictObject({ stapleId: Id }),
+  z.strictObject({ name: z.string().min(1).max(200) }),
+]);
+export type StapleTarget = z.infer<typeof StapleTarget>;
+
+/** A staple's usual store (SS5): kept only when said or picked. Absent = "Anywhere". No amounts. */
+const stapleStore = optionalFact(z.string().min(1).max(100));
+
+/**
+ * "Fish sauce is a staple", "we always keep jasmine rice", a yes to "remember these as your
+ * staples?", or Add a staple (SS2: said, said yes to, or tapped; never guessed). One list for the
+ * whole kitchen (SS1). Already a staple → a no-change, unless a new store is given (then it's set).
+ */
+export const StapleAdd = z.object({
+  ...common,
+  type: z.literal("staple.add"),
+  fields: z.object({ name: fact(z.string().min(1).max(200)), store: stapleStore }),
+});
+
+/** Change or clear a staple's usual store (SS5). Same store already → no change. */
+export const StapleUpdate = z.object({
+  ...common,
+  type: z.literal("staple.update"),
+  target: StapleTarget,
+  fields: z.object({ store: stapleStore }),
+  clear: z.array(z.enum(["store"])).optional(),
+});
+
+/** "Eggs aren't a staple any more", or Remove in Edit staples. Not a staple → a no-change. */
+export const StapleRemove = z.object({
+  ...common,
+  type: z.literal("staple.remove"),
+  target: StapleTarget,
+});
+
 export const ChangesetRevert = z.object({
   ...common,
   type: z.literal("changeset.revert"),
@@ -412,6 +489,7 @@ export const Operation = z.discriminatedUnion("type", [
   ItemAdd,
   ItemUpdate,
   ItemUse,
+  ItemStockSet,
   ItemRemove,
   ItemBatchClose,
   ItemBatchKeep,
@@ -419,6 +497,7 @@ export const Operation = z.discriminatedUnion("type", [
   MealChoose,
   MealMakeAgain,
   MealPlan,
+  MealDate,
   MealTransition,
   RecipeSave,
   ChecklistTick,
@@ -435,6 +514,9 @@ export const Operation = z.discriminatedUnion("type", [
   ShoppingTick,
   ShoppingRemove,
   ShoppingDone,
+  StapleAdd,
+  StapleUpdate,
+  StapleRemove,
   ChangesetRevert,
 ]);
 export type Operation = z.infer<typeof Operation>;

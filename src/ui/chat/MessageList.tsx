@@ -18,9 +18,12 @@ import { useTranslations } from "next-intl";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useAnnounce } from "@/ui/a11y/Announcer";
 import { LumiHalo, type LumiState } from "@/ui/lumi/Lumi";
+import { Appear, AppearScope, useAppear } from "@/ui/primitives/Appear";
 import type { AssistantMessage, ChatState, UserMessage } from "./chat-reducer";
+import { BulkRemoveConfirm } from "./BulkRemoveConfirm";
 import { useFormatMsg } from "./format-msg";
 import { Receipt } from "./Receipt";
+import { StaplesAnswerAdd } from "./StaplesAnswerAdd";
 
 export function MessageList({
   chat,
@@ -84,6 +87,8 @@ export function MessageList({
 
   return (
     <div ref={listRef} role="log" aria-live="off" aria-label={t("messagesLabel")} className="flex flex-col gap-3">
+      {/* New messages, receipts and answers ease in; saved chat is just there (0059 PF16). */}
+      <AppearScope>
       {history.status === "ready" && history.nextCursor && (
         <div data-peek="false" className="flex flex-col items-center gap-1">
           <button
@@ -123,30 +128,39 @@ export function MessageList({
             onRetry={() => onRetry(m.replyTo)}
             onUndo={onUndo}
             onView={onView}
+            last={m === last}
           />
         ),
       )}
-      {pendingReply && (
-        // Lumi tilts while she writes, in place of the typing dots; with reduced motion she's still.
-        <p data-peek="true" className="flex items-center gap-2 text-small text-text-muted">
-          <LumiFace state="think" />
-          {t("writing")}
-        </p>
-      )}
+      {pendingReply && <Writing />}
+      </AppearScope>
     </div>
+  );
+}
+
+/** Lumi tilts while she writes, in place of the typing dots; with reduced motion she's still. */
+function Writing() {
+  const t = useTranslations("chat");
+  const appear = useAppear("fade");
+  return (
+    <p data-peek="true" className="flex items-center gap-2 text-small text-text-muted" {...appear}>
+      <LumiFace state="think" />
+      {t("writing")}
+    </p>
   );
 }
 
 function UserBubble({ message, peek, onRetry }: { message: UserMessage; peek: boolean; onRetry: (id: string) => void }) {
   const t = useTranslations("chat");
+  const appear = useAppear("rise");
   return (
-    <div data-peek={peek || message.status === "failed"} data-message={message.id} tabIndex={-1} className="flex flex-col items-end gap-1">
+    <div data-peek={peek || message.status === "failed"} data-message={message.id} tabIndex={-1} className="flex flex-col items-end gap-1" {...appear}>
       <p className="bubble-you max-w-[85%] px-4 py-2 text-body font-medium whitespace-pre-wrap">
         <span className="sr-only">{t("you")}: </span>
         {message.text}
       </p>
       {message.status === "failed" && (
-        <p className="flex items-center gap-2 text-small text-error-text">
+        <Appear as="p" kind="fade" className="flex items-center gap-2 text-small text-error-text">
           {t("notSent")}
           <button
             type="button"
@@ -155,7 +169,7 @@ function UserBubble({ message, peek, onRetry }: { message: UserMessage; peek: bo
           >
             {t("tryAgain")}
           </button>
-        </p>
+        </Appear>
       )}
     </div>
   );
@@ -183,21 +197,26 @@ function AssistantBubble({
   onRetry,
   onUndo,
   onView,
+  last,
 }: {
   message: AssistantMessage;
   peek: boolean;
   onRetry: () => void;
   onUndo: (changeSetId: string) => void;
   onView?: () => void;
+  /** The newest message in the chat: only then can "Remove them all?" still be answered (KOS16). */
+  last: boolean;
 }) {
   const t = useTranslations("chat");
   const formatMsg = useFormatMsg();
   // A reply that finished while you watched gets one happy hop; saved ones are just there.
   const [watched] = useState(message.status === "pending");
+  // Eases in when its first words arrive (a reply redrawn from saved chat is just there).
+  const appear = useAppear("rise");
   if (message.status === "pending" && !message.text && !message.receipt) return null;
   const writing = message.status === "pending";
   return (
-    <div data-peek={peek} data-message={message.id} tabIndex={-1} className="flex items-start gap-2">
+    <div data-peek={peek} data-message={message.id} tabIndex={-1} className="flex items-start gap-2" {...appear}>
       {writing ? <LumiFace state="think" /> : <MoodLumi key={message.status} fresh={watched && message.status === "done"} />}
       <div className="flex min-w-0 flex-1 flex-col items-start">
       {message.text && (
@@ -207,16 +226,26 @@ function AssistantBubble({
           {message.text}
         </p>
       )}
+      {message.staples && message.status !== "error" && (
+        <Appear className="w-full">
+          <StaplesAnswerAdd items={message.staples} />
+        </Appear>
+      )}
+      {message.confirm && last && message.status === "done" && (
+        <Appear>
+          <BulkRemoveConfirm confirm={message.confirm} />
+        </Appear>
+      )}
       {message.receipt && (
         <div className="w-full">
           <Receipt receipt={message.receipt} onUndo={onUndo} onView={onView} />
         </div>
       )}
       {message.status === "interrupted" && (
-        <p className="mt-2 text-small text-text-muted">{t("interrupted")}</p>
+        <Appear as="p" kind="fade" className="mt-2 text-small text-text-muted">{t("interrupted")}</Appear>
       )}
       {message.status === "error" && (
-        <p className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-error-bg px-3 py-2 text-small text-error-text">
+        <Appear as="p" kind="fade" className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-error-bg px-3 py-2 text-small text-error-text">
           {message.error && message.error.reason.code !== "SAVE_FAILED"
             ? formatMsg(message.error.reason)
             : t("errorNothingChanged")}
@@ -225,7 +254,7 @@ function AssistantBubble({
               {t("tryAgain")}
             </button>
           )}
-        </p>
+        </Appear>
       )}
       </div>
     </div>

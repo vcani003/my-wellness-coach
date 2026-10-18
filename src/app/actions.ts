@@ -8,16 +8,29 @@ import { z } from "zod";
 import type { ApplyResult } from "@/contracts/apply-result";
 import type { Msg } from "@/contracts/common";
 import type { RecipeView } from "@/contracts/kitchen-state";
-import type { UpdateKitchenPrompt } from "@/contracts/stream";
-import { getMeals, handleChooseMeal } from "@/ai";
-import { getRecipe } from "@/domains/kitchen/queries";
+import type { StreamEvent, UpdateKitchenPrompt } from "@/contracts/stream";
+import { getMeals, handleChooseMeal, undoWithFollow } from "@/ai";
+import { getRecipe, getWeekNeeds } from "@/domains/kitchen/queries";
+import type { WeekNeeds } from "@/contracts/week-plan";
+import { todayIn } from "@/shared/plan-dates";
 import { checkChatRateLimit } from "@/lib/rate-limit";
-import { Id, Quantity, ShoppingSource } from "@/contracts/common";
+import { Id, ItemCategory, Location, PlanDate, Quantity, ShoppingSource, StockLevel } from "@/contracts/common";
 import { ShoppingDoneFields } from "@/contracts/operations";
 import {
   addRecipeNeedsToShoppingList,
   addShoppingItems,
+  addWeekNeedsToShoppingList,
+  setMealDay,
+  addStapleItems,
+  answerLegacyStaples,
+  getLegacyStaplesOffer,
+  removeStapleItem,
+  restockFromStaples,
+  updateStapleStore,
   doneShopping,
+  editItem as editItemCommand,
+  removeItem as removeItemCommand,
+  setItemStaple as setItemStapleCommand,
   makeMealAgain,
   moveMeal,
   planMeal,
@@ -28,6 +41,7 @@ import {
   queueShoppingReview,
   removeShoppingItem,
   resolveReview,
+  setStockLevel,
   tickShoppingItem,
   undo,
 } from "@/domains/kitchen/commands";
@@ -39,14 +53,21 @@ export type ActionResult = { ok: true; result: ApplyResult } | { ok: false; reas
 
 const UndoInput = z.object({ kitchenId: Id, changeSetId: Id, tapId: Id, basedOnVersion: z.number().int().nonnegative() });
 
+/**
+ * `events`: what an Undo shows besides the receipt (0052): a recipe it put back (its `recipe`
+ * parts and `recipe.saved`) and idea cards that follow it (`idea.updated`). The UI applies them
+ * as it would a stream's.
+ */
+export type UndoActionResult = { ok: true; result: ApplyResult; events: StreamEvent[] } | { ok: false; reason: Msg; retryable: boolean };
+
 /** Undo one of your own change sets (H3, 0017). `tapId` makes a double tap harmless. */
-export async function undoChange(input: z.input<typeof UndoInput>): Promise<ActionResult> {
+export async function undoChange(input: z.input<typeof UndoInput>): Promise<UndoActionResult> {
   const parsed = UndoInput.safeParse(input);
   if (!parsed.success) return { ok: false, reason: msg("INVALID_PROPOSAL"), retryable: false };
   const ctx = await getScope(parsed.data.kitchenId);
   if (!ctx) return { ok: false, reason: msg("NOT_ALLOWED"), retryable: false };
-  const outcome = await undo(ctx.db, ctx.scope, parsed.data);
-  return outcome.ok ? { ok: true, result: outcome.result } : { ok: false, ...outcome.error };
+  const { outcome, events } = await undoWithFollow(ctx, parsed.data);
+  return outcome.ok ? { ok: true, result: outcome.result, events } : { ok: false, ...outcome.error };
 }
 
 // ─── Shopping list (0027) ─────────────────────────────────────────────────────────────
@@ -125,6 +146,119 @@ export async function queueShoppingForLater(input: z.input<typeof QueueShoppingI
 /** Add or Skip on a To review card's sheet. A shopping-list card's Add is "Done shopping" for its items. */
 export async function resolveToReview(input: z.input<typeof ResolveReviewInput>): Promise<ActionResult> {
   return run(ResolveReviewInput, input, (ctx, d) => resolveReview(ctx.db, ctx.scope, d));
+}
+
+// ─── Stock levels (0045 KOS4) ─────────────────────────────────────────────────────────
+
+const StockLevelInput = z.object({ ...Tap, itemId: Id, batchId: Id.optional(), level: StockLevel });
+
+/**
+ * The level buttons: Plenty · Some · Low · Out. Without `batchId` it sets the whole item (every
+ * open batch); with one, only that batch. One change set with "What changed" and Undo. Low and
+ * Out offer "Add X to my list" (`offersListAdd`, SL3); Plenty and Some never do.
+ */
+export async function setItemStockLevel(input: z.input<typeof StockLevelInput>): Promise<ActionResult> {
+  return run(StockLevelInput, input, (ctx, d) => setStockLevel(ctx.db, ctx.scope, d));
+}
+
+// ─── Tap an item to edit it (0045 KOS3; 0030 / 0036) ──────────────────────────────────
+// Used up / Out and Running low are `setItemStockLevel` above. Send the `basedOnVersion` the
+// person saw when the sheet opened: a change someone else made to the item since comes back as a
+// STALE_TARGET rejection with nothing saved. Anyone in the kitchen may edit any item (0017).
+
+/** Sheet limits (item-actions.md §2): name ≤ 60, amount ≤ 40. */
+const ItemEditFields = z
+  .strictObject({
+    name: z.string().trim().min(1).max(60).optional(),
+    /** As typed; "" or null clears it to unknown. */
+    amount: z.string().trim().max(40).nullable().optional(),
+    place: Location.optional(),
+    category: ItemCategory.optional(),
+  })
+  .refine((e) => Object.values(e).some((v) => v !== undefined), { message: "nothing to change" });
+const EditItemInput = z.object({ ...Tap, itemId: Id, batchId: Id.optional(), edit: ItemEditFields });
+const ItemInput = z.object({ ...Tap, itemId: Id });
+const ItemStapleInput = z.object({ ...Tap, itemId: Id, staple: z.boolean() });
+
+/**
+ * Save the edit sheet: name, amount, place and/or type, as one change set with one Undo and one
+ * receipt line per part. With `batchId`, the amount and place apply to that batch only (KOS4-e,
+ * 0036); without, the amount goes on the oldest open batch (IA4) and the place on every open batch.
+ */
+export async function editItem(input: z.input<typeof EditItemInput>): Promise<ActionResult> {
+  return run(EditItemInput, input, (ctx, d) => editItemCommand(ctx.db, ctx.scope, d));
+}
+
+/** "Remove (added by mistake)" (0030): asks once in the UI; Undo brings it back. */
+export async function removeItem(input: z.input<typeof ItemInput>): Promise<ActionResult> {
+  return run(ItemInput, input, (ctx, d) => removeItemCommand(ctx.db, ctx.scope, d));
+}
+
+/** The item's "Staple" switch (0054 plan): on adds this item's name as a staple, off removes it. */
+export async function setItemStaple(input: z.input<typeof ItemStapleInput>): Promise<ActionResult> {
+  return run(ItemStapleInput, input, (ctx, d) => setItemStapleCommand(ctx.db, ctx.scope, d));
+}
+
+// ─── Staples (0054) ───────────────────────────────────────────────────────────────────
+// The list and each staple's `need` are in `KitchenState.staples` (computed on read, SS3).
+
+const StapleName = z.string().trim().min(1).max(200);
+const StapleStoreName = z.string().trim().min(1).max(100);
+const AddStaplesInput = z.object({ ...Tap, items: z.array(z.object({ name: StapleName, store: StapleStoreName.optional() })).min(1).max(50) });
+const UpdateStapleInput = z.object({ ...Tap, stapleId: Id, store: StapleStoreName.nullable() });
+const StapleInput = z.object({ ...Tap, stapleId: Id });
+const RestockInput = z.object({ ...Tap, stapleIds: z.array(Id).min(1).max(50) });
+const KitchenInput = z.object({ kitchenId: Id });
+const StaplesOfferInput = z.object({ kitchenId: Id, basedOnVersion: z.number().int().nonnegative() });
+
+/** Add a staple (or several), with an optional usual store (SS5). Already a staple → `STAPLE_ALREADY`. */
+export async function addStaples(input: z.input<typeof AddStaplesInput>): Promise<ActionResult> {
+  return run(AddStaplesInput, input, (ctx, d) => addStapleItems(ctx.db, ctx.scope, d));
+}
+
+/** Store… on a staple: a store name, or `null` for "Anywhere" (SS5). */
+export async function updateStaple(input: z.input<typeof UpdateStapleInput>): Promise<ActionResult> {
+  return run(UpdateStapleInput, input, (ctx, d) => updateStapleStore(ctx.db, ctx.scope, d));
+}
+
+/** Remove a staple: no confirmation, it has Undo. */
+export async function removeStaple(input: z.input<typeof StapleInput>): Promise<ActionResult> {
+  return run(StapleInput, input, (ctx, d) => removeStapleItem(ctx.db, ctx.scope, d));
+}
+
+/**
+ * Restock (SS3), and "Add these to my list" under a staples answer (SS6): the chosen staples go on
+ * the list in one change set with one Undo, each under its usual store, source `staples`.
+ */
+export async function restockStaples(input: z.input<typeof RestockInput>): Promise<ActionResult> {
+  return run(RestockInput, input, (ctx, d) => restockFromStaples(ctx.db, ctx.scope, d));
+}
+
+/**
+ * The one-time "You told me these before: … · Add them · Not now" offer (SS2): names from your
+ * old "Staples: …" preference that aren't staples yet. `null` = nothing to offer (or answered).
+ */
+export async function loadStaplesOffer(input: z.input<typeof KitchenInput>): Promise<{ names: string[] } | null> {
+  const parsed = KitchenInput.safeParse(input);
+  if (!parsed.success) return null;
+  try {
+    const ctx = await getScope(parsed.data.kitchenId);
+    if (!ctx) return null;
+    return await getLegacyStaplesOffer(ctx.db, ctx.scope);
+  } catch (error) {
+    console.error("actions: loadStaplesOffer failed", { error });
+    return null;
+  }
+}
+
+/** "Add them": the offered names become staples (one change set, one Undo); the offer is answered. */
+export async function acceptStaplesOffer(input: z.input<typeof StaplesOfferInput>): Promise<ActionResult> {
+  return run(StaplesOfferInput, input, (ctx, d) => answerLegacyStaples(ctx.db, ctx.scope, { ...d, accept: true }));
+}
+
+/** "Not now": nothing changes, and the offer isn't shown again. */
+export async function dismissStaplesOffer(input: z.input<typeof StaplesOfferInput>): Promise<ActionResult> {
+  return run(StaplesOfferInput, input, (ctx, d) => answerLegacyStaples(ctx.db, ctx.scope, { ...d, accept: false }));
 }
 
 // ─── Meals (0005, 0013) ───────────────────────────────────────────────────────────────
@@ -232,9 +366,46 @@ export async function makeAgain(input: z.input<typeof MakeAgainInput>): Promise<
   }
 }
 
-/** "Add to meal plan" (0008: a short list, no dates). */
-export async function addMealToPlan(input: z.input<typeof MealInput>): Promise<ActionResult> {
-  return run(MealInput, input, (ctx, d) => planMeal(ctx.db, ctx.scope, d));
+/** The person's device time zone (IANA, e.g. "America/New_York"): their "today" for the plan (0045 KOS1). */
+const TimeZone = z.string().min(1).max(64).optional();
+const PlanInput = z.object({ ...Tap, mealId: Id, date: PlanDate.optional(), timeZone: TimeZone });
+const MealDateInput = z.object({ ...Tap, mealId: Id, date: PlanDate.nullable(), timeZone: TimeZone });
+const WeekRange = { timeZone: TimeZone, from: PlanDate.optional(), to: PlanDate.optional(), includeUndated: z.boolean().optional() };
+const WeekNeedsInput = z.object({ kitchenId: Id, ...WeekRange });
+const AddWeekNeedsInput = z.object({ ...Tap, ...WeekRange, names: z.array(z.string().min(1).max(200)).min(1).max(50).optional() });
+
+/** "Add to meal plan" (0008), with an optional day (0045 KOS1: yesterday to 21 days ahead). */
+export async function addMealToPlan(input: z.input<typeof PlanInput>): Promise<ActionResult> {
+  return run(PlanInput, input, (ctx, d) => planMeal(ctx.db, ctx.scope, d));
+}
+
+/** The date picker on a planned meal (0045 KOS1): set or change its day; `date: null` clears it. */
+export async function setMealDate(input: z.input<typeof MealDateInput>): Promise<ActionResult> {
+  return run(MealDateInput, input, (ctx, d) => setMealDay(ctx.db, ctx.scope, d));
+}
+
+/**
+ * The preview for "Add the week's missing ingredients" (0045 KOS12): `WeekNeeds`, or null when it
+ * can't be read (the sheet shows its fallback, 0018). Range defaults: today to 6 days ahead, plus
+ * undated planned meals.
+ */
+export async function loadWeekNeeds(input: z.input<typeof WeekNeedsInput>): Promise<WeekNeeds | null> {
+  const parsed = WeekNeedsInput.safeParse(input);
+  if (!parsed.success) return null;
+  try {
+    const ctx = await getScope(parsed.data.kitchenId);
+    if (!ctx) return null;
+    const { timeZone, ...range } = parsed.data;
+    return await getWeekNeeds(ctx.db, ctx.scope, { ...range, today: todayIn(timeZone) });
+  } catch (error) {
+    console.error("actions: loadWeekNeeds failed", { error });
+    return null;
+  }
+}
+
+/** Add on that sheet: the chosen ones (or every one not on the list) in one change set, source `week-plan`. */
+export async function addWeekNeedsToList(input: z.input<typeof AddWeekNeedsInput>): Promise<ActionResult> {
+  return run(AddWeekNeedsInput, input, (ctx, d) => addWeekNeedsToShoppingList(ctx.db, ctx.scope, d));
 }
 
 export async function startCooking(input: z.input<typeof MealInput>): Promise<ActionResult> {

@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Db } from "@/db/client";
 import type { StreamEvent } from "@/contracts/stream";
 import { getInterpreter, handleChatTurn } from "@/ai";
-import { FALLBACK_REPLY, NOTHING_TO_UNDO_REPLY } from "@/ai/fake";
+import { FALLBACK_REPLY, NOTHING_TO_UNDO_REPLY, STAND_IN_DECLINE_REPLY } from "@/ai/fake";
 import type { Interpreter } from "@/ai/interpreter";
 import { getKitchenState } from "@/domains/kitchen/queries";
 import type { KitchenScope } from "@/shared/membership";
@@ -79,10 +79,25 @@ describe("chat turn with the fake interpreter", () => {
   it("anything it doesn't understand: a polite reply and no changes", async () => {
     const k = await newKitchen(db, ["Vero"]);
     const vero = await k.scope("Vero");
-    const out = await turn(vero, "Is it going to rain later?");
+    const out = await turn(vero, "Blue skies all day");
     expect(out.types).toEqual(["ack", "status", "status", "text", "done"]);
     expect(out.reply).toBe(FALLBACK_REPLY);
     expect((await getKitchenState(db, vero)).version).toBe(0);
+  });
+
+  it("a question, meal ideas or a dish's recipe: only the real AI answers; the stand-in says so and changes nothing (0059 PF10)", async () => {
+    const k = await newKitchen(db, ["Vero"]);
+    const vero = await k.scope("Vero");
+    await turn(vero, "I bought eggs and spinach");
+    for (const text of ["Is it going to rain later?", "How much spinach do I need?", "What can I make tonight?", "I want to make a chicken curry", "I have the ingredients needed to make this"]) {
+      const out = await turn(vero, text);
+      expect(out.types, text).toEqual(["ack", "status", "status", "text", "done"]);
+      expect(out.reply, text).toBe(text.startsWith("I have") ? FALLBACK_REPLY : STAND_IN_DECLINE_REPLY);
+    }
+    const state = await getKitchenState(db, vero);
+    expect(state.version).toBe(1);
+    expect(state.items.map((i) => i.name.value).sort()).toEqual(["eggs", "spinach"]);
+    expect(state.meals).toEqual([]);
   });
 
   it("undo only ever undoes your own change (H3, 0017)", async () => {

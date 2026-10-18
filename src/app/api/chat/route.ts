@@ -16,6 +16,8 @@ const Body = z.object({
     .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().max(4000) }))
     .max(10)
     .optional(),
+  /** The device's IANA time zone (0045 KOS1): "today" for the dated plan. Optional; unknown → UTC. */
+  timeZone: z.string().min(1).max(64).optional(),
 });
 
 export async function POST(request: Request): Promise<Response> {
@@ -39,7 +41,11 @@ export async function POST(request: Request): Promise<Response> {
   return ndjson(
     handleChatTurn(
       { db: ctx.db, scope: ctx.scope, interpreter: getInterpreter({ db: ctx.db, scope: ctx.scope }), meals: getMeals() },
-      { clientMessageId: parsed.data.clientMessageId, text: parsed.data.text },
+      {
+        clientMessageId: parsed.data.clientMessageId,
+        text: parsed.data.text,
+        ...(parsed.data.timeZone ? { timeZone: parsed.data.timeZone } : {}),
+      },
     ),
   );
 }

@@ -300,6 +300,8 @@ describe("saved chat", () => {
       expect((await getKitchenState(broken.db, vero)).items.map((i) => i.name.value)).toEqual(["eggs"]);
       expect(logged).toEqual([
         "chat.history: couldn't load recent turns",
+        // KOS16: no saved chat means no held bulk removal to answer; the message is read as new.
+        "chat.history: couldn't load held change",
         "chat.history: couldn't save user message",
         "chat.history: couldn't save reply",
       ]);

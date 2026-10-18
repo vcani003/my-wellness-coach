@@ -3,11 +3,11 @@
  * same transaction as their events (backend-data.md §3).
  */
 import { and, eq } from "drizzle-orm";
-import { checklistTicks, itemBatches, itemCategoryPrefs, itemLocationPrefs, items, meals, recipes, reviews, shoppingItems } from "@/db/schema";
+import { checklistTicks, itemBatches, itemCategoryPrefs, itemLocationPrefs, items, meals, recipes, reviews, shoppingItems, staples } from "@/db/schema";
 import type { Queryable } from "@/db/client";
 import type { ItemCategory, Location, MealStatus, ReviewKind, ReviewOrigin, ShoppingSource } from "@/contracts/common";
 import { compact, splitEntityKey } from "@/shared/events/types";
-import type { CategoryPref, Item, KitchenEntities, LocationPref, Meal, Recipe, Review, ShoppingItem, ShoppingStatus, Tick } from "./state";
+import type { CategoryPref, Item, KitchenEntities, LocationPref, Meal, Recipe, Review, ShoppingItem, ShoppingStatus, Staple, Tick } from "./state";
 import { tickId } from "./state";
 import { deriveItem, ensureBatches, type Batch, type BatchCloseReason } from "./batches";
 
@@ -81,6 +81,7 @@ export function mealFromRow(r: typeof meals.$inferSelect): Meal {
     status: r.status as MealStatus,
     ideaId: r.ideaId ?? undefined,
     planPosition: r.planPosition ?? undefined,
+    plannedFor: r.plannedFor ?? undefined,
     chosenAt: iso(r.chosenAt),
     recipeId: r.recipeId ?? undefined,
     note: r.note ?? undefined,
@@ -149,9 +150,13 @@ export function locationPrefFromRow(r: typeof itemLocationPrefs.$inferSelect): L
   return { standardName: r.standardName, location: r.location as Location, ...auditFrom(r) };
 }
 
+export function stapleFromRow(r: typeof staples.$inferSelect): Staple {
+  return compact({ standardName: r.standardName, name: r.name, store: r.store ?? undefined, ...auditFrom(r) });
+}
+
 /** The whole kitchen as the pure state (all rows, including done meals and `out` items). */
 export async function loadKitchenEntities(db: Queryable, kitchenId: string): Promise<KitchenEntities> {
-  const [itemRows, batchRows, mealRows, recipeRows, tickRows, reviewRows, shoppingRows, prefRows, placeRows] = await Promise.all([
+  const [itemRows, batchRows, mealRows, recipeRows, tickRows, reviewRows, shoppingRows, prefRows, placeRows, stapleRows] = await Promise.all([
     db.select().from(items).where(eq(items.kitchenId, kitchenId)),
     db.select().from(itemBatches).where(eq(itemBatches.kitchenId, kitchenId)),
     db.select().from(meals).where(eq(meals.kitchenId, kitchenId)),
@@ -161,6 +166,7 @@ export async function loadKitchenEntities(db: Queryable, kitchenId: string): Pro
     db.select().from(shoppingItems).where(eq(shoppingItems.kitchenId, kitchenId)),
     db.select().from(itemCategoryPrefs).where(eq(itemCategoryPrefs.kitchenId, kitchenId)),
     db.select().from(itemLocationPrefs).where(eq(itemLocationPrefs.kitchenId, kitchenId)),
+    db.select().from(staples).where(eq(staples.kitchenId, kitchenId)),
   ]);
   const batchesByItem = new Map<string, (typeof itemBatches.$inferSelect)[]>();
   for (const b of batchRows) batchesByItem.set(b.itemId, [...(batchesByItem.get(b.itemId) ?? []), b]);
@@ -173,6 +179,7 @@ export async function loadKitchenEntities(db: Queryable, kitchenId: string): Pro
     shopping: Object.fromEntries(shoppingRows.map((r) => [r.id, shoppingFromRow(r)])),
     categoryPrefs: Object.fromEntries(prefRows.map((r) => [r.standardName, categoryPrefFromRow(r)])),
     locationPrefs: Object.fromEntries(placeRows.map((r) => [r.standardName, locationPrefFromRow(r)])),
+    staples: Object.fromEntries(stapleRows.map((r) => [r.standardName, stapleFromRow(r)])),
   };
 }
 
@@ -245,6 +252,7 @@ export async function persistKitchenEntities(
             status: e.status,
             ideaId: e.ideaId ?? null,
             planPosition: e.planPosition ?? null,
+            plannedFor: e.plannedFor ?? null,
             chosenAt: date(e.chosenAt),
             recipeId: e.recipeId ?? null,
             note: e.note ?? null,
@@ -359,6 +367,14 @@ export async function persistKitchenEntities(
         }
         break;
       }
+      case "staple": {
+        await db.delete(staples).where(and(eq(staples.kitchenId, kitchenId), eq(staples.standardName, id)));
+        const e = state.staples?.[id];
+        if (e) {
+          await db.insert(staples).values({ kitchenId, standardName: e.standardName, name: e.name, store: e.store ?? null, ...auditTo(e) });
+        }
+        break;
+      }
       default:
         // Profile keys are persisted by the shared profile store.
         break;
@@ -377,6 +393,7 @@ export async function replaceKitchenProjections(db: Queryable, kitchenId: string
   await db.delete(shoppingItems).where(eq(shoppingItems.kitchenId, kitchenId));
   await db.delete(itemCategoryPrefs).where(eq(itemCategoryPrefs.kitchenId, kitchenId));
   await db.delete(itemLocationPrefs).where(eq(itemLocationPrefs.kitchenId, kitchenId));
+  await db.delete(staples).where(eq(staples.kitchenId, kitchenId));
   const keys = [
     ...Object.keys(state.items).map((id) => `item:${id}`),
     ...Object.keys(state.meals).map((id) => `meal:${id}`),
@@ -386,6 +403,7 @@ export async function replaceKitchenProjections(db: Queryable, kitchenId: string
     ...Object.keys(state.shopping).map((id) => `shopping:${id}`),
     ...Object.keys(state.categoryPrefs).map((id) => `catpref:${id}`),
     ...Object.keys(state.locationPrefs ?? {}).map((id) => `locpref:${id}`),
+    ...Object.keys(state.staples ?? {}).map((id) => `staple:${id}`),
   ];
   await persistKitchenEntities(db, kitchenId, state, keys);
 }

@@ -44,7 +44,8 @@ export const Quantity = z.object({
 });
 export type Quantity = z.infer<typeof Quantity>;
 
-export const Location = z.enum(["fridge", "freezer", "pantry"]);
+/** Where something is kept. Counter added by 0030 (IA1), shipped with KOS3; stored in jsonb facts, so no migration. */
+export const Location = z.enum(["fridge", "freezer", "pantry", "counter"]);
 export type Location = z.infer<typeof Location>;
 
 /**
@@ -69,8 +70,20 @@ export const ItemCategory = z.enum([
 export type ItemCategory = z.infer<typeof ItemCategory>;
 export const ITEM_CATEGORIES = ItemCategory.options;
 
-export const StockLevel = z.enum(["low", "out"]);
+/**
+ * How much of something is left (0045 KOS4): plenty / some / low ("Running low") / out. Absent =
+ * unknown (no made-up default). `out` closes the batch (0011: Out drops off the Kitchen list).
+ * Older events only ever carry `low` or `out`, which keep their meaning.
+ */
+export const StockLevel = z.enum(["plenty", "some", "low", "out"]);
 export type StockLevel = z.infer<typeof StockLevel>;
+export const STOCK_LEVELS = StockLevel.options;
+
+/**
+ * Whether a level triggers the "Add X to my list?" offer (SL3, 0054 SS4): Low and Out do; Plenty
+ * and Some never do. The one place this rule lives.
+ */
+export const offersListAdd = (level: StockLevel | undefined): boolean => level === "low" || level === "out";
 
 /**
  * Which of an item's open batches (0025): the oldest (used first by default) or the newest
@@ -86,6 +99,13 @@ export const MAX_OPEN_BATCHES = 3;
 export const MealStatus = z.enum(["chosen", "planned", "cooking", "done", "cancelled"]);
 export type MealStatus = z.infer<typeof MealStatus>;
 
+/**
+ * A planned meal's day (0045 KOS1): a calendar date "YYYY-MM-DD", never a timestamp, so it can't
+ * shift across time zones or DST. Helpers in `src/shared/plan-dates.ts`.
+ */
+export const PlanDate = z.iso.date();
+export type PlanDate = z.infer<typeof PlanDate>;
+
 export const RestrictionKind = z.enum(["allergy", "diet"]);
 export type RestrictionKind = z.infer<typeof RestrictionKind>;
 
@@ -100,7 +120,8 @@ export type ReviewOrigin = z.infer<typeof ReviewOrigin>;
  * How a shopping-list item got on the list (0027): said in chat, a staples answer, a recipe's
  * "Need" items, or the "Add to shopping list" offer after marking something Out or Low (SL3).
  */
-export const ShoppingSource = z.enum(["chat", "staples", "recipe", "stock-offer"]);
+/** `week-plan`: the week's missing ingredients (0045 KOS12). */
+export const ShoppingSource = z.enum(["chat", "staples", "recipe", "stock-offer", "week-plan"]);
 export type ShoppingSource = z.infer<typeof ShoppingSource>;
 
 /** Computed by code from current profiles on every read; never stored. */

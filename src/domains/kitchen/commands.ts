@@ -12,24 +12,29 @@
  */
 import { and, asc, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { changeSets, itemBatches, kitchens, mealIdeas, meals, users } from "@/db/schema";
+import { changeSets, itemBatches, kitchens, mealIdeas, meals, staples, users } from "@/db/schema";
 import type { Db, Queryable } from "@/db/client";
 import { ApplyResult, type ApplyResult as ApplyResultT } from "@/contracts/apply-result";
-import type { Msg, Quantity, ShoppingSource } from "@/contracts/common";
+import type { ItemCategory, Location, Msg, Quantity, ShoppingSource, StockLevel } from "@/contracts/common";
 import type { Operation } from "@/contracts/operations";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { MealIdea, UpdateKitchenPrompt } from "@/contracts/stream";
 import { standardName } from "@/shared/text";
+import { legacyStapleNames, stapleIdsForItem } from "@/shared/staples";
+import { quantityFromText } from "@/shared/quantity";
+import { todayIn } from "@/shared/plan-dates";
 import { msg } from "@/shared/messages";
 import { listMembers, type KitchenScope } from "@/shared/membership";
 import { appendEvents, eventExistsInStreams, loadChangeSetEvents, loadStream } from "@/shared/events/store";
 import { kitchenStream, streamKind, userStream } from "@/shared/events/types";
 import { loadProfiles, persistProfileEntities, replaceProfiles } from "@/shared/profile/store";
 import { emptyProfileState, getProfileEntity, replayProfile } from "@/shared/profile/state";
-import { getKitchenEntity, replay } from "./state";
+import { getKitchenEntity, replay, type Item } from "./state";
+import { openBatches, type Batch } from "./batches";
 import { loadKitchenEntities, persistKitchenEntities, replaceKitchenProjections } from "./store";
 import { SOFT_SUMMARY_CODES, planProposal, touchedKeys, type RevertPlan } from "./validate";
-import { getRecipe, ideaFlags, itemNames, readKitchenState } from "./queries";
+import { getRecipe, getWeekNeeds, ideaFlags, itemNames, readKitchenState } from "./queries";
+import { isRecipeNeed } from "@/contracts/kitchen-state";
 import { PLACES_SORT_ACTION, placesSortProposalId, planPlacesSort, sortedReply, type PlannedMove } from "./sort-places";
 
 export type ApplyOutcome =
@@ -41,6 +46,11 @@ export interface ApplyOptions {
   messageText?: string;
   /** Injected clock for tests. */
   now?: Date;
+  /**
+   * The person's IANA time zone (their device's), for "today" in the dated plan (0045 KOS1). Absent
+   * or unknown → UTC.
+   */
+  timeZone?: string;
 }
 
 type StoredResult = Omit<ApplyResultT, "state">;
@@ -176,12 +186,14 @@ export async function applyProposedChange(
       }
 
       const changeSetId = randomUUID();
-      const now = (options.now ?? new Date()).toISOString();
+      const clock = options.now ?? new Date();
+      const now = clock.toISOString();
       const plan = planProposal(proposal, {
         kitchenId: scope.kitchenId,
         actorId: scope.userId,
         via: proposal.source.via,
         now,
+        today: todayIn(options.timeZone, clock),
         changeSetId,
         source: proposal.source,
         messageText: options.messageText,
@@ -348,14 +360,19 @@ export interface TapArgs {
   basedOnVersion: number;
 }
 
-function tap(db: Db, scope: KitchenScope, args: TapArgs, action: string, operations: Operation[]) {
-  return applyProposedChange(db, scope, {
-    proposalId: args.tapId,
-    kitchenId: scope.kitchenId,
-    basedOnVersion: args.basedOnVersion,
-    source: { via: "button", action },
-    operations,
-  });
+function tap(db: Db, scope: KitchenScope, args: TapArgs, action: string, operations: Operation[], options: ApplyOptions = {}) {
+  return applyProposedChange(
+    db,
+    scope,
+    {
+      proposalId: args.tapId,
+      kitchenId: scope.kitchenId,
+      basedOnVersion: args.basedOnVersion,
+      source: { via: "button", action },
+      operations,
+    },
+    options,
+  );
 }
 
 const said = <T>(value: T) => ({ value, basis: "said" as const, confidence: "high" as const });
@@ -375,6 +392,169 @@ export function closeBatches(db: Db, scope: KitchenScope, args: TapArgs & { item
       target: { itemId: args.itemId, batchId },
     })),
   );
+}
+
+// ─── Stock levels (0045 KOS4) ─────────────────────────────────────────────────────────
+
+/**
+ * A level button (Plenty · Some · Low · Out): one change set with Undo. Without `batchId`, the
+ * whole item (every open batch); with one, only that batch. Out drops it off the Kitchen list
+ * (0011). Same level already set → a no-change.
+ */
+export function setStockLevel(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { itemId: string; batchId?: string; level: StockLevel },
+) {
+  return tap(db, scope, args, "item.stock.set", [
+    {
+      opId: "level",
+      type: "item.stock.set",
+      target: args.batchId ? { itemId: args.itemId, batchId: args.batchId } : { itemId: args.itemId },
+      fields: { stock: said(args.level) },
+    },
+  ]);
+}
+
+// ─── Tap an item to edit it (0045 KOS3; the item actions of 0030 / 0036) ────────────────
+// Used up / Out and Running low are `setStockLevel` (whole item, or one batch with `batchId`).
+// The rest are below. Each builds ordinary operations from the item as the server sees it now and
+// goes through the same validate → apply path as chat: one change set, one Undo, recorded as the
+// person who tapped (anyone in the kitchen may edit any item, 0017; Undo stays your own). A change
+// someone made to the item since `basedOnVersion` is refused whole as STALE_TARGET.
+
+/**
+ * What the edit sheet saves. Only what changed needs sending; each part is its own receipt line.
+ * - `name`: the item's name (IA6: "Renamed fish sauce → nước mắm"). Renaming onto another item's
+ *   name is allowed and nothing merges (item-actions.md §2, 0036).
+ * - `amount`: as typed ("half a bag", "2 lbs"); `""` or `null` clears it to unknown (0011). Goes on
+ *   the batch given, else the oldest open one (IA4).
+ * - `place`: Fridge / Freezer / Pantry / Counter, on the batch given, else every open batch. Into
+ *   the Freezer is the chat "froze it" path; out of it counts as defrosting (IA5).
+ * - `category`: the item's type, as said (remembered for the name, CAT1).
+ */
+export interface ItemEdit {
+  name?: string;
+  amount?: string | null;
+  place?: Location;
+  category?: ItemCategory;
+}
+
+type GoneOp = Operation;
+
+/**
+ * An item that can't be edited: the validator gives the usual rejection, so the answer has the
+ * same shape as any other (removed → UNKNOWN_ITEM; Out → ALREADY_OUT; nothing saved).
+ */
+function goneOps(itemId: string, item: Item | undefined): GoneOp[] {
+  return item
+    ? [{ opId: "gone", type: "item.use", target: { itemId }, fields: {} }]
+    : [{ opId: "gone", type: "item.update", target: { itemId }, fields: {} }];
+}
+
+const frozeIt = { value: "freezer" as const, basis: "inferred" as const, confidence: "high" as const };
+
+/** The operations for one move (IA5): skipped for a batch already there. */
+function moveOps(item: Item, batches: Batch[], to: Location): Operation[] {
+  return batches.flatMap((b, n): Operation[] => {
+    const target = { itemId: item.id, batchId: b.id };
+    const opId = `place-${n + 1}`;
+    const inFreezer = b.location?.value === "freezer";
+    if (to === "freezer") {
+      if (inFreezer && b.frozen?.value === true) return [];
+      // 0057 KOS3-d: freezing is usually a one-off, so it isn't remembered as the name's usual
+      // place. Same facts as saying "I froze it" in chat: frozen said, the Freezer follows from it
+      // (inferred, high), and only a said place is remembered (0041).
+      return [{ opId, type: "item.update", target, fields: { location: frozeIt, frozen: said(true) } }];
+    }
+    if (inFreezer || b.frozen?.value === true) {
+      return [{ opId, type: "item.defrost", target, fields: { location: said(to) } }];
+    }
+    if (b.location?.value === to) return [];
+    return [{ opId, type: "item.update", target, fields: { location: said(to) } }];
+  });
+}
+
+/** The edit sheet's operations, in receipt order: rename, amount, place, type. Pure. */
+export function itemEditOperations(item: Item, edit: ItemEdit, batchId?: string): Operation[] {
+  const open = openBatches(item);
+  const picked = batchId ? open.filter((b) => b.id === batchId) : undefined;
+  if (batchId && picked?.length === 0) {
+    // Gone since the sheet opened: the validator says so (closed → ALREADY_OUT, unknown → UNKNOWN_TARGET).
+    return [{ opId: "batch", type: "item.update", target: { itemId: item.id, batchId }, fields: {}, clear: ["quantity"] }];
+  }
+  const ops: Operation[] = [];
+  const name = edit.name?.trim();
+  if (name && name !== item.name.value) ops.push({ opId: "name", type: "item.update", target: { itemId: item.id }, fields: { name: said(name) } });
+
+  if (edit.amount !== undefined) {
+    const batch = picked?.[0] ?? open[0];
+    const target = batch ? { itemId: item.id, batchId: batch.id } : { itemId: item.id };
+    const quantity = quantityFromText(edit.amount ?? "");
+    if (!quantity) {
+      if (batch?.quantity) ops.push({ opId: "amount", type: "item.update", target, fields: {}, clear: ["quantity"] });
+    } else if (quantity.asSaid !== batch?.quantity?.value.asSaid) {
+      ops.push({ opId: "amount", type: "item.update", target, fields: { quantity: said(quantity) } });
+    }
+  }
+
+  if (edit.place) ops.push(...moveOps(item, picked ?? open, edit.place));
+
+  if (edit.category && !(item.category?.value === edit.category && item.category.basis === "said")) {
+    ops.push({ opId: "type", type: "item.update", target: { itemId: item.id }, fields: { category: said(edit.category) } });
+  }
+  return ops;
+}
+
+/** Save the edit sheet: one change set with one Undo; nothing changed → an empty change. */
+export async function editItem(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { itemId: string; batchId?: string; edit: ItemEdit },
+): Promise<ApplyOutcome> {
+  try {
+    const item = (await loadKitchenEntities(db, scope.kitchenId)).items[args.itemId];
+    const ops = item && openBatches(item).length > 0 ? itemEditOperations(item, args.edit, args.batchId) : goneOps(args.itemId, item);
+    return tap(db, scope, args, "item.edit", ops);
+  } catch (error) {
+    console.error("kitchen.apply: couldn't edit the item", { error });
+    return { ok: false, error: { reason: msg("SAVE_FAILED"), retryable: true } };
+  }
+}
+
+/** "Remove (added by mistake)" (0030): the whole item leaves the list; history keeps it. Undo brings it back. */
+export function removeItem(db: Db, scope: KitchenScope, args: TapArgs & { itemId: string }) {
+  return tap(db, scope, args, "item.remove", [{ opId: "remove", type: "item.remove", target: { itemId: args.itemId } }]);
+}
+
+/**
+ * The item's "Staple" switch (0054 plan, KOS3). On: this item's name becomes a staple (already one
+ * → STAPLE_ALREADY, no change). Off: every staple that is exactly this item's name is removed
+ * (`stapleIdsForItem`), so the switch reads off afterwards. One change set, one Undo.
+ */
+export async function setItemStaple(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { itemId: string; staple: boolean },
+): Promise<ApplyOutcome> {
+  try {
+    const entities = await loadKitchenEntities(db, scope.kitchenId);
+    const item = entities.items[args.itemId];
+    if (!item || openBatches(item).length === 0) return tap(db, scope, args, "item.staple", goneOps(args.itemId, item));
+    if (args.staple) return addStapleItems(db, scope, { ...args, items: [{ name: item.name.value }] });
+    const staples = Object.values(entities.staples ?? {}).map((s) => ({ id: s.standardName, name: s.name.value, standardName: s.standardName }));
+    const ids = stapleIdsForItem({ name: item.name.value, standardName: item.standardName }, staples);
+    return tap(
+      db,
+      scope,
+      args,
+      "staple.remove",
+      ids.map((stapleId, n) => ({ opId: `staple-${n + 1}`, type: "staple.remove", target: { stapleId } })),
+    );
+  } catch (error) {
+    console.error("kitchen.apply: couldn't set the item's staple", { error });
+    return { ok: false, error: { reason: msg("SAVE_FAILED"), retryable: true } };
+  }
 }
 
 /** "Still have them": the older batches stay, and the choice is dismissed (a soft change). */
@@ -426,6 +606,113 @@ export function removeShoppingItem(db: Db, scope: KitchenScope, args: TapArgs & 
   return tap(db, scope, args, "shopping.remove", [
     { opId: "remove", type: "shopping.remove", target: { shoppingItemId: args.shoppingItemId } },
   ]);
+}
+
+// ─── Staples (0054) ───────────────────────────────────────────────────────────────────
+// One list for the whole kitchen (SS1). Every change is one change set with Undo (0007, 0017).
+
+/** Add a staple, or several (the "You told me these before" offer): one change set, one Undo. */
+export function addStapleItems(db: Db, scope: KitchenScope, args: TapArgs & { items: { name: string; store?: string }[] }) {
+  return tap(
+    db,
+    scope,
+    args,
+    "staple.add",
+    args.items.map((i, n) => ({
+      opId: `staple-${n + 1}`,
+      type: "staple.add",
+      fields: { name: said(i.name), ...(i.store?.trim() ? { store: said(i.store) } : {}) },
+    })),
+  );
+}
+
+/** Store… in Edit staples (SS5): a store picked or typed, or `null` for "Anywhere". */
+export function updateStapleStore(db: Db, scope: KitchenScope, args: TapArgs & { stapleId: string; store: string | null }) {
+  const store = args.store?.trim();
+  return tap(db, scope, args, "staple.update", [
+    store
+      ? { opId: "store", type: "staple.update", target: { stapleId: args.stapleId }, fields: { store: said(store) } }
+      : { opId: "store", type: "staple.update", target: { stapleId: args.stapleId }, fields: {}, clear: ["store"] },
+  ]);
+}
+
+/** Remove in Edit staples: no confirmation, it has Undo. */
+export function removeStapleItem(db: Db, scope: KitchenScope, args: TapArgs & { stapleId: string }) {
+  return tap(db, scope, args, "staple.remove", [{ opId: "remove", type: "staple.remove", target: { stapleId: args.stapleId } }]);
+}
+
+/**
+ * Restock (SS3) and "Add these to my list" under a staples answer (SS6): the chosen staples go on
+ * the shopping list in **one** change set (one Undo), through `addShoppingItems` with source
+ * `staples`, each under its usual store (SS5). It merges like any add: one already on the list is
+ * a no-change "already on the list". Staples removed meanwhile are skipped; none left →
+ * UNKNOWN_TARGET, nothing changed.
+ */
+export async function restockFromStaples(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { stapleIds: string[] },
+): Promise<ApplyOutcome> {
+  try {
+    const entities = await loadKitchenEntities(db, scope.kitchenId);
+    const chosen = [...new Set(args.stapleIds)].flatMap((id) => {
+      const s = entities.staples?.[id];
+      return s ? [s] : [];
+    });
+    if (chosen.length === 0) return { ok: false, error: { reason: msg("UNKNOWN_TARGET"), retryable: false } };
+    return addShoppingItems(db, scope, {
+      ...args,
+      source: "staples",
+      items: chosen.slice(0, 50).map((s) => ({ name: s.name.value, ...(s.store ? { store: s.store.value } : {}) })),
+    });
+  } catch (error) {
+    console.error("kitchen.apply: couldn't restock staples", { error });
+    return { ok: false, error: { reason: msg("SAVE_FAILED"), retryable: true } };
+  }
+}
+
+/**
+ * The one-time "You told me these before" offer (SS2): the names in this person's old free-text
+ * "Staples: …" preference lines, minus what's already a staple. The fixed proposal ID marks it
+ * answered (Add them or Not now, like the places sort's mark), so it's offered once.
+ */
+export const legacyStaplesProposalId = (userId: string) => `staples-legacy-0054:${userId}`;
+
+export async function getLegacyStaplesOffer(db: Queryable, scope: KitchenScope): Promise<{ names: string[] } | null> {
+  const [answered] = await db
+    .select({ id: changeSets.id })
+    .from(changeSets)
+    .where(and(eq(changeSets.kitchenId, scope.kitchenId), eq(changeSets.proposalId, legacyStaplesProposalId(scope.userId))))
+    .limit(1);
+  if (answered) return null;
+  const profiles = await loadProfiles(db, [scope.userId]);
+  const statements = Object.values(profiles.preferences)
+    .filter((p) => p.userId === scope.userId)
+    .map((p) => p.statement.value);
+  if (statements.length === 0) return null;
+  const saved = await db.select({ std: staples.standardName }).from(staples).where(eq(staples.kitchenId, scope.kitchenId));
+  const already = new Set(saved.map((r) => r.std));
+  const names = legacyStapleNames(statements).filter((n) => !already.has(standardName(n)));
+  return names.length ? { names } : null;
+}
+
+/** "Add them" (or "Not now" with `accept: false`, which saves nothing but answers the offer). */
+export async function answerLegacyStaples(
+  db: Db,
+  scope: KitchenScope,
+  args: { basedOnVersion: number; accept: boolean },
+): Promise<ApplyOutcome> {
+  try {
+    const offer = await getLegacyStaplesOffer(db, scope);
+    const tapId = legacyStaplesProposalId(scope.userId);
+    const items = args.accept && offer ? offer.names.slice(0, 50).map((name) => ({ name })) : [];
+    if (items.length) return addStapleItems(db, scope, { tapId, basedOnVersion: args.basedOnVersion, items });
+    // Not now (or nothing left to add): an empty change set is the "answered" mark.
+    return tap(db, scope, { tapId, basedOnVersion: args.basedOnVersion }, "staple.offer.dismiss", []);
+  } catch (error) {
+    console.error("kitchen.apply: couldn't answer the staples offer", { error });
+    return { ok: false, error: { reason: msg("SAVE_FAILED"), retryable: true } };
+  }
 }
 
 /** "Done shopping" (SL2): the chosen ticked items go into the kitchen; unchosen ticked items stay. */
@@ -481,8 +768,67 @@ export function chooseMealTap(db: Db, scope: KitchenScope, args: TapArgs & ({ id
   return tap(db, scope, args, "meal.choose", [{ opId: "choose", type: "meal.choose", target }]);
 }
 
-export function planMeal(db: Db, scope: KitchenScope, args: TapArgs & { mealId: string }) {
-  return tap(db, scope, args, "meal.plan", [{ opId: "plan", type: "meal.plan", target: { mealId: args.mealId } }]);
+/**
+ * Add to plan. With `date` (0045 KOS1) it's planned for that day; `timeZone` is the person's own,
+ * for the plan window (yesterday to 21 days ahead).
+ */
+export function planMeal(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { mealId: string; date?: string; timeZone?: string; now?: Date },
+) {
+  return tap(
+    db,
+    scope,
+    args,
+    "meal.plan",
+    [{ opId: "plan", type: "meal.plan", target: { mealId: args.mealId }, ...(args.date ? { date: args.date } : {}) }],
+    { timeZone: args.timeZone, now: args.now },
+  );
+}
+
+/**
+ * The date picker on a planned meal (0045 KOS1): set or change its day, or `null` to clear it.
+ * A chosen meal given a day is planned for it. One change set, one Undo.
+ */
+export function setMealDay(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { mealId: string; date: string | null; timeZone?: string; now?: Date },
+) {
+  return tap(
+    db,
+    scope,
+    args,
+    "meal.date",
+    [{ opId: "date", type: "meal.date", target: { mealId: args.mealId }, date: args.date }],
+    { timeZone: args.timeZone, now: args.now },
+  );
+}
+
+/**
+ * "Add the week's missing ingredients to the list" (0045 KOS12): the planned meals' Need items
+ * in the range (`getWeekNeeds`), merged, go on the list in **one** change set (one Undo) with source
+ * `week-plan`, through `addShoppingItems` (the Restock pattern, 0054). `names` (standard names or as
+ * shown) limits it to the ones chosen on the preview; without it, everything not already on the
+ * list. Nothing to add → WEEK_NEEDS_NONE, nothing changed.
+ */
+export async function addWeekNeedsToShoppingList(
+  db: Db,
+  scope: KitchenScope,
+  args: TapArgs & { timeZone?: string; now?: Date; from?: string; to?: string; includeUndated?: boolean; names?: string[] },
+): Promise<ApplyOutcome> {
+  try {
+    const today = todayIn(args.timeZone, args.now ?? new Date());
+    const needs = await getWeekNeeds(db, scope, { today, from: args.from, to: args.to, includeUndated: args.includeUndated });
+    const chosen = args.names ? new Set(args.names.map(standardName)) : null;
+    const items = needs.items.filter((i) => (chosen ? chosen.has(i.standardName) : !i.onList)).slice(0, 50);
+    if (items.length === 0) return { ok: false, error: { reason: msg("WEEK_NEEDS_NONE"), retryable: false } };
+    return addShoppingItems(db, scope, { ...args, source: "week-plan", items: items.map((i) => ({ name: i.name })) });
+  } catch (error) {
+    console.error("kitchen.apply: couldn't add the week's needs", { error });
+    return { ok: false, error: { reason: msg("SAVE_FAILED"), retryable: true } };
+  }
 }
 
 /**
@@ -562,8 +908,9 @@ export async function addRecipeNeedsToShoppingList(
     const recipe = await getRecipe(db, scope, args.mealId);
     if (!recipe) return { ok: false, error: { reason: msg("UNKNOWN_TARGET"), retryable: false } };
     const chosen = args.names ? new Set(args.names.map(standardName)) : null;
+    // The Need group exactly as the recipe screen shows it (`isRecipeNeed`, shared with KOS12).
     const needs = recipe.ingredients
-      .filter((i) => !i.item && !i.basic)
+      .filter(isRecipeNeed)
       .filter((i) => !chosen || chosen.has(standardName(i.name)))
       .slice(0, 50);
     return addShoppingItems(db, scope, { ...args, source: "recipe", items: needs.map((i) => ({ name: i.name })) });
@@ -659,6 +1006,48 @@ export async function recordMealIdeas(
     });
   }
   return { setId, ideas: out };
+}
+
+/** Idea notes are the user's words, newest kept when they grow too long. */
+const IDEA_NOTES_MAX = 2000;
+
+/**
+ * Change one stored idea card in place (ai.md §5 "Refining an idea", and a card following its
+ * meal's latest recipe). Ideas aren't kitchen events (like `dropIdeaSet`), so this is a plain
+ * update. Uses that aren't items in this kitchen are dropped; allergen flags are computed here,
+ * by code, over the new card (0019). `note` (the user's words) is appended to the idea's notes.
+ * Returns the card as a stream `idea` payload, or null when there's no such idea in this kitchen.
+ */
+export async function updateMealIdea(
+  db: Queryable,
+  scope: KitchenScope,
+  ideaId: string,
+  next: { name?: string; why?: string; uses: string[]; missing: string[]; note?: string },
+): Promise<MealIdea | null> {
+  const [row] = await db
+    .select()
+    .from(mealIdeas)
+    .where(and(eq(mealIdeas.kitchenId, scope.kitchenId), eq(mealIdeas.id, ideaId)))
+    .limit(1);
+  if (!row) return null;
+  const names = await itemNames(db, scope.kitchenId, next.uses);
+  const uses = [...new Set(next.uses)].filter((id) => names.has(id));
+  const name = next.name?.trim() || row.name;
+  const why = next.why?.trim() || row.why;
+  const note = next.note?.trim();
+  const joined = note ? [row.notes, note].filter(Boolean).join("\n") : row.notes;
+  const notes = joined && joined.length > IDEA_NOTES_MAX ? joined.slice(joined.length - IDEA_NOTES_MAX) : joined;
+  await db
+    .update(mealIdeas)
+    .set({ name, why, uses, missing: next.missing, notes })
+    .where(and(eq(mealIdeas.kitchenId, scope.kitchenId), eq(mealIdeas.id, ideaId)));
+  const members = await listMembers(db, scope.kitchenId);
+  const profiles = await loadProfiles(
+    db,
+    members.map((m) => m.userId),
+  );
+  const restrictions = Object.values(profiles.restrictions);
+  return { ideaId, name, why, uses, missing: next.missing, allergenFlags: ideaFlags({ name, uses, missing: next.missing }, names, restrictions) };
 }
 
 /**

@@ -1,6 +1,6 @@
 /**
- * Meals end to end on an embedded Postgres (0005 steps 5–7, 0009, 0013, 0019): the FAKE
- * interpreter and the FAKE meal AI → the real turn follow-ups → the real validate → apply path.
+ * Meals end to end on an embedded Postgres (0005 steps 5–7, 0009, 0013, 0019): the SCRIPTED
+ * test interpreter and meal AI (tests/support/scripted-ai, not the app's stand-in, 0059 PF10) → the real turn follow-ups → the real validate → apply path.
  * ask → ideas → "the second one" → recipe → plan → cooking → "I made it" → Update your kitchen
  * (low / out / note) → Undo. Plus allergens (Levi's seafood) and the turn's safety nets.
  */
@@ -9,10 +9,11 @@ import { and, eq } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import { mealIdeas, meals as mealsTable } from "@/db/schema";
 import { StreamEvent } from "@/contracts/stream";
-import { getInterpreter, handleChatTurn, handleChooseMeal } from "@/ai";
+import { handleChatTurn, handleChooseMeal, recentChangesFor } from "@/ai";
+import { createScriptedInterpreter } from "../support/scripted-ai/interpreter";
 import type { Interpreter } from "@/ai/interpreter";
 import type { MealAI } from "@/ai/meals";
-import { createFakeMealAI } from "@/ai/fake/meals";
+import { createScriptedMealAI } from "../support/scripted-ai/meals";
 import {
   addRecipeNeedsToShoppingList,
   queueAfterCooking,
@@ -37,11 +38,11 @@ afterAll(async () => {
 });
 
 /**
- * The fake meal AI, with each idea also using the NEXT kitchen item, so a recipe has two
+ * The scripted meal AI, with each idea also using the NEXT kitchen item, so a recipe has two
  * in-kitchen ingredients and "Update your kitchen" can show both Running low and Out.
  */
 function pairedMeals(): MealAI {
-  const fake = createFakeMealAI();
+  const fake = createScriptedMealAI();
   return {
     ...fake,
     async *streamMealIdeas(input) {
@@ -61,7 +62,7 @@ function pairedMeals(): MealAI {
 let n = 0;
 async function turn(scope: KitchenScope, text: string, opts: { id?: string; interpreter?: Interpreter; meals?: MealAI } = {}) {
   const events: StreamEvent[] = [];
-  const deps = { db, scope, interpreter: opts.interpreter ?? getInterpreter({ db, scope }), meals: opts.meals ?? pairedMeals() };
+  const deps = { db, scope, interpreter: opts.interpreter ?? createScriptedInterpreter(recentChangesFor({ db, scope })), meals: opts.meals ?? pairedMeals() };
   for await (const e of handleChatTurn(deps, { clientMessageId: opts.id ?? `meal-${++n}`, text })) {
     StreamEvent.parse(e); // every event matches the shared contract
     events.push(e);
@@ -89,7 +90,7 @@ describe("the meal journey (0005 steps 5–7)", () => {
     // 5. "What can I make tonight?" → ideas, streamed after the reply's first line and stored in card order.
     const ask = await turn(vero, "What can I make tonight?");
     expect(ask.types).toEqual(["ack", "status", "status", "text", "status", "idea", "idea", "idea", "notes", "text", "done"]);
-    // The fake suggests one bowl per item, in kitchen order (eggs, limes, spinach).
+    // The scripted double suggests one bowl per item, in kitchen order (eggs, limes, spinach).
     expect(ask.ideas.map((i) => i.name)).toEqual(["Eggs rice bowl", "Limes rice bowl", "Spinach rice bowl"]);
     expect(ask.ideas[1].uses).toEqual([items.limes, items.spinach]);
     expect(of(ask.events, "notes")[0].notes[0].code).toBe("BASICS_ASSUMED");
@@ -102,14 +103,15 @@ describe("the meal journey (0005 steps 5–7)", () => {
     expect(chose.result?.applied.map((a) => a.summary.text)).toEqual(["Chose Limes rice bowl"]);
     const mealId = chose.result!.applied[0].refs.find((r) => r.kind === "meal")!.id;
     expect(chose.types.slice(0, 7)).toEqual(["ack", "status", "status", "applied", "status", "text", "status"]);
-    expect(of(chose.events, "recipe").map((e) => e.part)).toEqual(["meta", "ingredient", "ingredient", "ingredient", "ingredient", "step", "step", "step", "basics"]);
+    expect(of(chose.events, "recipe").map((e) => e.part)).toEqual(["meta", "ingredient", "ingredient", "ingredient", "ingredient", "step", "step", "step", "step", "step", "basics"]);
     const saved = of(chose.events, "recipe.saved")[0];
     expect(saved).toMatchObject({ mealId, version: 1 });
     expect(chose.types.at(-1)).toBe("done");
     const recipe = await getRecipe(db, vero, mealId);
     expect(recipe?.ingredients.map((i) => [i.name, i.amount ?? null, i.item && "name" in i.item ? i.item.name : null])).toEqual([
-      ["limes", null, "limes"],
-      ["spinach", null, "spinach"],
+      // The scripted double gives every non-basic an amount (0059 PF1).
+      ["limes", "1", "limes"],
+      ["spinach", "a handful", "spinach"],
       ["salt", "a pinch", null],
       ["cooking oil", "1 tbsp", null],
     ]);
@@ -270,11 +272,11 @@ describe("allergens (0019, AI6): Levi's seafood allergy", () => {
 
   it("unprompted ideas leave out shrimp dishes; asked for, they're shown and flagged with Levi's note", async () => {
     const { k, vero } = await shrimpKitchen();
-    const plain = await turn(vero, "What can I make tonight?", { meals: createFakeMealAI() });
+    const plain = await turn(vero, "What can I make tonight?", { meals: createScriptedMealAI() });
     expect(plain.ideas.map((i) => i.name)).toEqual(["Eggs rice bowl", "Spinach rice bowl"]);
     expect(plain.ideas.flatMap((i) => i.allergenFlags)).toEqual([]);
 
-    const asked = await turn(vero, "What can I make? Shrimp tacos?", { meals: createFakeMealAI() });
+    const asked = await turn(vero, "What can I make? Shrimp tacos?", { meals: createScriptedMealAI() });
     const shrimpy = asked.ideas.filter((i) => /shrimp/i.test(i.name));
     expect(shrimpy.length).toBeGreaterThan(0);
     for (const idea of shrimpy) {
@@ -351,7 +353,7 @@ describe("'the second one' and other safety nets", () => {
     const vero = await k.scope("Vero");
     await turn(vero, "I bought eggs");
     const refusing: MealAI = {
-      ...createFakeMealAI(),
+      ...createScriptedMealAI(),
       async *streamMealIdeas() {
         yield { type: "idea", idea: { name: "Omelette", why: "", uses: [], missing: [], basics: [], useItUp: [], allergenFlags: [] } };
         yield { type: "done", result: { ok: false, reason: "refusal", reply: "I can't help with that one." } };
@@ -370,7 +372,7 @@ describe("'the second one' and other safety nets", () => {
     const vero = await k.scope("Vero");
     await turn(vero, "I bought eggs");
     const broken: MealAI = {
-      ...createFakeMealAI(),
+      ...createScriptedMealAI(),
       async *streamMealIdeas() {
         throw new Error("boom");
       },
@@ -411,8 +413,8 @@ describe("'the second one' and other safety nets", () => {
     await turn(vero, "I bought eggs");
     const chose = await turn(vero, "the first one"); // no cards yet: asks
     expect(chose.result).toBeNull();
-    await turn(vero, "what can I make? soup?", { meals: createFakeMealAI() });
-    const picked = await turn(vero, "the first one", { meals: createFakeMealAI() });
+    await turn(vero, "what can I make? soup?", { meals: createScriptedMealAI() });
+    const picked = await turn(vero, "the first one", { meals: createScriptedMealAI() });
     const mealId = picked.result!.applied[0].refs.find((r) => r.kind === "meal")!.id;
     const recipe = await getRecipe(db, vero, mealId);
     const needs = recipe!.ingredients.filter((i) => !i.item && !i.basic).map((i) => i.name);

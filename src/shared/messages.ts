@@ -13,6 +13,8 @@ const TEMPLATES: Record<string, string> = {
   ITEM_ADDED_FROM_LIST: "Added {name} and took it off the shopping list",
   ITEM_RESTOCKED_FROM_LIST: "Added {name} (back in stock) and took it off the shopping list",
   ITEM_UPDATED: "Updated {name}",
+  // IA6 (0036): a rename's own line. `from` is the old name, `name` the new one.
+  ITEM_RENAMED: "Renamed {from} → {name}",
   ITEM_MOVED: "{name} → {location}",
   // categories (CAT1). `category` is the ID; `categoryName` the English name.
   ITEM_CATEGORY: "{name} → {categoryName}",
@@ -22,6 +24,9 @@ const TEMPLATES: Record<string, string> = {
   ITEM_USED: "Used {name}",
   ITEM_LOW: "{name}: running low",
   ITEM_OUT: "{name}: out",
+  // stock levels (0045 KOS4)
+  ITEM_PLENTY: "{name}: plenty",
+  ITEM_SOME: "{name}: some left",
   ITEM_RECORDED: "{name} wasn't in your kitchen, so I added it",
   ITEM_USED_RECORDED: "{name} wasn't in your kitchen; noted it as used",
   ITEM_REMOVED: "Removed {name}",
@@ -34,9 +39,15 @@ const TEMPLATES: Record<string, string> = {
   ITEM_DEFROSTED: "{name}: defrosted",
   MEAL_CHOSEN: "Chose {title}",
   MEAL_PLANNED: "Added {title} to the meal plan",
+  // dated plan (0045 KOS1). `date` is "YYYY-MM-DD" (the UI formats it by locale, 0015); `day` is the English label.
+  MEAL_PLANNED_FOR: "Planned {title} for {day}",
+  MEAL_DATE_SET: "Moved {title} to {day}",
+  MEAL_DATE_CLEARED: "{title}: no day set",
   MEAL_STATUS: "{title}: {status}",
   MEAL_NOTE_SAVED: "Saved a note on {title}",
   RECIPE_SAVED: "Saved the recipe for {title}",
+  // 0052: a new version of a recipe the meal had. The full text is built in validate.ts ({title, what, removed, added}).
+  RECIPE_UPDATED: "Updated the {title} recipe",
   MEAL_MADE_AGAIN: "Making {title} again",
   TICKED: "Ticked {ingredient}",
   UNTICKED: "Unticked {ingredient}",
@@ -65,6 +76,14 @@ const TEMPLATES: Record<string, string> = {
   SHOPPING_NOT_FOUND: "{name} isn't on the shopping list",
   SHOPPING_DONE: "Put {count} things from the shopping list in your kitchen: {names}",
   SHOPPING_REVIEW_QUEUED: "Saved for later in To review: {names}",
+  // staples (0054)
+  STAPLE_ADDED: "{name} is one of your staples now",
+  STAPLE_ADDED_STORE: "{name} is one of your staples now ({store})",
+  STAPLE_ALREADY: "{name} is already one of your staples",
+  STAPLE_STORE: "{name}: usually from {store}",
+  STAPLE_STORE_CLEARED: "{name}: from anywhere",
+  STAPLE_REMOVED: "{name} isn't a staple any more",
+  STAPLE_NOT_FOUND: "{name} isn't one of your staples",
   // rejections
   UNKNOWN_ITEM: "That item isn't in this kitchen",
   AMBIGUOUS_ITEM: "More than one item matches {name}",
@@ -83,6 +102,10 @@ const TEMPLATES: Record<string, string> = {
   NOT_TICKED: "{name} isn't ticked yet",
   ALREADY_MAKING: "{title} is already in your plan",
   RECIPE_LOCKED: "{title} is finished, so its recipe stays as it was. Make it again to change it.",
+  // 0045 KOS1: `from` / `to` are the window's dates.
+  DATE_OUT_OF_WINDOW: "{day} is outside the plan. Pick a day from yesterday to 3 weeks ahead.",
+  // 0045 KOS12: nothing missing for the meals in that range (or none chosen).
+  WEEK_NEEDS_NONE: "Nothing to add: you have what those meals need",
   // errors
   INVALID_PROPOSAL: "I couldn't understand that change, so nothing changed",
   SAVE_FAILED: "I couldn't save that, so nothing changed",

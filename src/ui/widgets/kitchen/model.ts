@@ -9,7 +9,7 @@ import { searchItems } from "@/shared/item-search";
 import { computeUseItUpSignals } from "@/domains/kitchen/use-it-up";
 import { foldText, singularWord, standardName } from "@/shared/text";
 
-export const GROUP_ORDER = ["fridge", "freezer", "pantry", "unknown"] as const;
+export const GROUP_ORDER = ["fridge", "freezer", "pantry", "counter", "unknown"] as const;
 export type GroupKey = (typeof GROUP_ORDER)[number];
 
 export interface ItemGroup {

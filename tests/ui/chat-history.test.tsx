@@ -204,6 +204,8 @@ describe("saved chat", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/chat");
     expect(JSON.parse(String(init.body))).not.toHaveProperty("history");
+    // The device time zone goes with every message: "today" and "Tuesday" are the person's (0045 KOS1).
+    expect(JSON.parse(String(init.body)).timeZone).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
     const texts = [...log().querySelectorAll("[data-message]")].map((el) => el.textContent);
     expect(texts.at(-1)).toContain("I bought milk");
   });

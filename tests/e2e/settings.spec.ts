@@ -7,6 +7,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
+import { openChat } from "../support/places";
 
 const COOKIE = "dev_acting_as";
 
@@ -15,6 +16,7 @@ async function resetAndActAs(page: Page, baseURL: string, userId: "demo-vero" | 
   expect(res.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: userId, url: baseURL }]);
   await page.goto("/");
+  await openChat(page);
 }
 
 const remember = (page: Page) => page.getByRole("region", { name: "Allergies and preferences" });
@@ -79,6 +81,7 @@ test("Levi: Not now hides the banner for the session", async ({ page, baseURL })
   await banner(page).getByRole("button", { name: "Not now" }).click();
   await expect(banner(page)).toHaveCount(0);
   await page.reload();
+  await openChat(page);
   await expect(page.getByRole("textbox", { name: "Message Lumi" })).toBeVisible();
   await expect(banner(page)).toHaveCount(0);
 });

@@ -6,10 +6,10 @@
 import { itemLabels, renderKitchen } from "../real/prompt";
 import { restrictionLines } from "./allergen-guard";
 import { rankUseItUp } from "./use-it-up";
-import type { MealContext, MealIdeasInput, PastedRecipeInput, RecipeInput } from "./types";
+import type { IdeaRefineInput, MealContext, MealIdeasInput, PastedRecipeInput, RecipeInput } from "./types";
 
 const TAGS =
-  "today|kitchen|use_it_up|allergies|preferences|recent_chat|request|count|meal|current_recipe|change_request|pasted_content|shopping_list|user_message|regenerate";
+  "today|kitchen|use_it_up|allergies|preferences|recent_chat|request|count|meal|idea|current_recipe|change_request|pasted_content|shopping_list|user_message|regenerate";
 const TAG_RE = new RegExp(String.raw`<\/?\s*(${TAGS})\b[^>]*>`, "gi");
 
 export function neutralizeAll(text: string): string {
@@ -64,9 +64,29 @@ function mealSection(input: MealContext & { meal: RecipeInput["meal"] }): string
     const uses = idea.uses.map((id) => toLabel.get(id)).filter(Boolean);
     if (uses.length) lines.push(`Uses: ${uses.join(", ")}`);
     if (idea.missing.length) lines.push(`Missing: ${idea.missing.join(", ")}`);
+    if (idea.notes) lines.push(`The user changed this idea before choosing it and said: ${idea.notes}`);
   }
   if (input.meal.notes) lines.push(`The user named this dish and said: ${input.meal.notes}`);
   return section("meal", lines.join("\n"));
+}
+
+/** The idea card being changed (ai.md §5 "Refining an idea"), with its kitchen labels. */
+export function renderIdeaRefineRequest(input: IdeaRefineInput, now: Date): string {
+  const { toLabel } = labelMaps(input);
+  const idea = input.idea;
+  const uses = idea.uses.flatMap((id) => {
+    const label = toLabel.get(id);
+    const item = input.state.items.find((i) => i.id === id);
+    return label && item ? [`${label} (${item.name.value})`] : [];
+  });
+  const lines = [
+    `Name: ${idea.name}`,
+    `Why: ${idea.why}`,
+    `Uses: ${uses.join(", ") || "(nothing from the kitchen)"}`,
+    `Missing: ${idea.missing.join(", ") || "(nothing)"}`,
+    ...(idea.notes ? [`Earlier changes the user asked for: ${idea.notes}`] : []),
+  ];
+  return [...common(input, now), section("idea", lines.join("\n")), section("change_request", input.request.text)].join("\n\n");
 }
 
 export function renderRecipeRequest(input: RecipeInput, now: Date): string {

@@ -11,6 +11,7 @@ import {
   Location,
   MealRef,
   MealStatus,
+  PlanDate,
   Quantity,
   ReviewKind,
   ReviewOrigin,
@@ -36,7 +37,7 @@ export const BatchRow = z.object({
   location: fact(Location).optional(),
   frozen: fact(z.boolean()).optional(),
   opened: fact(z.boolean()).optional(),
-  /** Only `low`: an Out batch is closed. */
+  /** plenty / some / low (0045 KOS4); absent = unknown. Never `out`: an Out batch is closed. */
   stock: fact(StockLevel).optional(),
   /** "Defrosted on" (0025): when the user said, else when it was recorded. ISO 8601. */
   defrostedOn: fact(isoDate).optional(),
@@ -50,8 +51,9 @@ export type BatchRow = z.infer<typeof BatchRow>;
 /**
  * One row per item on the Kitchen list. With batches (0025), its fields describe them together:
  * `addedAt`, location, frozen and opened come from the **oldest** open batch (the one used next);
- * `quantity` is the one batch's, or a sum when they share a unit (else unknown); `stock` is `low`
- * only when every open batch is low. "2 batches · oldest 12 days" = `batches.length` + `addedAt`.
+ * `quantity` is the one batch's, or a sum when they share a unit (else unknown); `stock` is set
+ * only when every open batch has a level, and is then the highest of them (plenty > some > low),
+ * so a new batch with no level makes it unknown again (KOS4). "2 batches · oldest 12 days" = `batches.length` + `addedAt`.
  */
 export const ItemRow = z.object({
   id: Id,
@@ -69,7 +71,10 @@ export const ItemRow = z.object({
   location: fact(Location).optional(),
   frozen: fact(z.boolean()).optional(),
   opened: fact(z.boolean()).optional(),
-  /** `low` = "Running low". `out` items are not in KitchenState.items (history keeps them). */
+  /**
+   * plenty / some / low ("Running low") (0045 KOS4); absent = unknown. `out` items are not in
+   * KitchenState.items (history keeps them). Low and Out offer "Add X to my list" (`offersListAdd`).
+   */
   stock: fact(StockLevel).optional(),
   /** For "added X days ago": when the user said it happened, else when it was recorded. */
   addedAt: isoDate,
@@ -81,6 +86,12 @@ export const ItemRow = z.object({
    * older build (offline cache) still parses (0018). Absent = one batch, described by the row.
    */
   batches: z.array(BatchRow).optional(),
+  /**
+   * Set when this item's name is one of the kitchen's staples (0045 KOS3, the item's "Staple"
+   * switch; 0054): that staple's ID. Computed on every read, never stored. Exact name matches
+   * only (`stapleIdsForItem`). Absent = not a staple.
+   */
+  stapleId: Id.optional(),
   ...Audit,
 });
 export type ItemRow = z.infer<typeof ItemRow>;
@@ -94,6 +105,8 @@ export const MealRow = z.object({
   ideaId: Id.optional(),
   /** Position in the plan; set while planned or cooking. */
   planPosition: z.number().int().optional(),
+  /** The day it's planned for (0045 KOS1), a calendar date. Absent = undated (the list still works). */
+  plannedFor: PlanDate.optional(),
   chosenAt: isoDate,
   recipe: RecipeSummary.optional(),
   /** After-cooking note, stored as said (0013). */
@@ -141,6 +154,37 @@ export const ShoppingItemRow = z.object({
 });
 export type ShoppingItemRow = z.infer<typeof ShoppingItemRow>;
 
+/**
+ * Where a staple stands (0054 SS3), **computed by code on every read** from the kitchen and the
+ * list, never stored: `out` (it was in the kitchen and is Out), `low` (Running low), `missing`
+ * (never in the kitchen: "Not in yet"), `have` (in the kitchen: Some, Plenty or no level), or
+ * `on-list` (already open on the shopping list, which wins over the rest). Restock pre-selects
+ * the first three (`stapleNeedsBuying`).
+ */
+export const StapleNeed = z.enum(["out", "low", "missing", "have", "on-list"]);
+export type StapleNeed = z.infer<typeof StapleNeed>;
+export const stapleNeedsBuying = (need: StapleNeed): boolean => need === "out" || need === "low" || need === "missing";
+
+/** One of the kitchen's staples (0054 SS1: one list for the whole kitchen). `createdBy` = who added it. */
+export const StapleRow = z.object({
+  /** Its standard name: what the staple actions take as `stapleId`. */
+  id: Id,
+  /** As said ("nước mắm (fish sauce)"). */
+  name: fact(z.string()),
+  standardName: z.string(),
+  /** Usual store (SS5), only when said or picked. Absent = "Anywhere". */
+  store: fact(z.string()).optional(),
+  need: StapleNeed,
+  /** The kitchen item it matched, when it's in the kitchen (`have` / `low`). */
+  itemId: Id.optional(),
+  /** That item's level when known (KOS4): for `have`, plenty or some; for `low`, low. */
+  level: StockLevel.optional(),
+  /** The open list item, when `on-list`. */
+  shoppingItemId: Id.optional(),
+  ...Audit,
+});
+export type StapleRow = z.infer<typeof StapleRow>;
+
 export const KitchenState = z.object({
   kitchenId: Id,
   version: z.number().int().nonnegative(),
@@ -159,6 +203,11 @@ export const KitchenState = z.object({
    * so a state saved by an older build (offline cache) still parses (0018).
    */
   shoppingList: z.array(ShoppingItemRow).default([]),
+  /**
+   * The kitchen's staples (0054), in the order added, each with its computed `need`. Defaults to
+   * [] so a state saved by an older build (offline cache) still parses (0018).
+   */
+  staples: z.array(StapleRow).default([]),
 });
 export type KitchenState = z.infer<typeof KitchenState>;
 
@@ -183,3 +232,13 @@ export const RecipeView = z.object({
   ...Audit,
 });
 export type RecipeView = z.infer<typeof RecipeView>;
+
+/**
+ * A recipe ingredient in the **Need** group (0013, 0027): not in the kitchen and not an assumed
+ * basic. An item reference to a row that no longer exists counts as not in the kitchen, as the
+ * recipe screen shows it. One rule for the recipe's "Add Need items" and the week's needs (KOS12).
+ */
+export function isRecipeNeed(ingredient: RecipeView["ingredients"][number]): boolean {
+  const inKitchen = ingredient.item !== undefined && !("missing" in ingredient.item);
+  return !inKitchen && !ingredient.basic;
+}

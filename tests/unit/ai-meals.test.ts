@@ -11,11 +11,13 @@ import {
   createRealMealAI,
   IDEAS_FAILURE_REPLY,
   MEAL_REFUSAL_REPLY,
+  RECIPE_QUESTION_UNREAD_REPLY,
   PASTE_TOO_LONG_REPLY,
   type MealLog,
   type StreamingMessagesApi,
 } from "@/ai/real/meals";
 import { createFakeMealAI } from "@/ai/fake/meals";
+import { sampleRecipeTitle, STAND_IN_DECLINE_REPLY } from "@/ai/fake/decline";
 import { getMealAI, notConfiguredMealAI } from "@/ai/meals";
 import { isBasic } from "@/ai/meals/basics";
 import { allergenExcusedIds, LOW_EXCUSES_ALLERGEN, rankUseItUp } from "@/ai/meals/use-it-up";
@@ -503,6 +505,25 @@ describe("refinement edit mode (ai.md §5): small changes edit the recipe in pla
     expect(refused.calls).toHaveLength(1);
   });
 
+  it("0059 PF2: a question whose answer can't be used never rewrites: a reply, no second call, no recipe.save", async () => {
+    for (const [text, first] of [
+      ["how much eggs do I need?", { json: { oops: true } }],
+      ["what are the measurements?", { json: { mode: "edit", edits: [{ ...blank, op: "remove_ingredient", at: 9 }], recipe: null, reply: "x" } }],
+      ["no measurements for the eggs?", { json: { mode: "rewrite", edits: [], recipe: null, reply: "x" } }],
+    ] as const) {
+      const { meals, calls } = setup(first, { json: OMELETTE });
+      const events = await collect(meals.streamRecipe(await refine(text)));
+      expect(calls, text).toHaveLength(1);
+      expect(events.map((e) => e.type), text).toEqual(["done"]);
+      const done = events[0];
+      expect(done.type === "done" && done.result, text).toEqual({ ok: false, reason: "failed", reply: RECIPE_QUESTION_UNREAD_REPLY });
+    }
+    // A change (not a question) still falls back to the rewrite.
+    const change = setup({ json: { oops: true } }, { json: OMELETTE });
+    expect(await change.meals.generateRecipe(await refine("no feta"))).toMatchObject({ ok: true });
+    expect(change.calls).toHaveLength(2);
+  });
+
   it("no edits (a question answered 'yes, that's fine'): nothing to save, no part", async () => {
     const { meals } = setup({ json: { mode: "edit", edits: [], recipe: null, reply: "Yes, a nonstick pan is fine." } });
     const events = await collect(meals.streamRecipe(await refine("is a nonstick pan ok?")));
@@ -590,15 +611,26 @@ describe("which meal AI runs is a server setting", () => {
     expect(await notConfiguredMealAI.generateMealIdeas(ideasInput([], null))).toMatchObject({ ok: false, reason: "not-configured" });
   });
 
-  it("the fake runs through the same guards: allergen ideas left out unless used up, recipe.save valid", async () => {
-    const fake = createFakeMealAI(() => NOW);
-    const result = await fake.generateMealIdeas(ideasInput([{ name: "canned tuna", location: "pantry" }, ...SHRIMP_KITCHEN.slice(1)], null, { restrictions: [LEVI_SEAFOOD] }));
-    expect(result.ok && result.ideas.some((i) => /tuna/i.test(i.name))).toBe(false);
-    const withShrimp = await fake.generateMealIdeas(ideasInput(SHRIMP_KITCHEN, null, { restrictions: [LEVI_SEAFOOD] }));
-    expect(withShrimp.ok && withShrimp.ideas[0]).toMatchObject({ name: "Shrimp rice bowl", useItUp: ["item-1"] });
-    expect(withShrimp.ok && withShrimp.ideas[0].allergenFlags).not.toEqual([]);
-    const recipe = await fake.generateRecipe(recipeInput());
-    expect(recipe.ok && RecipeSave.safeParse(recipe.operation).success).toBe(true);
+  it("the stand-in declines ideas, a dish's recipe and recipe changes (0059 PF10)", async () => {
+    const fake = createFakeMealAI();
+    const declined = { ok: false, reason: "not-configured", reply: STAND_IN_DECLINE_REPLY };
+    expect(await fake.generateMealIdeas(ideasInput(SHRIMP_KITCHEN, null))).toEqual(declined);
+    expect(await fake.generateRecipe(recipeInput())).toEqual(declined);
+    const sample = { mealId: "meal-s", title: sampleRecipeTitle("shrimp stir-fry") };
+    const current = { title: sample.title, servings: "2", ingredients: [], steps: ["Cook."] };
+    expect(await fake.generateRecipe(recipeInput({ meal: sample, refine: { messageId: "m-r", text: "no garlic", current } }))).toEqual(declined);
+  });
+
+  it("a sample recipe goes through the same guards: amounts, In your kitchen / Need, allergen flags, a valid recipe.save", async () => {
+    const recipe = await createFakeMealAI().generateRecipe(recipeInput({ meal: { mealId: "meal-s", title: sampleRecipeTitle("shrimp stir-fry") } }));
+    if (!recipe.ok || recipe.unchanged) throw new Error("expected a sample recipe");
+    expect(RecipeSave.safeParse(recipe.operation).success).toBe(true);
+    expect(recipe.recipe.title).toBe("Sample recipe (stand-in): Shrimp stir-fry");
+    expect(recipe.recipe.ingredients.filter((i) => i.group !== "basic").every((i) => i.amount)).toBe(true);
+    expect(recipe.recipe.ingredients.find((i) => i.name === "shrimp")).toMatchObject({ group: "kitchen" });
+    expect(recipe.recipe.ingredients.some((i) => i.group === "need")).toBe(true);
+    expect(recipe.recipe.allergenFlags).not.toEqual([]);
+    expect(recipe.recipe.steps.length).toBeGreaterThanOrEqual(4);
   });
 
   it("restriction() fixture builds a diet the asker owns, which is never shown for other members", async () => {

@@ -10,3 +10,4 @@ export * from "./apply-result";
 export * from "./stream";
 export * from "./settings";
 export * from "./past-meals";
+export * from "./week-plan";

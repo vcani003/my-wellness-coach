@@ -20,16 +20,29 @@
  *   add's is downgraded to a medium guess (a said one would be remembered, and a high one would
  *   beat the household's remembered place) and an update's is dropped: the model never moves an
  *   item by itself.
+ * - Stock levels (0045 KOS4): "we have plenty of rice" / "there's some milk left" is
+ *   `item.stock.set`, not a use. A `use` with plenty/some and no amount is the same thing. Only
+ *   Low and Out count as "marked Out/Low" for the list guard (`offersListAdd`).
+ * - Staples (0054): a staple is saved only when the user's words say so ("fish sauce is a staple",
+ *   "we always keep rice") and name it, or on a yes right after Kitchen offered to remember those
+ *   staples (SS2); its store only when said there (SS5). Removing one needs their words too. A
+ *   yes to "remember these as your staples" saves staples, never a "Staples: …" preference.
+ *   "What staples do I need?" is answered by code from the saved staples (SS6, `staplesAnswer`);
+ *   with none saved, the model's general guess stands.
  * - The result must pass the contract's Zod schema, or nothing is proposed.
  */
-import type { BatchWhich, Fact, ItemCategory, Location, ShoppingSource } from "@/contracts/common";
-import type { ItemBatchTarget, Operation, ShoppingTarget } from "@/contracts/operations";
+import { offersListAdd, type BatchWhich, type Fact, type ItemCategory, type Location, type ShoppingSource } from "@/contracts/common";
+import type { ItemBatchTarget, Operation, OperationOf, ShoppingTarget } from "@/contracts/operations";
 import { nameTokens, standardName } from "@/shared/text";
 import { ProposedChange } from "@/contracts/proposed-change";
 import type { InterpretRequest, InterpretResult } from "../interpreter";
 import type { ModelOp, ModelOutput } from "./model-output";
 import { guardDishIngredients, mealOperations } from "./meal-ops";
 import { itemLabels, shoppingLabels } from "./prompt";
+import { STAPLES_OFFER, STAPLE_WORDS, staplesAnswer } from "../staples";
+import { legacyStapleNames, nameKeys } from "@/shared/staples";
+import { isIsoDay } from "@/shared/plan-dates";
+import { WEEK_NEEDS_ADD, weekPlanAnswer } from "../week-plan";
 
 type MetaFact = { basis: Fact<unknown>["basis"]; confidence: Fact<unknown>["confidence"] };
 
@@ -75,6 +88,19 @@ const LIST_INTENT = /\b(list|buy|need|shop|shopping|pick up|grab)\b/i;
 function mentions(text: string, name: string): boolean {
   const hay = ` ${standardName(text)} `;
   return nameTokens(name).some((t) => t.length > 1 && hay.includes(` ${t} `));
+}
+
+/**
+ * Every word of the name, or of one of its parts ("nước mắm" or "fish sauce" for "nước mắm (fish
+ * sauce)"), appears in the text. Stricter than `mentions`, so "fish sauce is a staple" never
+ * vouches for "soy sauce" (0054 SS2).
+ */
+function saysName(text: string, name: string): boolean {
+  const words = new Set(standardName(text).split(" "));
+  return nameKeys(name).some((key) => {
+    const tokens = nameTokens(key);
+    return tokens.length > 0 && tokens.every((t) => words.has(t));
+  });
 }
 
 type Labels = { items: Map<string, string>; shopping: Map<string, string> };
@@ -185,6 +211,23 @@ function toOperationOrNull(op: ModelOp, opId: string, req: InterpretRequest, lab
       if (!target) return null;
       return { ...common, type: "shopping.remove", target };
     }
+    case "staple_add": {
+      // SS2: said ("X is a staple") or a yes to Kitchen's offer of X; never guessed.
+      if (!name) return null;
+      const text = req.message.text;
+      const saidHere = STAPLE_WORDS.test(text) && saysName(text, name.value);
+      const offer = offeredToRememberStaples(req);
+      const fromOffer = !saidHere && !!offer && saysName(offer, name.value);
+      if (!saidHere && !fromOffer) return null;
+      // SS5: a store only when it was said (here, or in the offer that was accepted).
+      const storeSaid = store?.value && saysName(fromOffer ? offer! : text, store.value);
+      const fields = { name: { ...name, basis: "said" as const }, ...(storeSaid && { store: { ...store!, basis: "said" as const } }) };
+      return { ...common, type: "staple.add", fields };
+    }
+    case "staple_remove": {
+      if (!name || !STAPLE_WORDS.test(req.message.text) || !saysName(req.message.text, name.value)) return null;
+      return { ...common, type: "staple.remove", target: { name: name.value } };
+    }
     case "add": {
       // Restocking a listed item: reuse its exact name so the backend matches it (0025).
       const listed = itemId ? req.state.items.find((i) => i.id === itemId) : undefined;
@@ -218,7 +261,18 @@ function toOperationOrNull(op: ModelOp, opId: string, req: InterpretRequest, lab
       if (!target) return null;
       const stock = keep(op.stock, (f) => f.value, evidenceOk);
       const amountUsed = keep(op.amountUsed, quantityOf, evidenceOk);
+      // "There's some milk left" read as a use: it's a level, not a use (KOS4).
+      if (stock && !amountUsed && !offersListAdd(stock.value)) {
+        return { ...common, type: "item.stock.set", target: withBatch(target, which), fields: { stock } };
+      }
       return { ...common, type: "item.use", target: withBatch(target, which), fields: { stock, amountUsed } };
+    }
+    case "level": {
+      // How much is left, said without a use (0045 KOS4). No level → nothing to set.
+      if (!target) return null;
+      const stock = keep(op.stock, (f) => f.value, evidenceOk);
+      if (!stock) return null;
+      return { ...common, type: "item.stock.set", target: withBatch(target, which), fields: { stock } };
     }
     case "batch_gone":
       // "The old eggs are gone": one batch closes, the oldest unless they named the newer one.
@@ -255,6 +309,29 @@ function offeredToRemember(req: InterpretRequest): boolean {
   return !!last && /\bremember\b/i.test(last);
 }
 
+/** Kitchen's last turn offered to remember staples (0054 SS2): its text, else undefined. */
+function offeredToRememberStaples(req: InterpretRequest): string | undefined {
+  const last = lastAssistantTurn(req);
+  return last && STAPLES_OFFER.test(last) ? last : undefined;
+}
+
+/**
+ * A yes to "remember these as your staples?" that the model still wrote as a "Staples: …"
+ * preference (the pre-0054 shape): saved as staples instead, one per name Kitchen offered.
+ */
+function staplesFromPreference(statement: string, evidence: string, req: InterpretRequest): OperationOf<"staple.add">[] {
+  const offer = offeredToRememberStaples(req);
+  if (!offer) return [];
+  return legacyStapleNames([statement])
+    .filter((n) => saysName(offer, n))
+    .map((n, i) => ({
+      opId: `${req.message.id}:staple${i + 1}`,
+      type: "staple.add" as const,
+      evidence,
+      fields: { name: { value: n, basis: "said" as const, confidence: "high" as const } },
+    }));
+}
+
 /** Kitchen's last turn offered to add things to the shopping list (staples answer or SL3 offer). */
 function offeredToAddToList(req: InterpretRequest): string | undefined {
   const last = lastAssistantTurn(req);
@@ -267,14 +344,15 @@ function offeredToAddToList(req: InterpretRequest): string | undefined {
  * - an add whose name the user didn't say needs Kitchen's offer of that item in its last turn,
  *   and is tagged with the offer's source;
  * - an add for something the same message marks Out/Low is dropped unless the user asked for the
- *   list (the reply may offer it instead).
+ *   list (the receipt's "Add X to my list" button offers it instead, 0054 SS10).
  */
 function guardShopping(ops: Operation[], out: ModelOutput, req: InterpretRequest): Operation[] {
   const text = req.message.text;
   const offer = offeredToAddToList(req);
   // Names marked Out/Low in this message ("fish sauce" matches "nước mắm (fish sauce)").
   const stockNames = ops.flatMap((o) => {
-    if (o.type !== "item.use" || !o.fields.stock) return [];
+    if (o.type !== "item.use" && o.type !== "item.stock.set") return [];
+    if (!offersListAdd(o.fields.stock?.value)) return [];
     if ("name" in o.target) return [nameTokens(o.target.name)];
     const id = o.target.itemId;
     const row = req.state.items.find((i) => i.id === id);
@@ -320,12 +398,28 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest, now: 
     basedOnVersion: req.version,
     source: { via: "chat" as const, messageId: req.message.id },
   };
+  // "What staples do I need?" (0054 SS6): from the saved staples, by code, when there are any.
+  if (out.generate?.what === "staples" && out.kind !== "clarify" && out.operations.length === 0) {
+    const answer = staplesAnswer(req.state);
+    if (answer) {
+      return { ok: true, result: { kind: "answer", proposal: null, reply: answer.reply, ...(answer.staples ? { staples: answer.staples } : {}) } };
+    }
+  }
+
+  // "What are we eating this week?" (0045 KOS1): from the plan, by code.
+  if (out.generate?.what === "week_plan" && out.kind !== "clarify" && out.operations.length === 0) {
+    const today = req.today && isIsoDay(req.today) ? req.today : now.toISOString().slice(0, 10);
+    return { ok: true, result: { kind: "answer", proposal: null, reply: weekPlanAnswer(req.state, today) } };
+  }
+  // "Add what we need for this week's meals" (KOS12): the turn computes them (it needs recipes).
+  const weekNeeds = out.generate?.what === "week_needs" ? { weekNeeds: { add: WEEK_NEEDS_ADD.test(req.message.text) } } : {};
+
   // Meal actions and "what can I make?" / "no oven" (0005, 0013): resolved by code.
   const meals = mealOperations(out, req, now);
   const followUps = meals.followUps.length ? { followUps: meals.followUps } : {};
 
   if (out.kind === "answer" && !meals.clarification && meals.operations.length === 0) {
-    return { ok: true, result: { kind: "answer", proposal: null, reply, ...followUps } };
+    return { ok: true, result: { kind: "answer", proposal: null, reply, ...followUps, ...weekNeeds } };
   }
 
   const clarifyOnly = (c: { question: string; options: Array<{ label: string; reply: string }> }, text: string): ProposalOutcome => {
@@ -353,7 +447,13 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest, now: 
   const operations = [...guardDishIngredients(guardShopping(converted, out, req), out, req), ...meals.operations];
 
   const pref = out.rememberPreference;
-  if (pref && pref.statement.trim() && offeredToRemember(req) && inMessage(req.message.text, pref.evidence)) {
+  const prefOk = !!pref && !!pref.statement.trim() && offeredToRemember(req) && inMessage(req.message.text, pref.evidence);
+  // 0054 SS2: a yes to "remember these as your staples" saves staples, not a preference line.
+  const asStaples = prefOk ? staplesFromPreference(pref!.statement, pref!.evidence.trim(), req) : [];
+  if (asStaples.length) {
+    const named = new Set(operations.flatMap((o) => (o.type === "staple.add" ? [standardName(o.fields.name.value)] : [])));
+    operations.push(...asStaples.filter((o) => !named.has(standardName(o.fields.name.value))));
+  } else if (pref && prefOk) {
     operations.push({
       opId: `${req.message.id}:pref`,
       type: "profile.preference.save",
@@ -367,7 +467,9 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest, now: 
   if (meals.clarification && operations.length === 0) return clarifyOnly(meals.clarification, meals.clarification.question);
 
   if (operations.length === 0) {
-    if (meals.followUps.length) return { ok: true, result: { kind: "answer", proposal: null, reply, ...followUps } };
+    if (meals.followUps.length || "weekNeeds" in weekNeeds) {
+      return { ok: true, result: { kind: "answer", proposal: null, reply, ...followUps, ...weekNeeds } };
+    }
     return { ok: true, result: { kind: "answer", proposal: null, reply: NOTHING_TO_CHANGE_REPLY } };
   }
 
@@ -377,5 +479,5 @@ export function toInterpretResult(out: ModelOutput, req: InterpretRequest, now: 
     ...(meals.clarification ? { clarification: meals.clarification } : {}),
   });
   if (!parsed.success) return { ok: false, reason: `proposal failed the contract: ${parsed.error.message}` };
-  return { ok: true, result: { kind: "change", proposal: parsed.data, reply, ...followUps } };
+  return { ok: true, result: { kind: "change", proposal: parsed.data, reply, ...followUps, ...weekNeeds } };
 }

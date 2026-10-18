@@ -15,7 +15,7 @@
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CreateLinkResult } from "@/lib/auth/invites";
-import { Dialog } from "@/ui/primitives/Dialog";
+import { Dialog, SheetBackdrop, SheetPopup, useOpenKey } from "@/ui/primitives/Dialog";
 import { SpinnerIcon } from "@/ui/primitives/icons";
 
 export interface LinkSheetProps {
@@ -28,13 +28,14 @@ export interface LinkSheetProps {
 }
 
 export function LinkSheet(props: LinkSheetProps) {
+  const sheetKey = useOpenKey(props.open);
   return (
     <Dialog.Root open={props.open} onOpenChange={(open) => props.onOpenChange(open)}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
+        <SheetBackdrop />
         {/* Always rendered (Base UI needs its Popup to finish closing, or the backdrop stays and
-            blocks the page); a new key on each open gives a fresh, empty sheet. */}
-        <SheetBody key={props.open ? "open" : "closed"} {...props} />
+            blocks the page); a new key on each open (useOpenKey) gives a fresh, empty sheet. */}
+        <SheetBody key={sheetKey} {...props} />
       </Dialog.Portal>
     </Dialog.Root>
   );
@@ -94,9 +95,9 @@ function SheetBody({ open, onOpenChange, title, body, create }: LinkSheetProps) 
   };
 
   return (
-    <Dialog.Popup
+    <SheetPopup
       initialFocus={doneRef}
-      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 overflow-y-auto rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
+      className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 overflow-y-auto rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
     >
       <Dialog.Title className="font-heading text-title font-medium">{title}</Dialog.Title>
       <Dialog.Description className="text-body">{body}</Dialog.Description>
@@ -174,6 +175,6 @@ function SheetBody({ open, onOpenChange, title, body, create }: LinkSheetProps) 
       >
         {t("done")}
       </button>
-    </Dialog.Popup>
+    </SheetPopup>
   );
 }

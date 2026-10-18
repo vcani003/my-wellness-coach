@@ -70,10 +70,18 @@ describe("the code's guess (src/shared/item-place.ts)", () => {
     ["orange juice", "fridge"],
     ["coffee", "pantry"],
     ["dried shiitake", "pantry"],
+    // Counter food (0057 KOS3-a)
+    ["bananas", "counter"],
+    ["avocado", "counter"],
+    ["tomatoes", "counter"],
+    ["chuối", "counter"],
+    // ...but what's made from it stays in the cupboard
+    ["canned chopped tomatoes", "pantry"],
+    ["tomato paste", "pantry"],
+    ["avocado oil", "pantry"],
+    ["dried mango", "pantry"],
+    ["frozen mango", "freezer"],
     // Genuinely depends: stays "Not sure where"
-    ["bananas", undefined],
-    ["avocado", undefined],
-    ["tomatoes", undefined],
     ["sparkling water", undefined],
     ["beer", undefined],
     ["zzz", undefined],
@@ -105,10 +113,19 @@ describe("item.add puts things where they usually go (0041)", () => {
     expect(k.kitchen.locationPrefs).toEqual({}); // a guess is never remembered
   });
 
+  it("counter food is guessed onto the Counter, as inferred, and not remembered (0057 KOS3-a)", () => {
+    const k = kitchen();
+    k.say("bought bananas", [add("bananas")], { actor: "ana" });
+    expect(placeOf(k, "bananas")).toEqual(medium("counter"));
+    expect(k.kitchen.locationPrefs).toEqual({});
+    k.say("bought avocados, they're in the fridge", [add("avocados", said("fridge"))], { actor: "ana" });
+    expect(placeOf(k, "avocados")).toEqual(said("fridge")); // a said place wins
+  });
+
   it("genuinely ambiguous items stay 'Not sure where'", () => {
     const k = kitchen();
-    k.say("bought bananas and zzz", [add("bananas"), add("zzz")], { actor: "ana" });
-    expect(placeOf(k, "bananas")).toBeUndefined();
+    k.say("bought sparkling water and zzz", [add("sparkling water"), add("zzz")], { actor: "ana" });
+    expect(placeOf(k, "sparkling water")).toBeUndefined();
     expect(placeOf(k, "zzz")).toBeUndefined();
   });
 
@@ -231,7 +248,7 @@ describe("the one-time sort's plan (0041)", () => {
   /** Items as an old build left them: no place. */
   function legacy(): MemoryKitchen {
     const k = kitchen();
-    k.say("bought things", [add("milk"), add("jasmine rice"), add("bananas"), add("nước mắm"), add("eggs", said("pantry"))], { actor: "ana" });
+    k.say("bought things", [add("milk"), add("jasmine rice"), add("sparkling water"), add("nước mắm"), add("eggs", said("pantry"))], { actor: "ana" });
     k.tap(["milk", "jasmine rice", "nước mắm"].map((name) => ({ type: "item.update" as const, target: { name }, fields: {}, clear: ["location" as const] })), { actor: "ana" });
     return k;
   }
@@ -244,7 +261,7 @@ describe("the one-time sort's plan (0041)", () => {
       ["milk", medium("fridge")],
       ["nước mắm", medium("pantry")],
     ]);
-    expect(unplaced).toBe(1); // bananas
+    expect(unplaced).toBe(1); // sparkling water
     // Applying it is ordinary item.update operations: one change set, nothing remembered.
     const plan = k.tap(moves.map((m) => ({ type: "item.update" as const, target: { itemId: m.itemId, batchId: m.batchId }, fields: { location: m.location } })), { actor: "ana" });
     expect(plan.rejected).toEqual([]);

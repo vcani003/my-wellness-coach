@@ -6,6 +6,7 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
+import { openChat } from "../support/places";
 
 const COOKIE = "dev_acting_as"; // DEV_ACTING_AS_COOKIE (src/lib/auth/current-user.ts)
 
@@ -24,12 +25,14 @@ test("chat survives a reload: message, reply and receipt are back, and Undo stil
   expect(reset.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: "demo-vero", url: baseURL! }]);
   await page.goto("/kitchen"); // the Kitchen place shows the undo's effect (0042)
+  await openChat(page);
 
   await say(page, "I bought eggs and spinach");
   await expect(receipts(page).last()).toContainText("Added spinach");
   await expect(page.getByRole("button", { name: UNDO })).toBeVisible();
 
   await page.reload();
+  await openChat(page);
   const phone = testInfo.project.name === "phone";
   const myMessage = page.getByText("You: I bought eggs and spinach");
 
@@ -67,6 +70,7 @@ test("chat survives a reload: message, reply and receipt are back, and Undo stil
 
   // After another reload the earlier receipt is no longer undoable (it was undone).
   await page.reload();
+  await openChat(page);
   if (phone) await page.getByRole("button", { name: "Show chat" }).click();
   await expect(receipts(page)).toHaveCount(2);
   await expect(receipts(page).first()).toContainText("Added eggs");
@@ -80,6 +84,7 @@ test("an undone receipt still reads Undone after a reload (struck through, no Un
   expect(reset.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: "demo-vero", url: baseURL! }]);
   await page.goto("/");
+  await openChat(page);
   const phone = testInfo.project.name === "phone";
   const undo = page.getByRole("button", { name: "Undo: Added eggs" });
 
@@ -89,6 +94,7 @@ test("an undone receipt still reads Undone after a reload (struck through, no Un
   await expect(receipts(page)).toContainText("Undone");
 
   await page.reload();
+  await openChat(page);
   if (phone) await page.getByRole("button", { name: "Show chat" }).click();
   await expect(receipts(page)).toHaveCount(1);
   await expect(receipts(page)).toContainText("Undone");

@@ -6,7 +6,7 @@
  * The valid ones become one change set; the rejected ones come back with reasons, so one bad
  * guess doesn't sink "I bought 4 things."
  */
-import type { AppliedOp, BatchOffer, ChangeRef, RefKind, RejectedOp } from "@/contracts/apply-result";
+import type { AppliedOp, BatchOffer, ChangeRef, ListOffer, RefKind, RejectedOp } from "@/contracts/apply-result";
 import { MAX_OPEN_BATCHES, type BatchWhich, type Fact, type ItemCategory, type Location, type Msg, type Quantity, type StockLevel } from "@/contracts/common";
 import {
   PASTE_ALLOWED_OPERATION_TYPES,
@@ -16,6 +16,7 @@ import {
   type ItemTarget,
   type ReviewEntry,
   type ShoppingTarget,
+  type StapleTarget,
   type Operation,
   type OperationOf,
 } from "@/contracts/operations";
@@ -63,6 +64,7 @@ import {
   type MealChosenPayload,
   type Recipe,
   type MealNotedPayload,
+  type MealDatedPayload,
   type MealTransitionedPayload,
   type RecipeSavedPayload,
   type Review,
@@ -75,7 +77,14 @@ import {
   type ShoppingRemovedPayload,
   type ShoppingTickedPayload,
   type ShoppingUpdatedPayload,
+  type Staple,
+  type StapleAddedPayload,
+  type StapleRemovedPayload,
+  type StapleUpdatedPayload,
+  type StockSetPayload,
 } from "./state";
+import { matchStaple, stapleIdsForItem } from "@/shared/staples";
+import { englishDayLabel, inPlanWindow, isIsoDay, planWindow } from "@/shared/plan-dates";
 import { getProfileEntity } from "@/shared/profile/state";
 
 /** Messages longer than this with no `pastedRanges` count as pasted (backend-data.md §6). */
@@ -96,6 +105,11 @@ export interface PlanContext {
   via: Via;
   /** ISO 8601; the `recordedAt` of every event in this change set. */
   now: string;
+  /**
+   * Today's calendar date for the person making the change, in their time zone (0045 KOS1): the
+   * plan window is counted from it. Absent → `now`'s UTC date.
+   */
+  today?: string;
   changeSetId: string;
   source: ProposalSource;
   /** The chat message text, for evidence and paste checks. */
@@ -557,17 +571,54 @@ function itemUpdate(op: OperationOf<"item.update">, env: OpEnv): OpOutcome {
   }
   const payload: ItemUpdatedPayload = compact({ itemId: item.id, batchId: batch?.id, set, clear });
   const displayName = set.name?.value ?? item.name.value;
-  const summary =
-    set.location && set.location.value !== (batch ?? item).location?.value
+  // IA6 (0036): a rename on its own gets its own line, "Renamed fish sauce → nước mắm" (the
+  // automatic re-sort of an unsorted item's type rides along with it).
+  const renameOnly = !!set.name && set.name.value !== item.name.value && !hasBatchFields && !f.category;
+  const summary = renameOnly
+    ? msg("ITEM_RENAMED", { from: item.name.value, name: displayName })
+    : set.location && set.location.value !== (batch ?? item).location?.value
       ? msg("ITEM_MOVED", { name: displayName, location: set.location.value })
       : set.category && Object.keys(set).length === 1 && clear.length === 0
         ? msg("ITEM_CATEGORY", categoryParams(displayName, set.category.value))
         : msg("ITEM_UPDATED", { name: displayName });
+  const staples = set.name ? renameStaples(item, set.name, env) : { events: [], refs: [] };
   return ok(
-    [emit(env, k, KITCHEN_EVENT.itemUpdated, payload, set.occurredAt?.value), ...remember],
+    [emit(env, k, KITCHEN_EVENT.itemUpdated, payload, set.occurredAt?.value), ...remember, ...staples.events],
     summary,
-    [compact({ kind: "item" as const, id: item.id, change: "updated" as const, batchId: batch?.id })],
+    [compact({ kind: "item" as const, id: item.id, change: "updated" as const, batchId: batch?.id }), ...staples.refs],
   );
+}
+
+/**
+ * 0057 KOS3-b: renaming an item that's a staple renames the staple too, in the same change set
+ * (one Undo reverts both), keeping its store. "The staple" = one that is exactly the item's old
+ * name (`stapleIdsForItem`, as the Staple switch reads it); one the new name still matches stays
+ * as it is. A staple is keyed by its standard name, so the rename is a remove + an add; when the
+ * new name already is a staple, that one is kept and the old one goes (they become one).
+ */
+function renameStaples(item: Item, newName: Fact<string>, env: OpEnv): { events: EventEnvelope[]; refs: ChangeRef[] } {
+  const all = stapleList(env.kitchen).map((s) => ({ id: s.standardName, name: s.name.value, standardName: s.standardName, staple: s }));
+  const newStd = standardName(newName.value);
+  const stillMatch = new Set(stapleIdsForItem({ name: newName.value, standardName: newStd }, all));
+  const renamed = stapleIdsForItem({ name: item.name.value, standardName: item.standardName }, all)
+    .filter((id) => !stillMatch.has(id))
+    .map((id) => env.kitchen.staples![id]);
+  if (renamed.length === 0 || !newStd) return { events: [], refs: [] };
+  const k = kitchenStream(env.ctx.kitchenId);
+  const events: EventEnvelope[] = [];
+  const refs: ChangeRef[] = [];
+  for (const s of renamed) {
+    const payload: StapleRemovedPayload = { standardName: s.standardName };
+    events.push(emit(env, k, KITCHEN_EVENT.stapleRemoved, payload));
+    refs.push(stapleRef(s.standardName, "removed"));
+  }
+  if (!env.kitchen.staples?.[newStd]) {
+    const store = renamed.find((s) => s.store)?.store;
+    const payload: StapleAddedPayload = compact({ standardName: newStd, name: newName, store });
+    events.push(emit(env, k, KITCHEN_EVENT.stapleAdded, payload));
+    refs.push(stapleRef(newStd, "added"));
+  }
+  return { events, refs };
 }
 
 function emit(env: OpEnv, stream: string, type: string, payload: unknown, occurredAt?: string): EventEnvelope {
@@ -666,8 +717,8 @@ function itemUse(op: OperationOf<"item.use">, env: OpEnv): OpOutcome {
       ? msg("ITEM_OUT", { name })
       : closedNow > 0
         ? msg("ITEM_BATCH_USED_UP", { name, left: openAfter })
-        : plan.size > 0 && [...plan.values()].some((p) => p.stock?.value === "low")
-          ? msg("ITEM_LOW", { name })
+        : stock && stock.value !== "out"
+          ? levelMsg(stock.value, name)
           : msg("ITEM_USED", { name });
   const touched = targets.filter((b) => plan.has(b.id));
   const ref: ChangeRef = compact({
@@ -675,6 +726,83 @@ function itemUse(op: OperationOf<"item.use">, env: OpEnv): OpOutcome {
     id: item.id,
     change: recorded ? ("added" as const) : ("updated" as const),
     batchId: touched.length === 1 ? touched[0].id : undefined,
+  });
+  return ok(events, summary, [ref]);
+}
+
+/** The receipt line for a level (KOS4). Only Low and Out offer "Add X to my list" (SL3). */
+function levelMsg(level: StockLevel, name: string): Msg {
+  switch (level) {
+    case "plenty":
+      return msg("ITEM_PLENTY", { name });
+    case "some":
+      return msg("ITEM_SOME", { name });
+    case "low":
+      return msg("ITEM_LOW", { name });
+    case "out":
+      return msg("ITEM_OUT", { name });
+  }
+}
+
+/**
+ * "We have plenty of rice", "there's some milk left", or a level button (0045 KOS4). Not a use:
+ * no amount and no "last used". Without a batch, every open batch gets the level (the whole item,
+ * like 0036 IA2); with a batch, only that one. `out` closes them. Same level already everywhere →
+ * no change. An Out item set to plenty/some/low comes back with a new batch (`item.add`'s
+ * restock); one the kitchen never heard about is recorded first (0011).
+ */
+function itemStockSet(op: OperationOf<"item.stock.set">, env: OpEnv): OpOutcome {
+  const k = kitchenStream(env.ctx.kitchenId);
+  const stock = op.fields.stock;
+  const level = stock.value;
+  const match = resolveTargetItem(op.target, env.kitchen);
+  if (match.kind === "rejected") return match.outcome;
+  if (match.kind === "unknown-id" || match.kind === "ambiguous") return reject("UNKNOWN_ITEM");
+
+  const events: EventEnvelope[] = [];
+  let item: Item;
+  let change: "added" | "updated" = "updated";
+  let targets: Batch[];
+  if (match.kind === "none") {
+    const event = recordUnknownItem(nameFact(targetName(op.target)), env);
+    events.push(event);
+    change = "added";
+    item = apply(env.kitchen, event).items[(event.payload as ItemAddedPayload).itemId];
+    targets = openBatches(item);
+  } else if (openBatches(match.item).length === 0) {
+    // Out already: "out" again is no change; any other level means it's back (a new batch).
+    if (level === "out") return noChange();
+    const back = addToKitchen(match.item.name, {}, env.kitchen, env);
+    events.push(...back.events);
+    item = applyAll(env.kitchen, back.events).items[back.itemId];
+    targets = item.batches.filter((b) => b.id === back.batchId);
+  } else {
+    item = match.item;
+    const spec = batchSpec(op.target);
+    if (spec) {
+      const picked = pickBatch(item, spec);
+      if (!picked.ok) return picked.outcome;
+      targets = [picked.batch];
+    } else {
+      targets = openBatches(item);
+    }
+    if (targets.every((b) => b.stock?.value === level)) return noChange();
+  }
+
+  for (const b of targets) {
+    const payload: StockSetPayload = { itemId: item.id, batchId: b.id, stock };
+    events.push(emit(env, k, KITCHEN_EVENT.stockSet, payload));
+  }
+  const after = applyAll(env.kitchen, events).items[item.id];
+  const openAfter = after ? openBatches(after).length : 0;
+  const name = item.name.value;
+  const summary =
+    level === "out" && openAfter > 0 ? msg("ITEM_BATCH_USED_UP", { name, left: openAfter }) : levelMsg(level, name);
+  const ref: ChangeRef = compact({
+    kind: "item" as const,
+    id: item.id,
+    change,
+    batchId: targets.length === 1 && change === "updated" ? targets[0].id : undefined,
   });
   return ok(events, summary, [ref]);
 }
@@ -892,8 +1020,62 @@ function stepMeal(target: OperationOf<"meal.plan">["target"], kitchen: KitchenEn
 function mealPlan(op: OperationOf<"meal.plan">, env: OpEnv): OpOutcome {
   const meal = stepMeal(op.target, env.kitchen);
   if (!meal) return reject("UNKNOWN_TARGET");
+  // KOS1: with a day, plan it for that day (or move it there if it's already in the plan).
+  if (op.date !== undefined) return planForDay(meal, op.date, env);
   if (meal.status === "planned" || meal.status === "cooking") return noChange();
   return mealTransition(meal, "planned", undefined, env, "MEAL_PLANNED");
+}
+
+/** Today for the person making the change (their time zone, 0045 KOS1); else `now`'s UTC date. */
+function todayOf(ctx: PlanContext): string {
+  return ctx.today && isIsoDay(ctx.today) ? ctx.today : ctx.now.slice(0, 10);
+}
+
+/** Receipt params for a day: the date (the UI formats it by locale, 0015) and an English label. */
+const dayParams = (date: string) => ({ date, day: englishDayLabel(date) });
+
+/**
+ * Plan a meal for a day (0045 KOS1). A chosen meal is planned and dated in one operation (one
+ * receipt line, one Undo); a planned or cooking meal just gets the day. The day must be in the
+ * plan window, yesterday to 21 days ahead, counted from the person's today.
+ */
+function planForDay(meal: Meal, date: string, env: OpEnv): OpOutcome {
+  if (meal.status === "done" || meal.status === "cancelled") {
+    return reject("INVALID_TRANSITION", { title: meal.title, from: meal.status, to: "planned" });
+  }
+  const today = todayOf(env.ctx);
+  if (!inPlanWindow(date, today)) {
+    const w = planWindow(today);
+    return reject("DATE_OUT_OF_WINDOW", { title: meal.title, ...dayParams(date), from: w.from, to: w.to });
+  }
+  const k = kitchenStream(env.ctx.kitchenId);
+  const dated = (): EventEnvelope => emit(env, k, KITCHEN_EVENT.mealDated, { mealId: meal.id, date } satisfies MealDatedPayload);
+  if (meal.status === "chosen") {
+    const planned = mealTransition(meal, "planned", undefined, env, "MEAL_PLANNED");
+    if (!planned.ok) return planned;
+    return ok([...planned.events, dated()], msg("MEAL_PLANNED_FOR", { title: meal.title, ...dayParams(date) }), planned.refs);
+  }
+  if (meal.plannedFor === date) return noChange();
+  return ok([dated()], msg("MEAL_DATE_SET", { title: meal.title, ...dayParams(date) }), [
+    { kind: "meal", id: meal.id, change: "updated" },
+  ]);
+}
+
+/** "Move the pasta to Friday", the date picker, or clearing the day (0045 KOS1). */
+function mealDate(op: OperationOf<"meal.date">, env: OpEnv): OpOutcome {
+  const meal = stepMeal(op.target, env.kitchen);
+  if (!meal) return reject("UNKNOWN_TARGET");
+  if (op.date !== null) return planForDay(meal, op.date, env);
+  if (meal.status === "done" || meal.status === "cancelled") {
+    return reject("INVALID_TRANSITION", { title: meal.title, from: meal.status, to: "planned" });
+  }
+  if (meal.plannedFor === undefined) return noChange();
+  const payload: MealDatedPayload = { mealId: meal.id, date: null };
+  return ok(
+    [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.mealDated, payload)],
+    msg("MEAL_DATE_CLEARED", { title: meal.title }),
+    [{ kind: "meal", id: meal.id, change: "updated" }],
+  );
 }
 
 function mealTransitionOp(op: OperationOf<"meal.transition">, env: OpEnv): OpOutcome {
@@ -940,6 +1122,29 @@ function cookedRecipe(meal: Meal, kitchen: KitchenEntities): Recipe | undefined 
   );
 }
 
+/**
+ * A new version of a recipe the meal already had (0052): "Updated the Chicken curry recipe:
+ * removed greek yogurt". Ingredients are compared by name (case and accents folded); a change to
+ * amounts or steps only is "Updated the Chicken curry recipe". `what` picks the wording in the UI
+ * catalog (msgIcu.RECIPE_UPDATED); `text` is the English fallback.
+ */
+function recipeUpdatedMsg(
+  title: string,
+  version: number,
+  before: readonly { name: string }[],
+  after: readonly { name: string }[],
+): Msg {
+  const names = (list: readonly { name: string }[]) => new Map(list.map((i) => [foldText(i.name), i.name.trim()]));
+  const was = names(before);
+  const now = names(after);
+  const removed = [...was].filter(([k]) => !now.has(k)).map(([, n]) => n).join(", ");
+  const added = [...now].filter(([k]) => !was.has(k)).map(([, n]) => n).join(", ");
+  const what = removed && added ? "both" : removed ? "removed" : added ? "added" : "other";
+  const changes = [removed && `removed ${removed}`, added && `added ${added}`].filter(Boolean).join(", ");
+  const text = `Updated the ${title} recipe${changes ? `: ${changes}` : ""}`;
+  return { code: "RECIPE_UPDATED", params: { title, version, what, removed, added }, text };
+}
+
 function recipeSave(op: OperationOf<"recipe.save">, env: OpEnv): OpOutcome {
   const meal = env.kitchen.meals[op.target.mealId];
   if (!meal) return reject("UNKNOWN_TARGET");
@@ -957,9 +1162,10 @@ function recipeSave(op: OperationOf<"recipe.save">, env: OpEnv): OpOutcome {
     steps: op.steps,
     basicsAssumed: op.basicsAssumed,
   };
+  const previous = cookedRecipe(meal, env.kitchen);
   return ok(
     [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.recipeSaved, payload)],
-    msg("RECIPE_SAVED", { title: meal.title, version: payload.version }),
+    previous ? recipeUpdatedMsg(meal.title, payload.version, previous.ingredients, payload.ingredients) : msg("RECIPE_SAVED", { title: meal.title, version: payload.version }),
     [
       { kind: "recipe", id: payload.recipeId, change: "added" },
       { kind: "meal", id: meal.id, change: "updated" },
@@ -1346,6 +1552,181 @@ function moveToKitchen(
   return { events, summary: msg("SHOPPING_DONE", { count: names.length, names: names.join(", ") }), refs, batchOffers };
 }
 
+// ─── Staples (0054) ───────────────────────────────────────────────────────────────────
+
+const stapleList = (kitchen: KitchenEntities): Staple[] => Object.values(kitchen.staples ?? {});
+
+/**
+ * A staple's store spelled like one the kitchen already uses (on a staple or on the list), so the
+ * Restock adds land in the same list group (SL1). Blank → none.
+ */
+function stapleStore(store: Fact<string> | undefined, kitchen: KitchenEntities): Fact<string> | undefined {
+  if (!store) return undefined;
+  const key = normalizeText(store.value);
+  if (!key) return undefined;
+  const known = [...stapleList(kitchen).map((s) => s.store), ...openShopping(kitchen).map((e) => e.store)].find(
+    (s) => s && normalizeText(s.value) === key,
+  );
+  return { ...store, value: known ? known.value : store.value.trim() };
+}
+
+type StapleMatch = { kind: "found"; staple: Staple } | { kind: "none" } | { kind: "ambiguous" } | { kind: "unknown-id" };
+
+/** `{stapleId}` exact; `{name}`: exact standard name (or the name in brackets), then all the words. */
+export function resolveStaple(target: StapleTarget, kitchen: KitchenEntities): StapleMatch {
+  if ("stapleId" in target) {
+    const staple = kitchen.staples?.[target.stapleId];
+    return staple ? { kind: "found", staple } : { kind: "unknown-id" };
+  }
+  const std = standardName(target.name);
+  const all = stapleList(kitchen);
+  const m = matchStaple(
+    { name: target.name, standardName: std },
+    all.map((s) => ({ staple: s, name: s.name.value, standardName: s.standardName })),
+  );
+  if (m.length === 1) return { kind: "found", staple: m[0].staple };
+  return m.length > 1 ? { kind: "ambiguous" } : { kind: "none" };
+}
+
+function stapleRejectFor(match: StapleMatch, target: StapleTarget): OpOutcome | null {
+  const name = "name" in target ? target.name : "";
+  if (match.kind === "unknown-id") return reject("UNKNOWN_TARGET");
+  if (match.kind === "ambiguous") return reject("AMBIGUOUS_ITEM", { name });
+  if (match.kind === "none") return ok([], msg("STAPLE_NOT_FOUND", { name }), []);
+  return null;
+}
+
+const stapleRef = (id: string, change: ChangeRef["change"]): ChangeRef => ({ kind: "staple", id, change });
+
+/**
+ * "Fish sauce is a staple" / Add a staple (SS1, SS2). Keyed by standard name, so it's never
+ * duplicated: already a staple → `STAPLE_ALREADY` (no change), unless a new store is said (SS5),
+ * which is then set.
+ */
+function stapleAdd(op: OperationOf<"staple.add">, env: OpEnv): OpOutcome {
+  const k = kitchenStream(env.ctx.kitchenId);
+  const name = { ...op.fields.name, value: op.fields.name.value.trim() };
+  const std = standardName(name.value);
+  if (!std) return reject("INVALID_OPERATION");
+  const store = stapleStore(nn(op.fields.store), env.kitchen);
+  const existing = env.kitchen.staples?.[std];
+  if (existing) {
+    if (!store || store.value === existing.store?.value) return ok([], msg("STAPLE_ALREADY", { name: existing.name.value }), []);
+    const payload: StapleUpdatedPayload = { standardName: std, set: { store }, clear: [] };
+    return ok(
+      [emit(env, k, KITCHEN_EVENT.stapleUpdated, payload)],
+      msg("STAPLE_STORE", { name: existing.name.value, store: store.value }),
+      [stapleRef(std, "updated")],
+    );
+  }
+  const payload: StapleAddedPayload = compact({ standardName: std, name, store });
+  return ok(
+    [emit(env, k, KITCHEN_EVENT.stapleAdded, payload)],
+    store ? msg("STAPLE_ADDED_STORE", { name: name.value, store: store.value }) : msg("STAPLE_ADDED", { name: name.value }),
+    [stapleRef(std, "added")],
+  );
+}
+
+/** A staple's usual store set (said or picked) or cleared (SS5). The same store → no change. */
+function stapleUpdate(op: OperationOf<"staple.update">, env: OpEnv): OpOutcome {
+  const match = resolveStaple(op.target, env.kitchen);
+  const rejected = stapleRejectFor(match, op.target);
+  if (rejected) return rejected;
+  const staple = (match as { staple: Staple }).staple;
+  const store = stapleStore(nn(op.fields.store), env.kitchen);
+  const clearing = !store && (op.clear ?? []).includes("store");
+  if (store ? store.value === staple.store?.value : !clearing || !staple.store) return noChange();
+  const payload: StapleUpdatedPayload = { standardName: staple.standardName, set: store ? { store } : {}, clear: store ? [] : ["store"] };
+  return ok(
+    [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.stapleUpdated, payload)],
+    store ? msg("STAPLE_STORE", { name: staple.name.value, store: store.value }) : msg("STAPLE_STORE_CLEARED", { name: staple.name.value }),
+    [stapleRef(staple.standardName, "updated")],
+  );
+}
+
+/** "Eggs aren't a staple any more" / Remove (no confirmation: it has Undo). History keeps it. */
+function stapleRemove(op: OperationOf<"staple.remove">, env: OpEnv): OpOutcome {
+  const match = resolveStaple(op.target, env.kitchen);
+  const rejected = stapleRejectFor(match, op.target);
+  if (rejected) return rejected;
+  const staple = (match as { staple: Staple }).staple;
+  const payload: StapleRemovedPayload = { standardName: staple.standardName };
+  return ok(
+    [emit(env, kitchenStream(env.ctx.kitchenId), KITCHEN_EVENT.stapleRemoved, payload)],
+    msg("STAPLE_REMOVED", { name: staple.name.value }),
+    [stapleRef(staple.standardName, "removed")],
+  );
+}
+
+// ─── "Add X to my list" after Low / Out (SL3, 0054 SS4, 0055 KOS4-d) ──────────────────
+
+/** The operations whose item refs may carry the offer: they're how something becomes Low or Out. */
+const LIST_OFFER_OPS: ReadonlySet<Operation["type"]> = new Set(["item.use", "item.stock.set", "item.batch.close"]);
+
+/** "low" / "out" for an item as the kitchen sees it now; anything else is undefined. */
+function lowOrOut(item: Item | undefined): "low" | "out" | undefined {
+  if (!item) return undefined;
+  if (openBatches(item).length === 0) return "out";
+  return item.stock?.value === "low" ? "low" : undefined;
+}
+
+/**
+ * The offers for one applied operation: each item it moved into Low or Out (from anything else),
+ * named as it is now, with its staple and the staple's store when it's one (SS4, SS5). Only an
+ * offer: nothing is added (SL3).
+ */
+function listOffersFor(op: Operation, refs: ChangeRef[], before: KitchenEntities, after: KitchenEntities): ListOffer[] {
+  if (!LIST_OFFER_OPS.has(op.type)) return [];
+  const out: ListOffer[] = [];
+  for (const id of new Set(refs.filter((r) => r.kind === "item").map((r) => r.id))) {
+    const item = after.items[id];
+    const level = lowOrOut(item);
+    if (!item || !level || lowOrOut(before.items[id]) === level) continue;
+    const staple = matchStaple(
+      { name: item.name.value, standardName: item.standardName },
+      stapleList(after).map((s) => ({ staple: s, name: s.name.value, standardName: s.standardName })),
+    )[0]?.staple;
+    out.push(
+      compact({
+        itemId: id,
+        name: item.name.value,
+        standardName: item.standardName,
+        level,
+        stapleId: staple?.standardName,
+        store: staple?.store?.value,
+      }),
+    );
+  }
+  return out;
+}
+
+/**
+ * Keep an offer only if it still holds once the whole change set is in: the item is still Low/Out
+ * and nothing open on the list is it ("we're out of fish sauce, add it to my list" needs no offer).
+ * One offer per item: the last one wins.
+ */
+function stillOffered(applied: AppliedOp[], kitchen: KitchenEntities): AppliedOp[] {
+  const list = openShopping(kitchen).map((e) => ({ name: e.name.value, standardName: e.standardName }));
+  const seen = new Set<string>();
+  const keep = new Map<AppliedOp, ListOffer[]>();
+  for (const a of [...applied].reverse()) {
+    const offers = (a.listOffers ?? []).filter((o) => {
+      if (seen.has(o.itemId)) return false;
+      seen.add(o.itemId);
+      if (lowOrOut(kitchen.items[o.itemId]) !== o.level) return false;
+      return matchStaple({ name: o.name, standardName: o.standardName }, list).length === 0;
+    });
+    keep.set(a, offers);
+  }
+  return applied.map((a) => {
+    if (!a.listOffers) return a;
+    const { listOffers: _drop, ...rest } = a;
+    void _drop;
+    const offers = keep.get(a) ?? [];
+    return offers.length ? { ...rest, listOffers: offers } : rest;
+  });
+}
+
 const REF_KIND: Record<string, RefKind> = {
   item: "item",
   meal: "meal",
@@ -1353,6 +1734,7 @@ const REF_KIND: Record<string, RefKind> = {
   tick: "tick",
   review: "review",
   shopping: "shopping",
+  staple: "staple",
   restriction: "profile",
   preference: "profile",
 };
@@ -1386,6 +1768,7 @@ function targetKeys(op: Operation): string[] {
   switch (op.type) {
     case "item.update":
     case "item.use":
+    case "item.stock.set":
     case "item.remove":
     case "item.defrost":
       return "itemId" in op.target ? [`item:${op.target.itemId}`] : [];
@@ -1396,6 +1779,7 @@ function targetKeys(op: Operation): string[] {
     case "meal.choose":
       return "mealId" in op.target ? [`meal:${op.target.mealId}`] : [];
     case "meal.plan":
+    case "meal.date":
     case "meal.transition":
       return "mealId" in op.target ? [`meal:${op.target.mealId}`] : [];
     case "recipe.save":
@@ -1409,6 +1793,9 @@ function targetKeys(op: Operation): string[] {
       return "shoppingItemId" in op.target ? [`shopping:${op.target.shoppingItemId}`] : [];
     case "shopping.done":
       return op.items.map((i) => `shopping:${i.shoppingItemId}`);
+    case "staple.update":
+    case "staple.remove":
+      return "stapleId" in op.target ? [`staple:${op.target.stapleId}`] : [];
     default:
       return [];
   }
@@ -1427,6 +1814,8 @@ function validateOperation(op: Operation, env: OpEnv): OpOutcome {
       return itemUpdate(op, env);
     case "item.use":
       return itemUse(op, env);
+    case "item.stock.set":
+      return itemStockSet(op, env);
     case "item.remove":
       return itemRemove(op, env);
     case "item.batch.close":
@@ -1441,6 +1830,8 @@ function validateOperation(op: Operation, env: OpEnv): OpOutcome {
       return mealMakeAgain(op, env);
     case "meal.plan":
       return mealPlan(op, env);
+    case "meal.date":
+      return mealDate(op, env);
     case "meal.transition":
       return mealTransitionOp(op, env);
     case "recipe.save":
@@ -1461,6 +1852,12 @@ function validateOperation(op: Operation, env: OpEnv): OpOutcome {
       return shoppingRemove(op, env);
     case "shopping.done":
       return shoppingDone(op, env);
+    case "staple.add":
+      return stapleAdd(op, env);
+    case "staple.update":
+      return stapleUpdate(op, env);
+    case "staple.remove":
+      return stapleRemove(op, env);
     case "changeset.revert":
       return changesetRevert(op, env);
     case "profile.restriction.add":
@@ -1532,19 +1929,43 @@ export function planProposal(proposal: ProposedChange, ctx: PlanContext): Plan {
       rejected.push({ opId: op.opId, reason: outcome.reason });
       continue;
     }
+    const kitchenBefore = world.kitchen;
     for (const event of outcome.events) {
       world = applyToWorld(world, event);
       for (const key of touchedKeys(event)) touched.add(key);
       events.push(event);
     }
     if (op.type === "changeset.revert" && outcome.events.length > 0) reverted.push(op.target.changeSetId);
+    let listOffers: ListOffer[] = [];
+    try {
+      listOffers = outcome.events.length ? listOffersFor(op, outcome.refs, kitchenBefore, world.kitchen) : [];
+    } catch (error) {
+      // The offer is a convenience: a bug in it never costs the change itself (0018).
+      console.error("kitchen.validate: list offer failed", { opId: op.opId, error });
+    }
     applied.push({
       opId: op.opId,
       summary: outcome.summary,
       refs: outcome.refs,
       ...(outcome.batchOffers?.length ? { batchOffers: outcome.batchOffers } : {}),
+      ...(listOffers.length ? { listOffers } : {}),
     });
   }
 
-  return { applied, rejected, events, kitchen: world.kitchen, profiles: world.profiles, touched: [...touched], reverted };
+  let finalApplied = applied;
+  try {
+    finalApplied = stillOffered(applied, world.kitchen);
+  } catch (error) {
+    console.error("kitchen.validate: list offers dropped", { error });
+    finalApplied = applied.map(({ listOffers: _drop, ...rest }) => (void _drop, rest));
+  }
+  return {
+    applied: finalApplied,
+    rejected,
+    events,
+    kitchen: world.kitchen,
+    profiles: world.profiles,
+    touched: [...touched],
+    reverted,
+  };
 }

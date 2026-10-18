@@ -14,8 +14,8 @@ import { toWire, type ModelOp, type ModelOutput } from "@/ai/real/model-output";
 import type { RecipeOutput } from "@/ai/meals/model-output";
 import type { MealContext } from "@/ai/meals/types";
 import { createFakeMealAI } from "@/ai/fake/meals";
-import { createFakeInterpreter } from "@/ai/fake";
-import { LEVI_SEAFOOD, MEMBERS, NOW } from "@/ai/eval/fixtures";
+import { createFakeInterpreter, STAND_IN_DECLINE_REPLY } from "@/ai/fake";
+import { LEVI_SEAFOOD, MEMBERS } from "@/ai/eval/fixtures";
 import { KITCHEN_EVENT, type ItemUsedPayload, type MealChosenPayload } from "@/domains/kitchen/state";
 import { MemoryKitchen, said } from "../support/memory-kitchen";
 
@@ -232,44 +232,51 @@ describe("Vero's message: a named dish is chosen directly (MI1)", () => {
   });
 });
 
-describe("the fake interpreter and fake meal AI understand a named dish (for localhost and e2e)", () => {
-  it("Vero's message → adds + choose; the fake recipe puts what she has in the kitchen and the rest under Need", async () => {
+describe("the stand-in AI and a named dish (0059 PF10)", () => {
+  it("Vero's message needs the real AI: the decline line, nothing added or chosen (no 'ingredients needed…' items)", async () => {
     const k = chickenKitchen();
     const state = k.state();
-    const result = await createFakeInterpreter().interpret({ kitchenId: k.kitchenId, userId: "vero", message: { id: "msg-f", text: VERO }, state, version: state.version, history: [] });
-    const ops = ProposedChange.parse(result.proposal).operations;
-    expect(ops.map((o) => o.type)).toEqual(["item.add", "item.add", "meal.choose"]);
-    expect(ops[2]).toMatchObject({ target: { title: "Chicken curry" }, evidence: "i was thinking a chicken curry" });
-    const applied = k.say(VERO, ops);
-    expect(applied.rejected).toEqual([]);
-    const mealId = applied.applied[2].refs.find((r) => r.kind === "meal")!.id;
-    const notes = result.followUps?.[0]?.kind === "recipe" ? result.followUps[0].notes : undefined;
+    for (const text of [VERO, "I want to make a chicken curry. I have the ingredients needed to make this"]) {
+      const result = await createFakeInterpreter().interpret({ kitchenId: k.kitchenId, userId: "vero", message: { id: "msg-f", text }, state, version: state.version, history: [] });
+      expect(result, text).toEqual({ kind: "answer", proposal: null, reply: STAND_IN_DECLINE_REPLY });
+    }
+  });
 
-    const recipe = await createFakeMealAI(() => NOW).generateRecipe({
+  it("'make me a sample recipe for chicken curry' → a clearly titled sample, chosen; what she has goes under In your kitchen", async () => {
+    const k = chickenKitchen();
+    const state = k.state();
+    const text = "make me a sample recipe for chicken curry";
+    const result = await createFakeInterpreter().interpret({ kitchenId: k.kitchenId, userId: "vero", message: { id: "msg-s", text }, state, version: state.version, history: [] });
+    const ops = ProposedChange.parse(result.proposal).operations;
+    expect(ops).toMatchObject([{ type: "meal.choose", target: { title: "Sample recipe (stand-in): Chicken curry" } }]);
+    const applied = k.say(text, ops);
+    expect(applied.rejected).toEqual([]);
+    const mealId = applied.applied[0].refs.find((r) => r.kind === "meal")!.id;
+    const recipe = await createFakeMealAI().generateRecipe({
       kitchenId: k.kitchenId,
       userId: "vero",
       state: k.state(),
       members: MEMBERS,
       restrictions: [],
-      meal: { mealId, title: "Chicken curry", ...(notes ? { notes } : {}) },
+      meal: { mealId, title: "Sample recipe (stand-in): Chicken curry" },
     });
     if (!recipe.ok) throw new Error("recipe failed");
     const group = (g: string) => recipe.recipe.ingredients.filter((i) => i.group === g).map((i) => i.name);
-    expect(group("kitchen")).toEqual(["chicken thighs", "curry base seasoning packet", "potatoes"]);
-    // The stand-in keeps her words as typed; the real model fixes typos (prompt + eval).
-    expect(group("need")).toEqual(["coconutt milk", "lemon grass", "kaffir"]);
+    expect(group("kitchen")).toContain("chicken thighs");
+    expect(group("need")).toEqual(expect.arrayContaining(["curry paste", "coconut milk"]));
+    expect(recipe.recipe.ingredients.filter((i) => i.group !== "basic").every((i) => i.amount)).toBe(true);
   });
 
-  it("an allergen dish she names is allowed and flagged by code (0019)", async () => {
+  it("an allergen sample dish is allowed and flagged by code (0019)", async () => {
     const k = new MemoryKitchen();
-    const recipe = await createFakeMealAI(() => NOW).generateRecipe({
+    const recipe = await createFakeMealAI().generateRecipe({
       kitchenId: k.kitchenId,
       userId: "vero",
       state: k.state(),
       members: MEMBERS,
       restrictions: [LEVI_SEAFOOD],
-      meal: { mealId: "meal-x", title: "Shrimp tacos" },
+      meal: { mealId: "meal-x", title: "Sample recipe (stand-in): Shrimp tacos" },
     });
-    expect(recipe.ok && recipe.recipe.allergenFlags.map((f) => [f.ingredient, f.subject])).toEqual([["Shrimp tacos", "seafood"]]);
+    expect(recipe.ok && recipe.recipe.allergenFlags.map((f) => f.subject)).toContain("seafood");
   });
 });

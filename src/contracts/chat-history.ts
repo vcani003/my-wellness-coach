@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { ActorRef, Id } from "./common";
 import { AppliedOp, ApplyResult } from "./apply-result";
+import { BulkConfirm } from "./stream";
 
 /** A receipt as saved with the message: the ApplyResult without `state`. Server-side only. */
 export const StoredReceipt = ApplyResult.omit({ state: true });
@@ -60,6 +61,11 @@ export const ChatHistoryMessage = z.object({
   createdAt: z.iso.datetime({ offset: true }),
   /** Assistant messages whose turn applied something; otherwise null. */
   receipt: ChatReceipt.nullable(),
+  /**
+   * A held bulk removal this reply asked about (0045 KOS16). The UI offers Yes / No only while
+   * it's the last message in the chat; a later message means it was answered or passed over.
+   */
+  confirm: BulkConfirm.optional(),
 });
 export type ChatHistoryMessage = z.infer<typeof ChatHistoryMessage>;
 

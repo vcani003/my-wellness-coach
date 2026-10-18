@@ -46,6 +46,12 @@ export function allergyTerms(subject: string): string[] {
  * Flags for each (ingredient, allergy) match. `ingredients` are names as written (recipe
  * ingredients, and the meal title so "Shrimp tacos" is flagged even before a recipe exists).
  */
+/** Whether a name contains any of these allergy subjects (same terms as the flags). */
+export function mentionsAllergen(name: string, subjects: string[]): boolean {
+  const tokens = nameTokens(name);
+  return subjects.some((s) => allergyTerms(s).some((term) => containsPhrase(tokens, term.split(" "))));
+}
+
 export function computeAllergenFlags(ingredients: string[], restrictions: Restriction[]): AllergenFlag[] {
   const flags: AllergenFlag[] = [];
   const seen = new Set<string>();

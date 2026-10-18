@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   // The end-to-end tests run a second dev server with its own build folder (playwright.config.ts).
   distDir: process.env.NEXT_DIST_DIR || ".next",
+  // A phone on the home Wi-Fi opens the local preview by the Mac's address. Without this, `next dev`
+  // blocks its own scripts for that origin and the page never becomes interactive (taps do nothing).
+  // Dev only: production ignores it.
+  allowedDevOrigins: ["192.168.*.*", "10.*.*.*", "*.local"],
 };
 
 export default nextConfig;

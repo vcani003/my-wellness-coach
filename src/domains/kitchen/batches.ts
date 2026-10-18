@@ -7,8 +7,10 @@
  *   come from it.
  * - `quantity`: the single open batch's, or the sum when every open batch has an amount in the
  *   same unit; otherwise unknown.
- * - `stock`: `low` only when every open batch is low; `out` once no batch is open (0011: it drops
- *   off the list, history keeps it).
+ * - `stock` (0045 KOS4): set only when every open batch has a level, and then the highest of them
+ *   (plenty > some > low), so a new batch with no level makes it unknown again (buying more clears
+ *   "Running low", as before). `out` once no batch is open (0011: it drops off the list, history
+ *   keeps it).
  * - Legacy items (from before batches) have exactly one batch whose ID is the item's ID. Migration
  *   0008 backfills that same row, so replaying old events and the backfill agree.
  */
@@ -29,7 +31,7 @@ export interface Batch extends AuditFields {
   location?: Fact<Location>;
   frozen?: Fact<boolean>;
   opened?: Fact<boolean>;
-  /** `low`, or `out` once it's closed by being used up. */
+  /** plenty / some / low (KOS4), or `out` once it's closed by being used up. */
   stock?: Fact<StockLevel>;
   defrostedOn?: Fact<string>;
   lastUsedAt?: string;
@@ -102,6 +104,18 @@ function sumQuantities(batches: Batch[]): Fact<Quantity> | undefined {
 
 const OUT_INFERRED: Fact<StockLevel> = { value: "out", basis: "inferred", confidence: "high" };
 
+const LEVEL_RANK: Record<StockLevel, number> = { out: 0, low: 1, some: 2, plenty: 3 };
+
+/**
+ * The row's level from its open batches (KOS4): unknown unless every open batch has one, then the
+ * highest. With only `low` and `out` (before KOS4) this is the old "low only when every open batch
+ * is low".
+ */
+export function rowStock(open: Batch[]): Fact<StockLevel> | undefined {
+  if (open.length === 0 || open.some((b) => !b.stock)) return undefined;
+  return open.reduce((best, b) => (LEVEL_RANK[b.stock!.value] > LEVEL_RANK[best.stock!.value] ? b : best)).stock;
+}
+
 /** Recompute the item row's fields from its batches. Pure; keeps name, ID and audit. */
 export function deriveItem(item: Item): Item {
   const open = openBatches(item);
@@ -151,7 +165,7 @@ export function deriveItem(item: Item): Item {
     opened: oldest.opened,
     occurredAt: oldest.occurredAt,
     addedAt: oldest.addedAt,
-    stock: open.every((b) => b.stock?.value === "low") ? oldest.stock : undefined,
+    stock: rowStock(open),
     lastUsedAt: lastUsed,
     defrostedOn: defrosted,
   });

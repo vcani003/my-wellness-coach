@@ -1,7 +1,7 @@
 "use client";
 /**
  * The Kitchen place (Kitchen OS dock, 0042; ux.md §3, decisions 0011, 0017, CAT1, K1): the whole
- * kitchen, view-only except To review. At the top, the shared-kitchen lines ("Since your last
+ * kitchen. Tap an item to edit it (0045 KOS3, `ItemEditSheet`). At the top, the shared-kitchen lines ("Since your last
  * visit", "Levi used up the eggs", ux.md §6) and To review; then **search** ("Search your
  * kitchen", instant, accents ignored, matched words marked) and **By place | By type**
  * (remembered on this device). By place groups Fridge / Freezer / Pantry / Not sure where; By type
@@ -14,21 +14,26 @@ import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import type { ItemRow } from "@/contracts/kitchen-state";
 import { useAnnounce } from "@/ui/a11y/Announcer";
 import { LumiHalo } from "@/ui/lumi/Lumi";
+import { LeavingList, leaveProps, useAppear } from "@/ui/primitives/Appear";
 import { FoodTile } from "@/ui/primitives/FoodTile";
-import { actorName, byOther as byOtherActor, itemName, sentenceCase } from "@/ui/fallbacks";
-import { Collapsible } from "@/ui/primitives/Collapsible";
-import { CaretDownIcon, CloseIcon, FreezerIcon, FridgeIcon, PantryIcon, SearchIcon, UnknownPlaceIcon } from "@/ui/primitives/icons";
+import { actorName, itemName, sentenceCase } from "@/ui/fallbacks";
+import { CaretRightIcon, CloseIcon, CounterIcon, FreezerIcon, FridgeIcon, PantryIcon, SearchIcon, UnknownPlaceIcon } from "@/ui/primitives/icons";
 import { useKitchenData, type ChangeMark } from "@/ui/sync/KitchenDataContext";
+import { useOnline } from "@/ui/sync/useOnline";
 import type { PlaceProps } from "@/ui/places/types";
 import { batchesOf, calendarDaysSince, groupByCategory, groupItems, highlightParts, isDefrosted, searchKitchen, type GroupKey } from "./model";
 import { LiveRemovals, SinceLastVisit } from "./SharedCues";
+import { ItemEditProvider, ItemNoteView, useItemEdit, useItemEditControl } from "./ItemEdit";
+import { ItemEditSheet } from "./ItemEditSheet";
+import { ghostOf, type GhostKind } from "./item-edit-model";
+import { LevelLabel } from "./StockLevel";
 import { ToReview } from "./ToReview";
 import { useKitchenView, type KitchenView } from "./view-pref";
 
 /** How long typing must pause before the result count is spoken. */
 const ANNOUNCE_DELAY_MS = 700;
 
-const PLACE_ICON = { fridge: FridgeIcon, freezer: FreezerIcon, pantry: PantryIcon, unknown: UnknownPlaceIcon } as const;
+const PLACE_ICON = { fridge: FridgeIcon, freezer: FreezerIcon, pantry: PantryIcon, counter: CounterIcon, unknown: UnknownPlaceIcon } as const;
 
 /** A place's tile (Kitchen OS): the place colour and its icon. Decorative; the words say where. */
 export function PlaceTile({ place, small = false }: { place: GroupKey; small?: boolean }) {
@@ -51,9 +56,15 @@ export function KitchenWidget({ onRetry }: PlaceProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   // Where focus goes when a To review sheet closes (the card it came from may be gone).
   const rootRef = useRef<HTMLDivElement>(null);
+  // Item buttons need a connection until KOS7 (0044): the same test as the header's Offline pill.
+  const online = useOnline();
+  const [edit, noteRefs] = useItemEditControl(!online || status === "stale" || status === "error");
 
+  // An item set to Out or removed has left the kitchen; it stays here, faded, while its note shows.
+  const ghost = state ? ghostOf(edit.note, state) : null;
+  const items = state ? (ghost ? [...state.items, ghost.row] : state.items) : [];
   const searching = query.trim().length > 0;
-  const results = state && searching ? searchKitchen(state.items, query) : [];
+  const results = state && searching ? searchKitchen(items, query) : [];
 
   // "2 matches" / "No matches for 'x'", once typing pauses (never per keystroke).
   const spoken = searching ? (results.length ? t("seeAll.matches", { count: results.length }) : t("seeAll.noMatches", { query: query.trim() })) : "";
@@ -88,36 +99,39 @@ export function KitchenWidget({ onRetry }: PlaceProps) {
     setQuery("");
     searchRef.current?.focus();
   };
-  const hasItems = groupItems(state.items).length > 0;
+  const hasItems = groupItems(items).length > 0;
 
   return (
-    <div ref={rootRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
-      {status === "stale" && syncedAt !== null && (
-        <p className="rounded-md bg-surface-sunken px-3 py-2 text-small text-text-muted">
-          {t("stale", { time: format.dateTime(new Date(syncedAt), { hour: "numeric", minute: "2-digit" }) })}
-        </p>
-      )}
-      {cues && <SinceLastVisit cues={cues} onDismissed={() => rootRef.current?.focus()} />}
-      {cues && <LiveRemovals cues={cues} />}
-      {!searching && <ToReview reviews={state.toReview} finalFocus={rootRef} />}
+    <ItemEditProvider control={edit} refs={noteRefs}>
+      <div ref={rootRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
+        {status === "stale" && syncedAt !== null && (
+          <p className="rounded-md bg-surface-sunken px-3 py-2 text-small text-text-muted">
+            {t("stale", { time: format.dateTime(new Date(syncedAt), { hour: "numeric", minute: "2-digit" }) })}
+          </p>
+        )}
+        {cues && <SinceLastVisit cues={cues} onDismissed={() => rootRef.current?.focus()} />}
+        {cues && <LiveRemovals cues={cues} />}
+        {!searching && <ToReview reviews={state.toReview} finalFocus={rootRef} />}
 
-      {!hasItems ? (
-        <EmptyKitchen />
-      ) : (
-        <>
-          <div className="sticky top-[var(--topbar-height)] z-10 -mx-4 flex flex-col gap-3 bg-surface-default px-4 py-2 desk:static desk:mx-0 desk:px-0">
-            <SearchField inputRef={searchRef} query={query} onChange={setQuery} onClear={clear} />
-            {/* Stays while searching: results are one flat list either way, and the choice is kept (CAT1). */}
-            <ViewToggle view={view} onChange={setView} />
-          </div>
-          {searching ? (
-            <SearchResults items={results} query={query} meId={me.id} now={now} marks={marks} remoteIds={remoteIds} />
-          ) : (
-            <ItemGroups items={state.items} view={view} meId={me.id} now={now} marks={marks} remoteIds={remoteIds} />
-          )}
-        </>
-      )}
-    </div>
+        {!hasItems ? (
+          <EmptyKitchen />
+        ) : (
+          <>
+            <div className="sticky top-[var(--topbar-height)] z-10 -mx-4 flex flex-col gap-3 bg-surface-default px-4 py-2 desk:static desk:mx-0 desk:px-0">
+              <SearchField inputRef={searchRef} query={query} onChange={setQuery} onClear={clear} />
+              {/* Stays while searching: results are one flat list either way, and the choice is kept (CAT1). */}
+              <ViewToggle view={view} onChange={setView} />
+            </div>
+            {searching ? (
+              <SearchResults items={results} query={query} meId={me.id} now={now} marks={marks} remoteIds={remoteIds} ghost={ghost} />
+            ) : (
+              <ItemGroups items={items} view={view} meId={me.id} now={now} marks={marks} remoteIds={remoteIds} ghost={ghost} />
+            )}
+          </>
+        )}
+      </div>
+      <ItemEditSheet />
+    </ItemEditProvider>
   );
 }
 
@@ -207,6 +221,8 @@ interface RowContext {
   now: Date;
   marks: ReturnType<typeof useKitchenData>["marks"];
   remoteIds: ReadonlySet<string>;
+  /** The item just set to Out or removed, drawn faded in place while its note shows. */
+  ghost: { row: ItemRow; kind: GhostKind } | null;
 }
 
 function ItemGroups({ items, view, ...row }: RowContext & { items: readonly ItemRow[]; view: KitchenView }) {
@@ -227,17 +243,21 @@ function ItemGroups({ items, view, ...row }: RowContext & { items: readonly Item
             </h3>
           </div>
           <ul className="flex flex-col gap-2">
-            {group.items.map((item) => (
+            <LeavingList items={group.items} keyOf={rowKey}>
+              {(item, leaving) => (
               <ItemRowView
                 key={item.id}
+                leaving={leaving}
                 item={item}
                 mark={row.marks[item.id]}
                 remote={row.remoteIds.has(item.id)}
                 meId={row.meId}
                 now={row.now}
                 showPlace={view === "type"}
+                ghost={item.id === row.ghost?.row.id ? row.ghost.kind : undefined}
               />
-            ))}
+              )}
+            </LeavingList>
           </ul>
         </section>
       ))}
@@ -272,12 +292,15 @@ function SearchResults({ items, query, ...row }: RowContext & { items: ItemRow[]
             now={row.now}
             showPlace
             query={query}
+            ghost={item.id === row.ghost?.row.id ? row.ghost.kind : undefined}
           />
         ))}
       </ul>
     </section>
   );
 }
+
+const rowKey = (item: ItemRow) => item.id;
 
 /** A search match inside a name (CAT1): marked, so it doesn't rely on colour alone (bold too). */
 export function HighlightedName({ text, query }: { text: string; query?: string }) {
@@ -305,8 +328,12 @@ export function ItemRowView({
   now,
   showPlace = false,
   query,
+  ghost,
+  leaving,
 }: {
   item: ItemRow;
+  /** Gone from the kitchen this moment: eases out (0059 PF16). */
+  leaving?: boolean;
   mark?: ChangeMark;
   remote: boolean;
   meId: string;
@@ -315,124 +342,110 @@ export function ItemRowView({
   showPlace?: boolean;
   /** See all's search: the words to mark in the name. */
   query?: string;
+  /** It left the kitchen just now (Out, Removed, or gone): faded, no edit button, until your next message. */
+  ghost?: GhostKind;
 }) {
   const t = useTranslations();
   const format = useFormatter();
   const locale = useLocale();
+  const control = useItemEdit();
+  const detailsId = useId();
+  const amountId = useId();
   const days = calendarDaysSince(item.addedAt, now);
   const byOther = "missing" in item.updatedBy || item.updatedBy.id !== meId;
   const updatedMs = now.getTime() - new Date(item.updatedAt).getTime();
   const when = updatedMs < 60_000 ? t("kitchen.justNow") : format.relativeTime(new Date(item.updatedAt), now);
   const highlighted = Boolean(mark) || remote;
   const batches = batchesOf(item);
-  const several = batches.length > 1;
+  const several = batches.length > 1 && !ghost;
+  const level = ghost === "out" ? "out" : ghost ? undefined : item.stock?.value;
   const name = itemName(item.name.value, t, locale);
+  const saving = control?.busyId === item.id;
+  // One way in (KOS3): the name is the edit button, stretched over the whole row for a tap.
+  const editable = Boolean(control) && !ghost;
+  // A row that turns up while you're here (yours or the other person's) opens into place (PF16).
+  const appear = useAppear("grow");
 
-  const content = (
+  const nameText = (
     <>
-      <span className="flex flex-wrap items-baseline gap-x-2">
-        <span className="text-body font-strong">
-          <HighlightedName text={name} query={query} />
-          {showPlace && (
-            <span className="text-small font-regular text-text-muted">
-              {" · "}
-              {t(`kitchen.groups.${item.location?.value ?? "unknown"}`)}
-            </span>
-          )}
+      <HighlightedName text={name} query={query} />
+      {showPlace && (
+        <span className="text-small font-regular text-text-muted">
+          {" · "}
+          {t(`kitchen.groups.${item.location?.value ?? "unknown"}`)}
         </span>
-        {item.quantity && <span className="text-small text-text-muted">{item.quantity.value.asSaid}</span>}
-        {mark && (
-          <span className="rounded-button bg-highlight-bg px-2 text-caption font-strong text-highlight-text">
-            {t(mark === "new" ? "kitchen.new" : "kitchen.updated")}
-          </span>
-        )}
-      </span>
-      <span className="flex flex-wrap gap-x-2 text-caption text-text-muted">
-        {/* "2 batches · oldest 12 days" (0025): the row's addedAt is the oldest open batch's. */}
-        <span>{several ? t("kitchen.batches.summary", { count: batches.length, days }) : t("kitchen.addedDaysAgo", { days })}</span>
-        {item.stock?.value === "low" && <span className="font-strong text-warning-text">{t("kitchen.low")}</span>}
-        {item.opened?.value && <span>{t("kitchen.opened")}</span>}
-        {item.frozen?.value && item.location?.value !== "freezer" && <span>{t("kitchen.frozen")}</span>}
-        {isDefrosted(item) && <span>{t("kitchen.defrosted")}</span>}
-        {byOther && (
-          <span className={remote ? "font-strong text-highlight-text" : ""}>
-            {t("kitchen.byPerson", { name: sentenceCase(actorName(item.updatedBy, t), locale), when })}
-          </span>
-        )}
-      </span>
+      )}
     </>
   );
 
-  const rowClass = `row-card ${highlighted ? "change-highlight" : ""}`;
-  // The food's emoji tile, tinted by where it's kept (0048); the catalog emoji comes with KOS2.
-  const tile = <FoodTile place={item.location?.value ?? "unknown"} />;
-  if (!several) {
-    return (
-      <li
-        data-entity-id={item.id}
-        data-change={mark ?? (remote ? "remote" : undefined)}
-        className={`flex min-h-tap items-center gap-3 px-3 py-2 ${rowClass}`}
-      >
-        {tile}
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">{content}</span>
-      </li>
-    );
-  }
-
-  // Several batches: the whole row is a disclosure that lists them, view-only (K1, 0025).
   return (
-    <li data-entity-id={item.id} data-change={mark ?? (remote ? "remote" : undefined)} className={rowClass}>
-      <Collapsible.Root>
-        <Collapsible.Trigger
-          data-batches-toggle=""
-          className="group flex min-h-tap w-full items-center gap-3 rounded-md px-3 py-2 text-left"
-        >
-          {tile}
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">{content}</span>
-          <CaretDownIcon
-            aria-hidden="true"
-            className="size-icon-sm shrink-0 text-text-muted transition-transform group-data-[panel-open]:rotate-180 motion-reduce:transition-none"
-          />
-        </Collapsible.Trigger>
-        <Collapsible.Panel className="px-4 pb-3">
-          <BatchList item={item} meId={meId} name={name} />
-        </Collapsible.Panel>
-      </Collapsible.Root>
+    <li
+      data-entity-id={item.id}
+      data-change={ghost ? "gone" : (mark ?? (remote ? "remote" : undefined))}
+      className={`row-card ${highlighted && !ghost ? "change-highlight" : ""}`}
+      {...appear}
+      {...leaveProps(leaving)}
+    >
+      <div className="relative flex min-h-tap items-center gap-3 py-2 pr-3 pl-3">
+        {/* The food's emoji tile, tinted by where it's kept (0048); the catalog emoji comes with KOS2. */}
+        {/* Gone (Out / Removed): only the decorative tile fades, so the words keep AA contrast. */}
+        <span className={ghost ? "opacity-50 grayscale" : "contents"}>
+          <FoodTile place={item.location?.value ?? "unknown"} />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="flex flex-wrap items-baseline gap-x-2">
+            {editable ? (
+              <button
+                type="button"
+                onClick={(e) => control?.open(item, e.currentTarget)}
+                aria-label={t("kitchen.edit.open", { name: item.name.value })}
+                aria-describedby={item.quantity ? `${amountId} ${detailsId}` : detailsId}
+                aria-haspopup="dialog"
+                data-item-edit={item.id}
+                className="text-left text-body font-strong outline-none after:absolute after:inset-0 after:rounded-md after:content-[''] focus-visible:after:outline-3 focus-visible:after:outline-offset-2 focus-visible:after:outline-focus-ring"
+              >
+                {nameText}
+              </button>
+            ) : (
+              <span className="text-body font-strong">{nameText}</span>
+            )}
+            {item.quantity && (
+              <span id={amountId} className="text-small text-text-muted">
+                {item.quantity.value.asSaid}
+              </span>
+            )}
+            {mark && !ghost && (
+              <span className="rounded-button bg-highlight-bg px-2 text-caption font-strong text-highlight-text">
+                {t(mark === "new" ? "kitchen.new" : "kitchen.updated")}
+              </span>
+            )}
+          </span>
+          <span id={detailsId} className="flex flex-wrap gap-x-2 text-caption text-text-muted">
+            {saving ? (
+              <span data-row-saving="" className="font-strong">
+                {t("kitchen.edit.saving")}
+              </span>
+            ) : (
+              <>
+                {/* "2 batches · oldest 12 days" (0025): the row's addedAt is the oldest open batch's. */}
+                <span>{several ? t("kitchen.batches.summary", { count: batches.length, days }) : t("kitchen.addedDaysAgo", { days })}</span>
+                {level && <LevelLabel level={level} />}
+                {ghost === "removed" && <span className="font-strong">{t("kitchen.edit.removed")}</span>}
+                {!ghost && item.opened?.value && <span>{t("kitchen.opened")}</span>}
+                {!ghost && item.frozen?.value && item.location?.value !== "freezer" && <span>{t("kitchen.frozen")}</span>}
+                {!ghost && isDefrosted(item) && <span>{t("kitchen.defrosted")}</span>}
+                {byOther && !ghost && (
+                  <span className={remote ? "font-strong text-highlight-text" : ""}>
+                    {t("kitchen.byPerson", { name: sentenceCase(actorName(item.updatedBy, t), locale), when })}
+                  </span>
+                )}
+              </>
+            )}
+          </span>
+        </span>
+        {editable && <CaretRightIcon aria-hidden="true" className="size-icon-sm shrink-0 text-text-muted" />}
+      </div>
+      <ItemNoteView itemId={item.id} />
     </li>
-  );
-}
-
-/** One line per open batch, oldest first: added date, where, frozen or defrosted, Low, and who added it. */
-function BatchList({ item, meId, name }: { item: ItemRow; meId: string; name: string }) {
-  const t = useTranslations();
-  const format = useFormatter();
-  const locale = useLocale();
-  const date = (iso: string) => format.dateTime(new Date(iso), { month: "short", day: "numeric" });
-  return (
-    <>
-      <ul aria-label={t("kitchen.batches.listLabel", { name })} className="flex flex-col gap-1 border-l-2 border-border-default pl-3">
-        {batchesOf(item).map((b) => {
-          const defrosted = b.defrostedOn && !b.frozen?.value;
-          const who = byOtherActor(b.createdBy, meId)
-            ? t("kitchen.batches.addedBy", { name: sentenceCase(actorName(b.createdBy, t), locale) })
-            : t("kitchen.batches.addedByYou");
-          return (
-            <li key={b.id} data-batch-id={b.id} className="flex flex-wrap gap-x-2 text-small">
-              <span className="font-medium">{t("kitchen.batches.added", { date: date(b.addedAt) })}</span>
-              {b.quantity && <span className="text-text-muted">{b.quantity.value.asSaid}</span>}
-              {b.location && <span className="text-text-muted">{t(`kitchen.groups.${b.location.value}`)}</span>}
-              {b.frozen?.value && <span className="text-text-muted">{t("kitchen.frozen")}</span>}
-              {defrosted && (
-                <span className="text-text-muted">{t("kitchen.batches.defrostedOn", { date: date(b.defrostedOn!.value) })}</span>
-              )}
-              {b.stock?.value === "low" && <span className="font-strong text-warning-text">{t("kitchen.low")}</span>}
-              {b.opened?.value && <span className="text-text-muted">{t("kitchen.opened")}</span>}
-              <span className="text-text-muted">{who}</span>
-            </li>
-          );
-        })}
-      </ul>
-      <p className="mt-2 text-caption text-text-muted">{t("kitchen.batches.viewOnly")}</p>
-    </>
   );
 }

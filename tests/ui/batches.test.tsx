@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * Older and newer batches in the UI (0025): the Kitchen row ("2 batches · oldest 3 days",
- * Defrosted, the view-only batch list) and the receipt's one-tap choice
+ * Defrosted, the batches listed in the item's edit sheet, KOS3) and the receipt's one-tap choice
  * ("You also had eggs from Oct 2: Still have them · Those are gone") with its result and Undo.
  */
 import "@testing-library/jest-dom/vitest";
@@ -89,7 +89,9 @@ const announcer = () => screen.getByTestId("announcer");
 const choice = () => screen.getByRole("group", { name: "You also had eggs from Oct 2." });
 
 describe("Kitchen row with batches", () => {
-  it("shows '2 batches · oldest 12 days' and lists the batches, view-only, when tapped", async () => {
+  const row = (id: string) => document.querySelector<HTMLElement>(`[data-entity-id="${id}"]`)!;
+
+  it("shows '2 batches · oldest 12 days'; its edit sheet lists the batches, oldest first, to pick from (KOS3, KOS4-e)", async () => {
     const state = kitchen([
       eggs([
         batch("b1", OCT2, { location: said("fridge" as const), stock: said("low" as const) }),
@@ -97,46 +99,40 @@ describe("Kitchen row with batches", () => {
       ]),
     ]);
     renderWithIntl(<Harness initial={state} actions={{}} receipt={{ ...purchase, applied: [] }} />);
-    const row = screen.getByRole("button", { name: /^Eggs/ });
-    expect(row).toHaveTextContent("2 batches · oldest 12 days");
-    expect(row).toHaveAttribute("aria-expanded", "false");
+    expect(row("eggs")).toHaveTextContent("2 batches · oldest 12 days");
 
-    await userEvent.click(row);
-    expect(row).toHaveAttribute("aria-expanded", "true");
-    const list = screen.getByRole("list", { name: "Eggs: batches, oldest first" });
-    const [older, newer] = within(list).getAllByRole("listitem");
-    expect(older).toHaveTextContent("Added Oct 2");
-    expect(older).toHaveTextContent("Fridge");
-    expect(older).toHaveTextContent("Running low");
-    expect(older).toHaveTextContent("Added by you");
-    expect(newer).toHaveTextContent("Added Oct 14");
-    expect(newer).toHaveTextContent("a dozen");
-    expect(newer).toHaveTextContent("Added by Levi");
-    // View-only (K1): no buttons inside, just a pointer to chat.
-    expect(within(list).queryByRole("button")).toBeNull();
-    expect(screen.getByText("To change these, tell me in chat.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Edit eggs" }));
+    const sheet = await screen.findByRole("dialog", { name: "Edit eggs" });
+    const which = within(sheet).getByRole("radiogroup", { name: "Which batch?" });
+    const [all, older, newer] = within(which).getAllByRole("radio");
+    expect(all).toHaveAccessibleName("All 2 batches");
+    expect(all).toBeChecked();
+    expect(older).toHaveAccessibleName(/^Added Oct 2 · Fridge · Running low · added by you$/);
+    expect(newer).toHaveAccessibleName(/^Added Oct 14 · a dozen · added by Levi$/);
   });
 
-  it("a one-batch item stays a plain row with 'added X days ago'", () => {
+  it("a one-batch item says 'added X days ago', and its sheet has no batch choice", async () => {
     renderWithIntl(<Harness initial={kitchen([eggs([batch("b1", OCT11)])])} actions={{}} receipt={{ ...purchase, applied: [] }} />);
-    expect(screen.queryByRole("button", { name: /^Eggs/ })).toBeNull();
     expect(screen.getByText("added 3 days ago")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Edit eggs" }));
+    const sheet = await screen.findByRole("dialog", { name: "Edit eggs" });
+    expect(within(sheet).queryByRole("radiogroup", { name: "Which batch?" })).toBeNull();
   });
 
-  it("labels a defrosted batch Defrosted, on the row and in the list (with its date)", async () => {
+  it("labels a defrosted batch Defrosted, on the row and in the sheet's batch choice (with its date)", async () => {
     const chicken = item("ch", "chicken thighs", {
       location: said("fridge" as const),
       defrostedOn: said(OCT11),
       batches: [batch("c1", OCT2, { defrostedOn: said(OCT11), frozen: said(false) }), batch("c2", OCT11, { frozen: said(true) })],
     });
     renderWithIntl(<Harness initial={kitchen([chicken])} actions={{}} receipt={{ ...purchase, applied: [] }} />);
-    const row = screen.getByRole("button", { name: /^Chicken thighs/ });
-    expect(row).toHaveTextContent("Defrosted");
-    await userEvent.click(row);
-    const [first, second] = within(screen.getByRole("list", { name: /Chicken thighs: batches/ })).getAllByRole("listitem");
-    expect(first).toHaveTextContent("Defrosted Oct 11");
-    expect(second).toHaveTextContent("Frozen");
-    expect(second).not.toHaveTextContent("Defrosted");
+    expect(row("ch")).toHaveTextContent("Defrosted");
+    await userEvent.click(screen.getByRole("button", { name: "Edit chicken thighs" }));
+    const which = within(await screen.findByRole("dialog")).getByRole("radiogroup", { name: "Which batch?" });
+    const [, first, second] = within(which).getAllByRole("radio");
+    expect(first).toHaveAccessibleName(/Defrosted Oct 11/);
+    expect(second).toHaveAccessibleName(/Frozen/);
+    expect(second).not.toHaveAccessibleName(/Defrosted/);
   });
 
   it("an item from an older cached state (no batches) still shows Defrosted from the row", () => {
@@ -170,14 +166,14 @@ describe("Receipt batch choice", () => {
     await waitFor(() => expect(announcer()).toHaveTextContent("Eggs: those are gone (1 batch left)"));
     expect(screen.queryByRole("group", { name: /You also had eggs/ })).toBeNull();
     // The Kitchen row is a plain one-batch row again.
-    expect(screen.queryByRole("button", { name: /^Eggs/ })).toBeNull();
+    expect(document.querySelector('[data-entity-id="eggs"]')).not.toHaveTextContent("2 batches");
 
     await userEvent.click(undoButton);
     expect(undo).toHaveBeenCalledWith("cs-ITEM_BATCH_GONE");
     const gone = await screen.findByRole("button", { name: "Those are gone: eggs from Oct 2" });
     await waitFor(() => expect(gone).toHaveFocus());
     await waitFor(() => expect(announcer()).toHaveTextContent("Undone: Eggs: those are gone (1 batch left)"));
-    expect(screen.getByRole("button", { name: /^Eggs/ })).toHaveTextContent("2 batches");
+    expect(document.querySelector('[data-entity-id="eggs"]')).toHaveTextContent("2 batches");
     // With the answer stepped back, the same one Undo is for the purchase again.
     expect(within(card).getAllByRole("button", { name: /^Undo/ })).toHaveLength(1);
     expect(within(card).getByRole("button", { name: /^Undo/ })).toHaveAccessibleName("Undo: Added eggs (2 batches)");
@@ -238,7 +234,7 @@ describe("Receipt batch choice", () => {
     const line = await screen.findByText("Kept the older eggs", { selector: "p" });
     await waitFor(() => expect(line).toHaveFocus());
     expect(screen.queryByRole("button", { name: /^Undo: Kept/ })).toBeNull();
-    expect(screen.getByRole("button", { name: /^Eggs/ })).toHaveTextContent("2 batches");
+    expect(document.querySelector('[data-entity-id="eggs"]')).toHaveTextContent("2 batches");
   });
 
   it("a failed tap says nothing changed and keeps the buttons, focus on the choice", async () => {

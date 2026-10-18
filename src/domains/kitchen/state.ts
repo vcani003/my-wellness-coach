@@ -63,6 +63,8 @@ export interface Meal extends AuditFields {
   status: MealStatus;
   ideaId?: string;
   planPosition?: number;
+  /** The day it's planned for (0045 KOS1): a calendar date "YYYY-MM-DD". Absent = undated. */
+  plannedFor?: string;
   chosenAt: string;
   recipeId?: string;
   note?: string;
@@ -141,6 +143,18 @@ export interface LocationPref extends AuditFields {
   location: Location;
 }
 
+/**
+ * One of the kitchen's staples (0054 SS1: one list for the whole kitchen), keyed by standard name.
+ * Its need (Out / Low / Not in yet / have / on the list) is computed on read, never stored.
+ * Removed staples leave the state; history keeps them.
+ */
+export interface Staple extends AuditFields {
+  standardName: string;
+  name: Fact<string>;
+  /** Usual store (SS5), only when said or picked. Absent = "Anywhere". */
+  store?: Fact<string>;
+}
+
 export interface KitchenEntities {
   items: Record<string, Item>;
   meals: Record<string, Meal>;
@@ -153,9 +167,11 @@ export interface KitchenEntities {
   categoryPrefs: Record<string, CategoryPref>;
   /** Keyed by standard name (0041). */
   locationPrefs: Record<string, LocationPref>;
+  /** Keyed by standard name (0054). Optional so a state built by older code still reads (0018). */
+  staples?: Record<string, Staple>;
 }
 
-export type KitchenEntity = Item | Meal | Recipe | Tick | Review | ShoppingItem | CategoryPref | LocationPref;
+export type KitchenEntity = Item | Meal | Recipe | Tick | Review | ShoppingItem | CategoryPref | LocationPref | Staple;
 
 export const emptyKitchen = (): KitchenEntities => ({
   items: {},
@@ -166,6 +182,7 @@ export const emptyKitchen = (): KitchenEntities => ({
   shopping: {},
   categoryPrefs: {},
   locationPrefs: {},
+  staples: {},
 });
 
 export const tickId = (mealId: string, ingredientKey: string) => `${mealId}|${ingredientKey}`;
@@ -176,10 +193,14 @@ export const KITCHEN_EVENT = {
   itemAdded: "item.added",
   itemUpdated: "item.updated",
   itemUsed: "item.used",
+  /** KOS4: how much is left, set without a use. */
+  stockSet: "item.stock.set",
   itemRemoved: "item.removed",
   mealChosen: "meal.chosen",
   mealTransitioned: "meal.transitioned",
   mealNoted: "meal.noted",
+  /** KOS1: a planned meal's day set, changed or cleared. */
+  mealDated: "meal.dated",
   recipeSaved: "recipe.saved",
   checklistTicked: "checklist.ticked",
   reviewQueued: "review.queued",
@@ -196,6 +217,10 @@ export const KITCHEN_EVENT = {
   batchDefrosted: "item.batch.defrosted",
   categoryRemembered: "item.category.remembered",
   locationRemembered: "item.location.remembered",
+  /** Smart staples (0054). */
+  stapleAdded: "staple.added",
+  stapleUpdated: "staple.updated",
+  stapleRemoved: "staple.removed",
 } as const;
 
 type ItemFactFields = Pick<Item, "quantity" | "location" | "frozen" | "opened" | "occurredAt">;
@@ -231,6 +256,15 @@ export interface ItemUsedPayload {
   quantityAfter?: Fact<Quantity> | null;
   /** Set when recorded by finishing a meal (0013): used in this meal, amount unknown. */
   mealId?: string;
+}
+/**
+ * How much is left (0045 KOS4), set on one batch without a use: no amount and no "last used".
+ * `out` closes the batch (used up). One event per batch.
+ */
+export interface StockSetPayload {
+  itemId: string;
+  batchId: string;
+  stock: Fact<StockLevel>;
 }
 /** Buying something already in the kitchen adds a batch (0025). */
 export interface BatchAddedPayload extends BatchFacts {
@@ -292,6 +326,11 @@ export interface MealTransitionedPayload {
 export interface MealNotedPayload {
   mealId: string;
   note: string;
+}
+/** 0045 KOS1: the day a meal is planned for, a calendar date; null = undated again. */
+export interface MealDatedPayload {
+  mealId: string;
+  date: string | null;
 }
 export interface RecipeSavedPayload {
   recipeId: string;
@@ -358,6 +397,22 @@ export interface ShoppingMovedPayload {
   itemId: string;
 }
 
+/** A new staple (0054). Its own key `staple:<standardName>`, so Undo puts it back as it was. */
+export interface StapleAddedPayload {
+  standardName: string;
+  name: Fact<string>;
+  store?: Fact<string>;
+}
+/** A staple's usual store set or cleared (SS5). */
+export interface StapleUpdatedPayload {
+  standardName: string;
+  set: { store?: Fact<string> };
+  clear: "store"[];
+}
+export interface StapleRemovedPayload {
+  standardName: string;
+}
+
 /** Entity keys a kitchen event touches (`item:<id>` …), for Undo conflicts and STALE_TARGET. */
 export function kitchenTouchedKeys(event: EventEnvelope): string[] {
   const p = event.payload as Record<string, unknown>;
@@ -365,6 +420,7 @@ export function kitchenTouchedKeys(event: EventEnvelope): string[] {
     case KITCHEN_EVENT.itemAdded:
     case KITCHEN_EVENT.itemUpdated:
     case KITCHEN_EVENT.itemUsed:
+    case KITCHEN_EVENT.stockSet:
     case KITCHEN_EVENT.itemRemoved:
     case KITCHEN_EVENT.batchAdded:
     case KITCHEN_EVENT.batchClosed:
@@ -374,6 +430,7 @@ export function kitchenTouchedKeys(event: EventEnvelope): string[] {
     case KITCHEN_EVENT.mealChosen:
     case KITCHEN_EVENT.mealTransitioned:
     case KITCHEN_EVENT.mealNoted:
+    case KITCHEN_EVENT.mealDated:
       return [`meal:${p.mealId as string}`];
     case KITCHEN_EVENT.recipeSaved:
       return [`recipe:${p.recipeId as string}`, `meal:${p.mealId as string}`];
@@ -393,6 +450,10 @@ export function kitchenTouchedKeys(event: EventEnvelope): string[] {
       return [`catpref:${p.standardName as string}`];
     case KITCHEN_EVENT.locationRemembered:
       return [`locpref:${p.standardName as string}`];
+    case KITCHEN_EVENT.stapleAdded:
+    case KITCHEN_EVENT.stapleUpdated:
+    case KITCHEN_EVENT.stapleRemoved:
+      return [`staple:${p.standardName as string}`];
     case CHANGESET_REVERTED:
       return Object.keys((event.payload as ChangesetRevertedPayload).restore);
     default:
@@ -409,13 +470,14 @@ const COLLECTION = {
   shopping: "shopping",
   catpref: "categoryPrefs",
   locpref: "locationPrefs",
+  staple: "staples",
 } as const satisfies Record<string, keyof KitchenEntities>;
 
 export function getKitchenEntity(state: KitchenEntities, key: string): KitchenEntity | null {
   const { kind, id } = splitEntityKey(key);
   const coll = COLLECTION[kind as keyof typeof COLLECTION];
   if (!coll) return null;
-  return (state[coll] as Record<string, KitchenEntity>)[id] ?? null;
+  return (state[coll] as Record<string, KitchenEntity> | undefined)?.[id] ?? null;
 }
 
 // ─── apply ────────────────────────────────────────────────────────────────────────────
@@ -434,7 +496,7 @@ function put<K extends keyof KitchenEntities>(
   state: KitchenEntities,
   coll: K,
   id: string,
-  value: KitchenEntities[K][string] | null,
+  value: NonNullable<KitchenEntities[K]>[string] | null,
 ): KitchenEntities {
   const next = { ...state[coll] } as Record<string, unknown>;
   if (value === null) delete next[id];
@@ -532,6 +594,21 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
       }
       return put(state, "items", next.id, deriveItem(next));
     }
+    case KITCHEN_EVENT.stockSet: {
+      const p = event.payload as StockSetPayload;
+      const found = state.items[p.itemId];
+      if (!found) return state;
+      const item: Item = { ...ensureBatches(found), ...stamp(event) };
+      const prev = item.batches.find((b) => b.id === p.batchId);
+      // A missing or already closed batch: ignored, so an odd history never throws (0018).
+      if (!prev || prev.closedAt) return state;
+      const b: Batch = { ...prev, stock: p.stock, ...stamp(event) };
+      if (p.stock.value === "out") {
+        b.closedAt = event.recordedAt;
+        b.closedReason = "used-up";
+      }
+      return put(state, "items", item.id, withBatch(item, b));
+    }
     case KITCHEN_EVENT.batchAdded: {
       const p = event.payload as BatchAddedPayload;
       const found = state.items[p.itemId];
@@ -590,6 +667,23 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
       };
       return put(state, "locationPrefs", p.standardName, pref);
     }
+    case KITCHEN_EVENT.stapleAdded: {
+      const p = event.payload as StapleAddedPayload;
+      const staple: Staple = { standardName: p.standardName, name: p.name, ...(p.store ? { store: p.store } : {}), ...created(event) };
+      return put(state, "staples", p.standardName, staple);
+    }
+    case KITCHEN_EVENT.stapleUpdated: {
+      const p = event.payload as StapleUpdatedPayload;
+      const prev = state.staples?.[p.standardName];
+      if (!prev) return state;
+      const next: Staple = { ...prev, ...compact(p.set), ...stamp(event) };
+      for (const field of p.clear) delete next[field];
+      return put(state, "staples", p.standardName, next);
+    }
+    case KITCHEN_EVENT.stapleRemoved: {
+      const p = event.payload as StapleRemovedPayload;
+      return put(state, "staples", p.standardName, null);
+    }
     case KITCHEN_EVENT.itemRemoved: {
       const p = event.payload as ItemRemovedPayload;
       return put(state, "items", p.itemId, null);
@@ -631,6 +725,15 @@ export function apply(state: KitchenEntities, event: EventEnvelope): KitchenEnti
       const prev = state.meals[p.mealId];
       if (!prev) return state;
       return put(state, "meals", prev.id, { ...prev, note: p.note, noteBy: event.actor, ...stamp(event) });
+    }
+    case KITCHEN_EVENT.mealDated: {
+      const p = event.payload as MealDatedPayload;
+      const prev = state.meals[p.mealId];
+      if (!prev) return state;
+      const next: Meal = { ...prev, ...stamp(event) };
+      if (p.date === null) delete next.plannedFor;
+      else next.plannedFor = p.date;
+      return put(state, "meals", next.id, next);
     }
     case KITCHEN_EVENT.recipeSaved: {
       const p = event.payload as RecipeSavedPayload;

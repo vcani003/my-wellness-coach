@@ -15,6 +15,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -224,6 +225,11 @@ export const mealIdeas = pgTable(
     assistantMessageId: text("assistant_message_id"),
     /** Card order within the set (0, 1, 2…), so "the second one" resolves (0013). */
     position: integer("position").notNull().default(0),
+    /**
+     * The user's own words for changes made to this idea before it had a recipe ("no yogurt"),
+     * oldest first, so its recipe honours them (ai.md §5 "Refining an idea"). Data, never instructions.
+     */
+    notes: text("notes"),
     createdAt: ts("created_at").notNull(),
     createdBy: text("created_by").notNull(),
   },
@@ -336,6 +342,27 @@ export const itemLocationPrefs = pgTable(
   (t) => [primaryKey({ columns: [t.kitchenId, t.standardName] })],
 );
 
+/**
+ * The kitchen's staples (0054 SS1): one list per kitchen, keyed by standard name. From
+ * `staple.added` / `.updated` / `.removed`. Their need (Out, Low, Not in yet…) is computed on
+ * read and never stored (SS3). `created_by` is who added it. Migration 0014, additive.
+ */
+export const staples = pgTable(
+  "staples",
+  {
+    kitchenId: text("kitchen_id")
+      .notNull()
+      .references(() => kitchens.id, { onDelete: "cascade" }),
+    standardName: text("standard_name").notNull(),
+    /** As said. */
+    name: jsonb("name").$type<Fact<string>>().notNull(),
+    /** Usual store (SS5); null = "Anywhere". */
+    store: jsonb("store").$type<Fact<string>>(),
+    ...audit,
+  },
+  (t) => [primaryKey({ columns: [t.kitchenId, t.standardName] })],
+);
+
 export const meals = pgTable(
   "meals",
   {
@@ -348,6 +375,11 @@ export const meals = pgTable(
     status: text("status").notNull(),
     ideaId: text("idea_id"),
     planPosition: integer("plan_position"),
+    /**
+     * The day it's planned for (0045 KOS1): a calendar date, never a timestamp, so it can't shift
+     * across time zones or DST. Migration 0016, additive; null = undated.
+     */
+    plannedFor: date("planned_for", { mode: "string" }),
     chosenAt: ts("chosen_at").notNull(),
     recipeId: text("recipe_id"),
     note: text("note"),
@@ -543,6 +575,11 @@ export const chatMessages = pgTable(
     changeSetId: text("change_set_id"),
     /** The ApplyResult without `state`, so a reloaded receipt can show "What changed". */
     receipt: jsonb("receipt"),
+    /**
+     * A held bulk removal this reply asked about (0045 KOS16): the change a yes applies, exactly.
+     * Assistant rows only; null for every other reply. Shape owned by `src/ai/bulk-remove.ts`.
+     */
+    pendingConfirm: jsonb("pending_confirm"),
     createdAt: ts("created_at").notNull(),
   },
   (t) => [

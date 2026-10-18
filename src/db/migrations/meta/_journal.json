@@ -92,6 +92,34 @@
       "when": 1792090039017,
       "tag": "0012_item_location_prefs",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792106786914,
+      "tag": "0013_meal_idea_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792169353250,
+      "tag": "0014_staples",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792200000000,
+      "tag": "0015_chat_pending_confirm",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792300000000,
+      "tag": "0016_meal_planned_for",
+      "breakpoints": true
     }
   ]
 }

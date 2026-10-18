@@ -59,14 +59,14 @@ export function planPlacesSort(kitchen: KitchenEntities): { moves: PlannedMove[]
   return { moves: moves.slice(0, MAX_SORT_MOVES), unplaced: unplaced + Math.max(0, moves.length - MAX_SORT_MOVES) };
 }
 
-const PLACE_NAME: Record<Location, string> = { fridge: "Fridge", freezer: "Freezer", pantry: "Pantry" };
+const PLACE_NAME: Record<Location, string> = { fridge: "Fridge", freezer: "Freezer", pantry: "Pantry", counter: "Counter" };
 
 /** "I sorted 9 items from "Not sure where" into their usual places: 5 to the Fridge and 4 to the Pantry. …" */
 export function sortedReply(moves: PlannedMove[], unplaced: number): string {
   const items = new Set(moves.map((m) => m.itemId)).size;
   const byPlace = new Map<Location, Set<string>>();
   for (const m of moves) byPlace.set(m.location.value, (byPlace.get(m.location.value) ?? new Set()).add(m.itemId));
-  const parts = (["fridge", "freezer", "pantry"] as const)
+  const parts = (["fridge", "freezer", "pantry", "counter"] as const)
     .filter((l) => byPlace.has(l))
     .map((l) => `${byPlace.get(l)!.size} to the ${PLACE_NAME[l]}`);
   const list = new Intl.ListFormat("en", { type: "conjunction" }).format(parts);

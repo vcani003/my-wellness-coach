@@ -23,6 +23,7 @@ import { fromDraft } from "@/ui/widgets/meals/recipe-model";
 import { initialMealsSession, mealsReducer, type MealsSession } from "@/ui/widgets/meals/session";
 import { UpdateKitchenSheet } from "@/ui/widgets/meals/UpdateKitchenSheet";
 import { fakeActions, saved } from "../support/fake-actions";
+import { fakeMealActions } from "../support/fake-meal-actions";
 import { renderWithIntl } from "../support/intl";
 import { item, kitchen, LEVI, T0, VERO } from "../support/kitchen-rows";
 
@@ -46,28 +47,6 @@ const meal = (id: string, title: string, status: MealRow["status"], extra: Parti
 });
 
 const ok = (state: KitchenState, code = "NO_CHANGE") => vi.fn(async (): Promise<ActionResult> => saved(state, code));
-
-function fakeMealActions(overrides: Partial<MealActions> = {}): MealActions {
-  const refused = async (): Promise<ActionResult> => ({ ok: false, reason: { code: "SAVE_FAILED", params: {}, text: "x" }, retryable: true });
-  return {
-    choose: vi.fn(async () => true),
-    retryRecipe: vi.fn(async () => true),
-    addToPlan: vi.fn(refused),
-    startCooking: vi.fn(refused),
-    cancel: vi.fn(refused),
-    finishCooking: vi.fn(async () => ({ ok: false as const, reason: { code: "SAVE_FAILED", params: {}, text: "x" }, retryable: true })),
-    submitUpdateKitchen: vi.fn(refused),
-    updateKitchenLater: vi.fn(refused),
-    skipUpdateKitchen: vi.fn(refused),
-    tick: vi.fn(refused),
-    addNeedsToList: vi.fn(refused),
-    openRecipe: vi.fn(),
-    closeRecipe: vi.fn(),
-    useOwnRecipe: vi.fn(),
-    showSaved: vi.fn(),
-    ...overrides,
-  };
-}
 
 /** Renders `children` with real reducers for the meal session and fakes for every server call. */
 function Harness({
@@ -275,6 +254,49 @@ describe("Meal ideas widget", () => {
   it("shows 'Finding ideas…' before the first card", () => {
     show(<MealIdeasWidget />, { state, session: feed([{ type: "status", phase: "ideas" }]) });
     expect(screen.getByText("Finding ideas from your kitchen…")).toBeInTheDocument();
+  });
+
+  it("an idea changed in chat: only that card's changed line changes and is highlighted (ai.md §5)", () => {
+    const start = feed([idea("i1", "Spinach omelette", { uses: ["eggs", "spinach"], missing: ["feta"] }), idea("i2", "Soup")]);
+    const session = feed(
+      [{ type: "idea.updated", idea: { ideaId: "i1", name: "Spinach omelette", why: "Why Spinach omelette", uses: ["eggs"], missing: ["feta"], allergenFlags: [] } }],
+      "m2",
+      start,
+    );
+    show(<MealIdeasWidget />, { state, session });
+    const [first, second] = screen.getAllByRole("listitem");
+    expect(first).toHaveTextContent("Useseggs");
+    expect(first).not.toHaveTextContent("spinach and");
+    const marked = first.querySelectorAll("[data-recipe-changed]");
+    expect([...marked].map((el) => el.textContent)).toEqual(["eggs"]);
+    expect(second.querySelectorAll("[data-recipe-changed]")).toHaveLength(0);
+  });
+});
+
+describe("idea cards follow chat changes and the latest recipe (idea.updated, ai.md §5)", () => {
+  const base = () => feed([idea("i1", "Curry", { uses: ["chicken", "yogurt"], missing: ["lemongrass"] }), idea("i2", "Soup")]);
+  const updated = (extra: Partial<{ name: string; why: string; uses: string[]; missing: string[] }>): StreamEvent => ({
+    type: "idea.updated",
+    idea: { ideaId: "i1", name: "Curry", why: "Why Curry", uses: ["chicken", "yogurt"], missing: ["lemongrass"], allergenFlags: [], ...extra },
+  });
+
+  it("replaces the card in place, keeps the order and the other card, and marks only the lines that differ", () => {
+    const s = feed([updated({ uses: ["chicken"] })], "m2", base());
+    expect(s.ideas?.ideas.map((i) => i.ideaId)).toEqual(["i1", "i2"]);
+    expect(s.ideas?.ideas[0]).toMatchObject({ uses: ["chicken"], changed: ["uses"], changeKey: 1 });
+    expect(s.ideas?.ideas[1].changed).toBeUndefined();
+  });
+
+  it("a second change marks again with a new key; name and why are marked only when they change", () => {
+    let s = feed([updated({ uses: ["chicken"] })], "m2", base());
+    s = feed([updated({ name: "Tofu curry", uses: ["tofu"], missing: ["lemongrass", "lime"] })], "m3", s);
+    expect(s.ideas?.ideas[0]).toMatchObject({ changed: ["name", "uses", "missing"], changeKey: 2 });
+  });
+
+  it("ignores a card that isn't on screen, and an update that changes nothing", () => {
+    const s = base();
+    expect(feed([{ ...updated({}), idea: { ...(updated({}) as { idea: object }).idea, ideaId: "gone" } } as StreamEvent], "m2", s)).toBe(s);
+    expect(feed([updated({})], "m2", s)).toBe(s);
   });
 });
 

@@ -20,6 +20,8 @@ import { actorRef, buildKitchenState, buildRecipeView } from "./read-model";
 import type { KitchenEntities } from "./state";
 import { loadKitchenEntities } from "./store";
 import { computeUseItUpSignals, type UseItUpSignal } from "./use-it-up";
+import type { WeekNeeds } from "@/contracts/week-plan";
+import { computeWeekNeeds, weekNeedsRange } from "./week-needs";
 
 export { computeUseItUpSignals, signalFor, type UseItUpSignal } from "./use-it-up";
 export { findPastMealsByTitle, listPastMeals } from "./past-meals";
@@ -88,6 +90,19 @@ export async function getRecipe(db: Queryable, scope: KitchenScope, mealId: stri
   const kitchen = await loadKitchenEntities(db, scope.kitchenId);
   const ctx = await loadReadContext(db, scope.kitchenId, kitchen);
   return buildRecipeView(kitchen, mealId, ctx);
+}
+
+/**
+ * The week's missing ingredients (0045 KOS12): the preview the Add sheet shows, and what the
+ * add uses. `today` is the person's own day (their time zone); range defaults in `weekNeedsRange`.
+ */
+export async function getWeekNeeds(
+  db: Queryable,
+  scope: KitchenScope,
+  args: { today: string; from?: string; to?: string; includeUndated?: boolean },
+): Promise<WeekNeeds> {
+  const kitchen = await loadKitchenEntities(db, scope.kitchenId);
+  return computeWeekNeeds(kitchen, weekNeedsRange(args.today, args));
 }
 
 /** Change-set summaries after `sinceVersion`, oldest first: "Since your last visit". */
@@ -248,18 +263,20 @@ export async function wasApplied(db: Queryable, scope: KitchenScope, proposalId:
   return rows.length > 0;
 }
 
-/** One stored idea card's content, for writing its recipe; null if unknown here. */
+/** One stored idea card's content, for writing its recipe or refining it; null if unknown here. */
 export async function getIdea(
   db: Queryable,
   scope: KitchenScope,
   ideaId: string,
-): Promise<{ name: string; why: string; uses: string[]; missing: string[] } | null> {
+): Promise<{ name: string; why: string; uses: string[]; missing: string[]; notes?: string } | null> {
   const [row] = await db
-    .select({ name: mealIdeas.name, why: mealIdeas.why, uses: mealIdeas.uses, missing: mealIdeas.missing })
+    .select({ name: mealIdeas.name, why: mealIdeas.why, uses: mealIdeas.uses, missing: mealIdeas.missing, notes: mealIdeas.notes })
     .from(mealIdeas)
     .where(and(eq(mealIdeas.kitchenId, scope.kitchenId), eq(mealIdeas.id, ideaId)))
     .limit(1);
-  return row ?? null;
+  if (!row) return null;
+  const { notes, ...rest } = row;
+  return notes ? { ...rest, notes } : rest;
 }
 
 // ─── Batches and "use it up" (0025) ───────────────────────────────────────────────────

@@ -7,6 +7,15 @@
 import { createContext, useContext } from "react";
 import type { ApplyResult } from "@/contracts/apply-result";
 import type { ActionResult } from "@/app/actions";
+import type { ItemCategory, Location, ShoppingSource, StockLevel } from "@/contracts/common";
+
+/** What the edit sheet sends: only the parts that changed. `amount` "" or null clears it. */
+export interface ItemEditFields {
+  name?: string;
+  amount?: string | null;
+  place?: Location;
+  category?: ItemCategory;
+}
 
 export interface KitchenActions {
   kitchenId: string;
@@ -22,6 +31,32 @@ export interface KitchenActions {
   closeBatch(itemId: string, batchIds: string[]): Promise<ActionResult>;
   /** "Still have them": the older batches stay and the choice goes away (a soft change, no Undo). */
   keepOlderBatch(itemId: string, batchIds: string[]): Promise<ActionResult>;
+  /**
+   * Plenty · Some · Low · Out (KOS4). Without `batchId` it sets the whole item. One change set with
+   * Undo. `basedOnVersion`: the version the edit sheet opened at (a change made since → STALE_TARGET);
+   * omitted = the version on screen now.
+   */
+  setStockLevel(itemId: string, level: StockLevel, batchId?: string, basedOnVersion?: number): Promise<ActionResult>;
+  /** The edit sheet's Save (KOS3): name / amount / place / type, one change set, one Undo. */
+  editItem(itemId: string, edit: ItemEditFields, opts?: { batchId?: string; basedOnVersion?: number }): Promise<ActionResult>;
+  /** Remove (added by mistake), after the one confirm (0030). Undo brings it back. */
+  removeItem(itemId: string, opts?: { basedOnVersion?: number }): Promise<ActionResult>;
+  /** The item's Staple switch (KOS3, 0054). */
+  setItemStaple(itemId: string, staple: boolean, opts?: { basedOnVersion?: number }): Promise<ActionResult>;
+  /** One-tap adds to the shopping list, e.g. the Low/Out offer "Add rice to my list" (SL3), under the staple's store. */
+  addToList(source: ShoppingSource, items: { name: string; store?: string }[]): Promise<ActionResult>;
+  /** Smart staples (0054): add one or more, with an optional usual store (SS5). */
+  addStaples(items: { name: string; store?: string }[]): Promise<ActionResult>;
+  /** Store… on a staple: a store name, or null for "Anywhere". */
+  updateStaple(stapleId: string, store: string | null): Promise<ActionResult>;
+  /** Remove a staple: no confirmation, it has Undo. */
+  removeStaple(stapleId: string): Promise<ActionResult>;
+  /** Restock, and "Add these to my list" under a staples answer: one change set, one Undo. */
+  restockStaples(stapleIds: string[]): Promise<ActionResult>;
+  /** The one-time "You told me these before" offer (SS2, SS8); null = nothing to offer. */
+  loadStaplesOffer(): Promise<{ names: string[] } | null>;
+  /** "Add them" (true) or "Not now" (false). Either way it's never offered again (SS8). */
+  answerStaplesOffer(accept: boolean): Promise<ActionResult>;
   /** Show a saved button change now; `highlight` marks its rows New / Updated. */
   showOwn(result: ApplyResult, opts?: { highlight?: boolean }): void;
   /** Remember that you used this widget, so a phone reopens with it on top (ux.md §10). */

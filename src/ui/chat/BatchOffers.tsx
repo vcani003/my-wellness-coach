@@ -14,6 +14,7 @@
  *   and, for "Those are gone", the same one Undo, so a reload looks as it did live (tester re-run
  *   2026-10-14, step 28). Being redrawn, it never moves focus.
  */
+import { Appear, useAppear } from "@/ui/primitives/Appear";
 import { useFormatter, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApplyResult, AppliedOp, BatchOffer } from "@/contracts/apply-result";
@@ -123,6 +124,8 @@ function BatchOfferChoice({ offer, saved, onUndoStep }: { offer: BatchOffer; sav
   );
   const focusNext = useRef<"result" | "gone" | null>(null);
   const resultRef = useRef<HTMLParagraphElement>(null);
+  // An answer you just gave eases in (a saved one is just there; 0059 PF16).
+  const answerAppear = useAppear("fade");
   const goneRef = useRef<HTMLButtonElement>(null);
 
   // The buttons it replaces are gone, so focus moves to what took their place (never to <body>).
@@ -186,12 +189,14 @@ function BatchOfferChoice({ offer, saved, onUndoStep }: { offer: BatchOffer; sav
   if (phase.kind === "answered") {
     const lines = phase.result.applied.map((a) => formatMsg(a.summary));
     return (
-      <div data-batch-offer={offer.itemId} data-batch-answer={phase.choice} className="mt-2 flex flex-wrap items-center gap-2 border-t border-border-default pt-2">
+      <div data-batch-offer={offer.itemId} data-batch-answer={phase.choice} className="mt-2 flex flex-wrap items-center gap-2 border-t border-border-default pt-2" {...answerAppear}>
         <p ref={resultRef} tabIndex={-1} className="text-small outline-none">
           {lines.join(" · ")}
         </p>
         {phase.undo === "refused" && (
-          <p className="rounded-md bg-warning-bg px-3 py-2 text-small text-warning-text">{t("cantUndo")}</p>
+          <Appear as="p" kind="fade" className="rounded-md bg-warning-bg px-3 py-2 text-small text-warning-text">
+            {t("cantUndo")}
+          </Appear>
         )}
       </div>
     );
@@ -257,7 +262,7 @@ function BatchOfferChoice({ offer, saved, onUndoStep }: { offer: BatchOffer; sav
         </button>
       </div>
       {phase.kind === "idle" && phase.failed && (
-        <p className="rounded-md bg-error-bg px-3 py-2 text-small text-error-text">{t("batch.failed")}</p>
+        <Appear as="p" kind="fade" className="rounded-md bg-error-bg px-3 py-2 text-small text-error-text">{t("batch.failed")}</Appear>
       )}
     </div>
   );

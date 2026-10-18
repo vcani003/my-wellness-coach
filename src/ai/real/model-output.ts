@@ -19,14 +19,18 @@ const QuantityFact = z.object({
 });
 
 /**
- * Kitchen actions (add/update/use/remove, plus batch_gone and defrost for batches, 0025) and
+ * Kitchen actions (add/update/use/remove, level for how much is left (KOS4), plus batch_gone and
+ * defrost for batches, 0025) and
  * shopping-list actions (list_*, 0027). A list action never touches the kitchen; "I bought X" is a
  * kitchen add (the backend takes it off the list, SL5, and adds a batch when X is already there).
+ * staple_add / staple_remove (0054): only when the user says it, or says yes to Kitchen's offer
+ * to remember staples (SS2); code checks both (to-proposal.ts).
  */
 export const ModelAction = z.enum([
   "add",
   "update",
   "use",
+  "level",
   "remove",
   "batch_gone",
   "defrost",
@@ -35,10 +39,15 @@ export const ModelAction = z.enum([
   "list_tick",
   "list_untick",
   "list_remove",
+  "staple_add",
+  "staple_remove",
   "meal_choose",
   "meal_plan",
   "meal_start_cooking",
   "meal_done",
+  // 0045 KOS1: set or move a planned meal's day ("move the pasta to Friday"); clear it.
+  "meal_date",
+  "meal_clear_date",
 ]);
 export type ModelAction = z.infer<typeof ModelAction>;
 
@@ -53,7 +62,10 @@ export const ModelOp = z.object({
   quantity: QuantityFact.nullable(),
   location: z.object({ value: Location, ...meta }).nullable(),
   frozen: z.object({ value: z.boolean(), ...meta }).nullable(),
-  /** use: "low" (running low) or "out" (used up / out). */
+  /**
+   * use: "low" (running low) or "out" (used up / out). level (0045 KOS4): how much is left, said
+   * without a use: "plenty" / "some" (or "low" / "out").
+   */
   stock: z.object({ value: StockLevel, ...meta }).nullable(),
   /** use: how much was used, when said. */
   amountUsed: QuantityFact.nullable(),
@@ -63,7 +75,7 @@ export const ModelOp = z.object({
    * say; code then leaves the backend's default (the oldest first).
    */
   batch: BatchWhich.nullable(),
-  /** list_add / list_update: the store to buy it at, as said (SL1). */
+  /** list_add / list_update / staple_add: the store to buy it at, as said (SL1, 0054 SS5). */
   store: TextFact.nullable(),
   /**
    * meal_*: which meal. An idea label ("d2"), a meal label ("m1"), or "last_chosen" for "that" /
@@ -76,6 +88,12 @@ export const ModelOp = z.object({
    * here (absent = none) so older call sites stay unchanged; always present on the wire.
    */
   category: z.object({ value: ItemCategory, ...meta }).nullable().optional(),
+  /**
+   * meal_plan / meal_date (0045 KOS1): the day exactly as the user said it ("Tuesday", "tomorrow",
+   * "the 24th"). Code resolves it from the message's own day, never the model. Optional here
+   * (absent = none) so older call sites stay unchanged; always present on the wire ("" = none).
+   */
+  when: z.string().nullable().optional(),
 });
 export type ModelOp = z.infer<typeof ModelOp>;
 
@@ -96,13 +114,16 @@ export const ModelOutput = z.object({
    * Only when the previous Kitchen turn offered to add things to the shopping list and the user
    * now says yes: which offer it was. Code checks the offer really happened (0027, SL3).
    */
-  listOfferAccepted: z.enum(["staples", "stock-offer"]).nullable(),
+  listOfferAccepted: z.enum(["staples", "stock-offer", "week-plan"]).nullable(),
   /**
    * "What can I make?" → "ideas". A change to the open recipe ("no oven", "make it spicier") →
-   * "recipe_change" with `meal`. Code turns it into a follow-up after apply. Otherwise null.
+   * "recipe_change" with `meal`. Code turns it into a follow-up after apply. "What staples do I
+   * need?" / "restock" → "staples": code answers from the saved staples when there are any (0054
+   * SS6). "What are we eating this week?" → "week_plan"; "add what we need for this week's meals"
+   * → "week_needs" (0045 KOS1, KOS12): code answers or adds, from the plan. Otherwise null.
    */
   generate: z
-    .object({ what: z.enum(["ideas", "recipe_change"]), meal: z.string().nullable() })
+    .object({ what: z.enum(["ideas", "recipe_change", "staples", "week_plan", "week_needs"]), meal: z.string().nullable() })
     .nullable(),
   /**
    * A dish the user names themselves ("I was thinking a chicken curry…") that isn't an idea card
@@ -160,6 +181,8 @@ export const WireOp = z.object({
    * "none" means no category. The basis and confidence are then ignored.
    */
   category: z.object({ value: z.enum([...ItemCategory.options, "none"]), ...meta }),
+  /** KOS1: the day as said, "" when none (a plain string: no union). */
+  when: z.string(),
 });
 export type WireOp = z.infer<typeof WireOp>;
 
@@ -174,9 +197,9 @@ export const WireOutput = z.object({
   }),
   /** statement "" unless the user just accepted an offer to remember something. */
   rememberPreference: z.object({ statement: z.string(), evidence: z.string() }),
-  listOfferAccepted: z.enum(["staples", "stock-offer", "none"]),
-  /** what "none" (meal "") unless routing to ideas or a recipe change. */
-  generate: z.object({ what: z.enum(["ideas", "recipe_change", "none"]), meal: z.string() }),
+  listOfferAccepted: z.enum(["staples", "stock-offer", "week-plan", "none"]),
+  /** what "none" (meal "") unless routing to ideas, a recipe change, staples or the week. */
+  generate: z.object({ what: z.enum(["ideas", "recipe_change", "staples", "week_plan", "week_needs", "none"]), meal: z.string() }),
   /** title "" unless the user named a dish themselves (MI1). notes "" when none. */
   dish: z.object({ title: z.string(), notes: z.string(), evidence: z.string() }),
 });
@@ -215,6 +238,7 @@ export function fromWire(w: WireOutput): ModelOutput {
       store: op.store,
       meal: orNull(op.meal),
       ...(op.category.value === "none" ? {} : { category: { ...op.category, value: op.category.value } }),
+      ...(op.when.trim() ? { when: op.when } : {}),
     })),
     clarification: w.clarification.question === "" ? null : w.clarification,
     rememberPreference: w.rememberPreference.statement === "" ? null : w.rememberPreference,
@@ -243,6 +267,7 @@ export function toWire(o: ModelOutput): WireOutput {
       store: op.store,
       meal: orEmpty(op.meal),
       category: op.category ?? NO_CATEGORY,
+      when: op.when ?? "",
     })),
     clarification: o.clarification ?? { question: "", options: [] },
     rememberPreference: o.rememberPreference ?? { statement: "", evidence: "" },

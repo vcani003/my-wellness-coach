@@ -14,8 +14,10 @@ import {
   RecipeView,
   ReviewRow,
   ShoppingItemRow,
+  StapleRow,
   TickRow,
 } from "@/contracts/kitchen-state";
+import { stapleIdsForItem, stapleNeed, type NeedContext } from "@/shared/staples";
 import { actorRef, type NameDirectory } from "@/shared/identity";
 import { computeAllergenFlags } from "@/shared/profile/allergens";
 import type { Restriction } from "@/shared/profile/state";
@@ -84,19 +86,25 @@ function safeMap<T, R>(values: T[], fn: (v: T) => R, what: string): unknown[] {
 
 export function buildKitchenState(kitchen: KitchenEntities, ctx: ReadContext): KitchenState {
   const { names } = ctx;
+  const stapleNames = Object.values(kitchen.staples ?? {}).map((s) => ({ id: s.standardName, name: s.name.value, standardName: s.standardName }));
 
   const items = checked(
     ItemRow,
     safeMap(
       Object.values(kitchen.items).filter((i) => i.stock?.value !== "out"),
       // Open batches only, oldest first (0025); closed ones stay in history.
-      (i) => ({
-        ...i,
-        // CAT1: items saved before categories read as the kitchen's guess (never written back).
-        category: effectiveCategory(i, kitchen),
-        batches: openBatches(i).map((b) => ({ ...b, ...audit(b, names) })),
-        ...audit(i, names),
-      }),
+      (i) => {
+        // KOS3: the item's Staple switch reads this.
+        const [stapleId] = stapleIdsForItem({ name: i.name.value, standardName: i.standardName }, stapleNames);
+        return {
+          ...i,
+          // CAT1: items saved before categories read as the kitchen's guess (never written back).
+          category: effectiveCategory(i, kitchen),
+          batches: openBatches(i).map((b) => ({ ...b, ...audit(b, names) })),
+          ...(stapleId ? { stapleId } : {}),
+          ...audit(i, names),
+        };
+      },
       "item",
     ),
     "item",
@@ -195,7 +203,46 @@ export function buildKitchenState(kitchen: KitchenEntities, ctx: ReadContext): K
     "shopping",
   );
 
-  return { kitchenId: ctx.kitchenId, version: ctx.version, items, meals, plan, ticks, toReview, shoppingList };
+  // Staples (0054): each one's need is computed now from the kitchen and the list (SS3).
+  const needs = needContext(kitchen);
+  const staples = checked(
+    StapleRow,
+    safeMap(
+      Object.values(kitchen.staples ?? {}).sort(
+        (a, b) => a.createdAt.localeCompare(b.createdAt) || a.standardName.localeCompare(b.standardName),
+      ),
+      (s) => ({
+        id: s.standardName,
+        name: s.name,
+        standardName: s.standardName,
+        ...(s.store ? { store: s.store } : {}),
+        ...stapleNeed({ name: s.name.value, standardName: s.standardName }, needs),
+        ...audit(s, names),
+      }),
+      "staple",
+    ),
+    "staple",
+  );
+
+  return { kitchenId: ctx.kitchenId, version: ctx.version, items, meals, plan, ticks, toReview, shoppingList, staples };
+}
+
+/** What a staple's need is computed from (0054): items in the kitchen, items that are Out, the open list. */
+export function needContext(kitchen: KitchenEntities): NeedContext {
+  const all = Object.values(kitchen.items);
+  const isOpen = (i: (typeof all)[number]) => openBatches(i).length > 0;
+  return {
+    current: all.filter(isOpen).map((i) => ({
+      id: i.id,
+      name: i.name.value,
+      standardName: i.standardName,
+      ...(i.stock && i.stock.value !== "out" ? { stock: i.stock.value } : {}),
+    })),
+    out: all.filter((i) => !isOpen(i)).map((i) => ({ name: i.name.value, standardName: i.standardName })),
+    list: Object.values(kitchen.shopping)
+      .filter((e) => e.status === "open")
+      .map((e) => ({ id: e.id, name: e.name.value, standardName: e.standardName })),
+  };
 }
 
 /** The latest recipe for a meal, with item references resolved defensively. */
@@ -211,6 +258,7 @@ export function buildRecipeView(
       .filter((r) => r.mealId === mealId)
       .sort((a, b) => b.version - a.version)[0];
   if (!recipe) return null;
+  const finished = meal?.status === "done" || meal?.status === "cancelled";
   try {
     const view = {
       id: recipe.id,
@@ -220,10 +268,15 @@ export function buildRecipeView(
       text: recipe.text,
       ingredients: recipe.ingredients.map((ing) => {
         let item: { id: string; name: string } | { id: string; missing: true } | undefined;
-        if (ing.itemId) {
-          const found = kitchen.items[ing.itemId];
-          item = found ? { id: found.id, name: found.name.value } : { id: ing.itemId, missing: true };
+        const linked = ing.itemId ? kitchen.items[ing.itemId] : undefined;
+        if (ing.itemId && !linked) {
+          item = { id: ing.itemId, missing: true };
+        } else if (linked && (finished || linked.stock?.value !== "out")) {
+          // A Done or cancelled recipe is a record (0040 A2): it keeps the item it was cooked with.
+          item = { id: linked.id, name: linked.name.value };
         } else if (!ing.basic) {
+          // Not linked, or (a live meal) linked to an item that's Out since (0011: Out isn't in
+          // the kitchen): a current item of that name, else Need (0045 KOS12 found the Out case).
           const m = resolveItem({ name: ing.name }, kitchen);
           if (m.kind === "found" && m.item.stock?.value !== "out") item = { id: m.item.id, name: m.item.name.value };
         }

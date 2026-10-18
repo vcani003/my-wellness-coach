@@ -13,7 +13,7 @@ import { CheckIcon } from "@/ui/primitives/icons";
 import { useKitchenData } from "@/ui/sync/KitchenDataContext";
 import { AllergenBadge } from "./AllergenBadge";
 import { useMeals } from "./MealsContext";
-import type { IdeaCard, IdeaSet } from "./session";
+import type { IdeaCard, IdeaLine, IdeaSet } from "./session";
 
 export const MEAL_IDEAS_WIDGET_ID = "meals.ideas";
 
@@ -73,21 +73,26 @@ function IdeaCardView({ idea }: { idea: IdeaCard }) {
   const choosing = session.choosing[idea.ideaId];
   const list = new Intl.ListFormat(locale, { type: "conjunction" });
   const uses = idea.uses.map((id) => itemName(state?.items.find((i) => i.id === id)?.name.value, tAll, locale).toLocaleLowerCase(locale));
+  // A line a chat change just changed gets the recipe lines' brief highlight (ai.md §5); the key
+  // remounts it so a second change highlights again.
+  const hit = (line: IdeaLine) => idea.changed?.includes(line) ?? false;
+  const mark = (line: IdeaLine) => (hit(line) ? { "data-recipe-changed": "" } : {});
+  const key = (line: IdeaLine) => (hit(line) ? `${line}-${idea.changeKey}` : line);
 
   return (
     <li
       data-entity-id={idea.ideaId}
       className="card flex flex-col gap-2 px-5 py-4"
     >
-      <h3 className="text-title font-medium">
+      <h3 key={key("name")} {...mark("name")} className="text-title font-medium">
         {idea.name}
       </h3>
-      <p className="text-small">{idea.why}</p>
+      <p key={key("why")} {...mark("why")} className="text-small">{idea.why}</p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-2 text-small">
         <dt className="font-strong text-text-muted">{t("uses")}</dt>
-        <dd>{uses.length ? list.format(uses) : t("usesNone")}</dd>
+        <dd key={key("uses")} {...mark("uses")}>{uses.length ? list.format(uses) : t("usesNone")}</dd>
         <dt className="font-strong text-text-muted">{t("missing")}</dt>
-        <dd>{idea.missing.length ? list.format(idea.missing) : t("missingNone")}</dd>
+        <dd key={key("missing")} {...mark("missing")}>{idea.missing.length ? list.format(idea.missing) : t("missingNone")}</dd>
       </dl>
       <AllergenBadge flags={idea.allergenFlags} />
       {chosen ? (

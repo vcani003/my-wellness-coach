@@ -10,7 +10,7 @@
  */
 import { expect, request, test, type Page } from "@playwright/test";
 import { expectAccessible } from "../support/axe";
-import { cueShow, goTo } from "../support/places";
+import { cueShow, goTo, openChat } from "../support/places";
 
 const KITCHEN_ID = "test-kitchen-demo";
 const COOKIE = "dev_acting_as"; // DEV_ACTING_AS_COOKIE (src/lib/auth/current-user.ts)
@@ -20,6 +20,7 @@ async function resetAndActAs(page: Page, baseURL: string, userId: "demo-vero" | 
   expect(res.ok()).toBe(true);
   await page.context().addCookies([{ name: COOKIE, value: userId, url: baseURL }]);
   await page.goto("/");
+  await openChat(page);
 }
 
 const kitchen = (page: Page) => page.getByRole("region", { name: "Kitchen" });
@@ -94,9 +95,11 @@ test("journey steps 1–4: bought → Kitchen shows items → froze → Freezer 
 
 test("anything the stand-in doesn't understand gets a polite reply and changes nothing", async ({ page, baseURL }) => {
   await resetAndActAs(page, baseURL!, "demo-vero");
-  // ("What can I make tonight?" is understood now: meal ideas, P2 d.)
   await say(page, "Tell me a joke");
-  await expect(page.getByRole("log").getByText(/I'm a simple stand-in for now/)).toBeVisible();
+  await expect(page.getByRole("log").getByText(/I'm only the stand-in AI, so I just do simple kitchen updates/)).toBeVisible();
+  // A question needs the real AI (0059 PF10).
+  await say(page, "What can I make tonight?");
+  await expect(page.getByRole("log").getByText("That needs the real AI (Claude). I'm only the stand-in.")).toBeVisible();
   await expect(page.getByRole("region", { name: "What changed" })).toHaveCount(0);
   await expect(page.getByText("Your kitchen is empty", { exact: true })).toBeVisible();
 });
@@ -154,8 +157,9 @@ test.describe("phone dock", () => {
     // A reply that arrives while minimized shows the dot, named in words too.
     await fab.click();
     await expect(composer(page)).toBeFocused();
+    // Slow enough that Minimize lands first, even while the dock is still springing up (PF16).
     await page.route("**/api/chat", async (route) => {
-      await new Promise((r) => setTimeout(r, 800));
+      await new Promise((r) => setTimeout(r, 2000));
       await route.continue();
     });
     await say(page, "The eggs are running low");

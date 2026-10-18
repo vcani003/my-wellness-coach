@@ -15,9 +15,11 @@ What the user sees and does; no technology. Where an outstanding question matter
 You talk in the chat and watch things change in the workspace. The composer is always on screen (except Sign-in and Settings).
 
 **Phone (designed first).** The workspace fills the screen; the chat is **docked at the bottom**, about a third of the height, like the bottom panel in maps apps. Three states (UX3, 0017):
-- **Peek** (default): the latest reply, its receipt and the composer.
+- **Peek:** the latest reply, its receipt and the composer. Where chat goes when you open it.
 - **Full:** the whole conversation (Show chat, or drag the handle).
 - **Minimized:** the dock hides and the workspace gets the full screen. A round **chat button** floats bottom-right, with a dot when Kitchen has replied since you minimized; tapping it returns to Peek. It isn't draggable (**UX4** Rec).
+
+**At launch, chat starts Minimized on phone** (0059 PF3, amending UX3): only the chat button shows, and tapping it opens Peek. Desktop is unchanged: the chat column is open.
 
 With the keyboard open, the workspace shrinks but stays visible.
 

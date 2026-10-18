@@ -20,6 +20,8 @@ import type { StreamEvent } from "@/contracts/stream";
 import { undoChange } from "@/app/actions";
 import { chatReducer, initialChatState, type ChatState } from "./chat-reducer";
 import { readTurnStream } from "./stream";
+import { withTimeZone } from "@/ui/sync/time-zone";
+import { newId } from "@/shared/new-id";
 
 /** Messages per history page (the server's default, backend-data.md §6). */
 export const HISTORY_PAGE_SIZE = 30;
@@ -58,11 +60,14 @@ export interface TurnCallbacks {
   onTurnEnd(turn: { id?: string; reply: string; result: ApplyResult | null; error: Msg | null; changed: boolean }): void;
   /** Every stream event, for the widgets that follow it (meal ideas, recipes, "Update your kitchen"). */
   onEvent?(event: StreamEvent, id: string): void;
-  onUndone(result: ApplyResult): void;
+  /**
+   * Your Undo went through. `events`: what it shows besides the receipt (0052), to apply like a
+   * stream's: a recipe it put back, and idea cards that follow it. `key` names that "stream".
+   */
+  onUndone(result: ApplyResult, events: StreamEvent[], key: string): void;
   onUndoRefused(reason: Msg): void;
 }
 
-const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `m-${Date.now()}-${Math.random()}`);
 
 export function useChat(opts: {
   kitchenId: string;
@@ -89,7 +94,8 @@ export function useChat(opts: {
         res = await fetch("/api/chat", {
           method: "POST",
           headers: { "content-type": "application/json", accept: "application/x-ndjson" },
-          body: JSON.stringify({ kitchenId, clientMessageId: id, text }),
+          // The device time zone: "today" and "Tuesday" are the person's own days (0045 KOS1).
+          body: JSON.stringify({ kitchenId, clientMessageId: id, text, ...withTimeZone() }),
         });
         if (!res.ok || !res.body) throw new Error(`chat: ${res.status}`);
       } catch {
@@ -124,6 +130,14 @@ export function useChat(opts: {
               reply += event.delta;
               dispatch({ type: "text", id, delta: event.delta });
               break;
+            case "staples":
+              dispatch({ type: "staples", id, items: event.items });
+              break;
+            case "confirm": {
+              const { kind, count, names } = event;
+              dispatch({ type: "confirm", id, confirm: { kind, count, names } });
+              break;
+            }
             case "done":
               ended = true;
               dispatch({ type: "done", id });
@@ -187,7 +201,7 @@ export function useChat(opts: {
         });
         if (out.ok && out.result.applied.length > 0 && out.result.rejected.length === 0) {
           dispatch({ type: "undoDone", changeSetId });
-          cb.current.onUndone(out.result);
+          cb.current.onUndone(out.result, out.events ?? [], `undo:${changeSetId}:${newId()}`);
         } else {
           const reason = out.ok ? (out.result.rejected[0]?.reason ?? out.result.undoBlockedReason) : out.reason;
           const fallback: Msg = { code: "UNDO_CONFLICT", params: {}, text: "" };

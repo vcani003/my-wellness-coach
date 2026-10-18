@@ -7,6 +7,7 @@
 export { ArrowCounterClockwise as UndoIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 export { CaretDown as CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 export { CaretUp as CaretUpIcon } from "@phosphor-icons/react/dist/csr/CaretUp";
+export { CaretRight as CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 export { ChatCircleDots as ChatIcon } from "@phosphor-icons/react/dist/csr/ChatCircleDots";
 export { Check as CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 export { Minus as MinusIcon } from "@phosphor-icons/react/dist/csr/Minus";
@@ -30,8 +31,13 @@ export { ListChecks as ListIcon } from "@phosphor-icons/react/dist/csr/ListCheck
 export { Leaf as FridgeIcon } from "@phosphor-icons/react/dist/csr/Leaf";
 export { Snowflake as FreezerIcon } from "@phosphor-icons/react/dist/csr/Snowflake";
 export { Jar as PantryIcon } from "@phosphor-icons/react/dist/csr/Jar";
+// Counter (0030, KOS3): one piece of fruit, the counter's usual food (0057 KOS3-a), drawn like the
+// other single-object place icons (leaf, snowflake, jar; 0048).
+export { Orange as CounterIcon } from "@phosphor-icons/react/dist/csr/Orange";
 export { Question as UnknownPlaceIcon } from "@phosphor-icons/react/dist/csr/Question";
 export { Sparkle as SparkleIcon } from "@phosphor-icons/react/dist/csr/Sparkle";
 export { Repeat as MakeAgainIcon } from "@phosphor-icons/react/dist/csr/Repeat";
 export { ArrowRight as GoIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
+export { Basket as RestockIcon } from "@phosphor-icons/react/dist/csr/Basket";
+export { Plus as AddIcon } from "@phosphor-icons/react/dist/csr/Plus";
 export type { Icon as IconComponent } from "@phosphor-icons/react";

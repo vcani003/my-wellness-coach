@@ -16,19 +16,32 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLocale, useNow, useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, ViewTransition, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import {
+  acceptStaplesOffer,
+  addStaples,
+  addToShoppingList,
+  dismissStaplesOffer,
+  editItem,
   finishShopping,
+  loadStaplesOffer,
   makeAgain,
   queueShoppingForLater,
+  removeItem,
   removeShoppingListItem,
+  removeStaple,
   resolveToReview,
+  restockStaples,
+  setItemStaple,
+  setItemStockLevel,
   tickShoppingListItem,
   undoChange,
   untickShoppingListItem,
+  updateStaple,
 } from "@/app/actions";
 import { closeBatch, keepOlderBatch } from "@/app/batches/actions";
-import type { ChangeRef } from "@/contracts/apply-result";
+import { isListOfferOpen, type ChangeRef } from "@/contracts/apply-result";
 import type { ChatHistoryPage } from "@/contracts/chat-history";
 import type { KitchenState } from "@/contracts/kitchen-state";
 import { AnnouncerProvider, useAnnounce } from "@/ui/a11y/Announcer";
@@ -37,22 +50,27 @@ import { AskLumiProvider } from "@/ui/chat/AskLumi";
 import { Composer, type ComposerHandle } from "@/ui/chat/Composer";
 import { offersOf, openOlder, useBatchOfferWords } from "@/ui/chat/BatchOffers";
 import { useFormatMsg } from "@/ui/chat/format-msg";
+import { listOffersOf } from "@/ui/chat/ListOffers";
 import { LumiFace, MessageList } from "@/ui/chat/MessageList";
+import { StandInBadge } from "@/ui/chat/StandInBadge";
 import { useChat } from "@/ui/chat/useChat";
 import { cueTarget, parseLastPlace, placeForHost, placeForPath, resumePlace } from "@/ui/places/model";
 import { PlaceRetryProvider } from "@/ui/places/Place";
 import { PlaceMemoryProvider } from "@/ui/places/PlaceMemory";
 import { places, TODAY_PLACE_ID } from "@/ui/places/registry";
 import { CaretDownIcon, CaretUpIcon, ChatIcon, GoIcon, MinusIcon } from "@/ui/primitives/icons";
+import { Appear, AppearScope, useAppear } from "@/ui/primitives/Appear";
 import { ConfirmPromptProvider } from "@/ui/settings/ConfirmPrompt";
 import type { PendingConfirm } from "@/ui/settings/model";
 import { Dock } from "@/ui/shell/Dock";
+import { launchDock, type DockState } from "@/ui/shell/dock-state";
 import { Header, PLACE_TITLE_ID } from "@/ui/shell/Header";
 import { DESKTOP_QUERY, useMediaQuery } from "@/ui/shell/useMediaQuery";
 import { useKeyboardInset } from "@/ui/shell/viewport";
 import { KitchenActionsProvider, type KitchenActions } from "@/ui/sync/KitchenActionsContext";
 import { KitchenDataProvider, type ChangeMark } from "@/ui/sync/KitchenDataContext";
 import { useKitchenSync } from "@/ui/sync/useKitchenSync";
+import { useOnline } from "@/ui/sync/useOnline";
 import { useSharedCues } from "@/ui/sync/useSharedCues";
 import { useCueWords } from "@/ui/widgets/kitchen/cue-words";
 import { MEAL_IDEAS_WIDGET_ID } from "@/ui/widgets/meals";
@@ -61,6 +79,7 @@ import { fetchPastMeals, RecipeBoxProvider, type RecipeBoxActions } from "@/ui/w
 import { UpdateKitchenSheet } from "@/ui/widgets/meals/UpdateKitchenSheet";
 import { useMealsController } from "@/ui/widgets/meals/useMealsController";
 import { useTickQueue } from "@/ui/widgets/shopping/useTickQueue";
+import { newId } from "@/shared/new-id";
 
 export interface KitchenAppProps {
   kitchenId: string;
@@ -72,11 +91,26 @@ export interface KitchenAppProps {
   initialHistory?: ChatHistoryPage | null;
   /** Your allergies or diets someone else added that you haven't confirmed (AI7): the Today banner. */
   initialPendingConfirm?: PendingConfirm[];
+  /** The stand-in AI is answering, not Claude (0059 PF6): the chat says so. */
+  standInAI?: boolean;
   /** The route's page: a place, the Recipe or Settings. */
   children?: ReactNode;
 }
 
-export type DockState = "peek" | "full" | "minimized";
+/**
+ * Before hydration the server can't know the screen width, so the dock renders as "launch" and CSS
+ * picks the start state (0059 PF3): Minimized on phone (only the chat button), the open column on
+ * desktop. Once hydrated, the same rule is applied from the same breakpoint, so nothing flashes.
+ */
+type DockView = DockState | "launch";
+const noSubscribe = () => () => {};
+/** False while rendering on the server and hydrating; true after. */
+function useHydrated(): boolean {
+  return useSyncExternalStore(noSubscribe, () => true, () => false);
+}
+
+/** How long after the app opens before things animate (the launch state settles first; PF16). */
+const MOTION_SETTLE_MS = 400;
 
 /**
  * "Reopen where you left off" (ux.md §10: the list is waiting at the store). This phone keeps the
@@ -100,22 +134,6 @@ function placeToResume(): string | null {
   } catch {
     return null;
   }
-}
-
-/** Chat is online only (0044): Send is off while the phone has no connection. */
-function useOnline(): boolean {
-  return useSyncExternalStore(
-    (onChange) => {
-      window.addEventListener("online", onChange);
-      window.addEventListener("offline", onChange);
-      return () => {
-        window.removeEventListener("online", onChange);
-        window.removeEventListener("offline", onChange);
-      };
-    },
-    () => navigator.onLine,
-    () => true,
-  );
 }
 
 /** Unsent shopping ticks are sent on app open and when you're back online, wherever you are (SL4). */
@@ -147,6 +165,7 @@ function KitchenScreen({
   initialState,
   initialHistory = null,
   initialPendingConfirm = NO_PENDING,
+  standInAI = false,
   children,
 }: KitchenAppProps) {
   const t = useTranslations();
@@ -171,8 +190,17 @@ function KitchenScreen({
   const cueWords = useCueWords();
   const [marks, setMarks] = useState<Record<string, ChangeMark>>({});
   const [remoteIds, setRemoteIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [dock, setDock] = useState<DockState>("peek");
+  // Until you open, minimize or expand the chat, it follows the launch rule for this screen width.
+  const [chosenDock, setDock] = useState<DockState | null>(null);
+  const hydrated = useHydrated();
+  const dock: DockView = chosenDock ?? (hydrated ? launchDock(isDesktop) : "launch");
   const [newReply, setNewReply] = useState(false);
+  // Motion switches on a moment after the app settles, so opening it never animates (0059 PF16).
+  const [motion, setMotion] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setMotion(true), MOTION_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, []);
   const [turn, setTurn] = useState(0);
   const [cue, setCue] = useState<Cue | null>(null);
 
@@ -265,12 +293,21 @@ function KitchenScreen({
             const older = openOlder(offer, result.state);
             if (older.length) parts.push(batchWords(offer, older).question);
           }
+          // So is "Add fish sauce to my list" (SL3, 0054 SS10: Lumi no longer asks it in words).
+          for (const offer of listOffersOf(result.applied)) {
+            if (isListOfferOpen(offer, result.state)) parts.push(t("receipt.list.announce", { name: offer.name }));
+          }
         }
         announce(parts.filter(Boolean).join(" "));
         if (dockNow.current === "minimized") setNewReply(true);
       },
-      onUndone(result) {
+      onUndone(result, events, key) {
         sync.applyOwn(result.state);
+        // 0052: a recipe the Undo put back replaces the one shown, and its idea card follows it.
+        if (events.length) {
+          for (const e of events) meals.onEvent(e, key, "chat");
+          meals.onStreamEnd(key);
+        }
         setMarks(marksFrom(result));
         announce(t("receipt.announceUndone", { changes: result.applied.map((a) => formatMsg(a.summary, "plain")).join(", ") }));
       },
@@ -323,10 +360,11 @@ function KitchenScreen({
 
   // Buttons that change the kitchen without chat (the list's tick, Remove, Done shopping, To review).
   const actions = useMemo<KitchenActions>(() => {
-    const tap = () => ({
+    // `version`: the one an edit sheet opened at (KOS3), so a change made since is refused whole.
+    const tap = (version?: number) => ({
       kitchenId,
-      tapId: crypto.randomUUID(),
-      basedOnVersion: sync.getSnapshot().state?.version ?? 0,
+      tapId: newId(),
+      basedOnVersion: version ?? sync.getSnapshot().state?.version ?? 0,
     });
     return {
       kitchenId,
@@ -340,6 +378,22 @@ function KitchenScreen({
       undo: (changeSetId) => undoChange({ ...tap(), changeSetId }),
       closeBatch: (itemId, batchIds) => closeBatch({ ...tap(), itemId, batchIds }),
       keepOlderBatch: (itemId, batchIds) => keepOlderBatch({ ...tap(), itemId, batchIds }),
+      setStockLevel: (itemId, level, batchId, version) =>
+        setItemStockLevel({ ...tap(version), itemId, level, ...(batchId ? { batchId } : {}) }),
+      editItem: (itemId, edit, opts) =>
+        editItem({ ...tap(opts?.basedOnVersion), itemId, edit, ...(opts?.batchId ? { batchId: opts.batchId } : {}) }),
+      removeItem: (itemId, opts) => removeItem({ ...tap(opts?.basedOnVersion), itemId }),
+      setItemStaple: (itemId, staple, opts) => setItemStaple({ ...tap(opts?.basedOnVersion), itemId, staple }),
+      addToList: (source, items) => addToShoppingList({ ...tap(), source, items }),
+      addStaples: (items) => addStaples({ ...tap(), items }),
+      updateStaple: (stapleId, store) => updateStaple({ ...tap(), stapleId, store }),
+      removeStaple: (stapleId) => removeStaple({ ...tap(), stapleId }),
+      restockStaples: (stapleIds) => restockStaples({ ...tap(), stapleIds }),
+      loadStaplesOffer: () => loadStaplesOffer({ kitchenId }),
+      answerStaplesOffer: (accept) => {
+        const { kitchenId: k, basedOnVersion } = tap();
+        return (accept ? acceptStaplesOffer : dismissStaplesOffer)({ kitchenId: k, basedOnVersion });
+      },
       showOwn(result, opts) {
         sync.applyOwn(result.state);
         if (opts?.highlight) setMarks(marksFrom(result));
@@ -355,7 +409,7 @@ function KitchenScreen({
     () => ({
       listPastMeals: (q) => fetchPastMeals(kitchenId, q),
       makeAgain: (fromMealId) =>
-        makeAgain({ kitchenId, tapId: crypto.randomUUID(), basedOnVersion: sync.getSnapshot().state?.version ?? 0, fromMealId }),
+        makeAgain({ kitchenId, tapId: newId(), basedOnVersion: sync.getSnapshot().state?.version ?? 0, fromMealId }),
     }),
     [kitchenId, sync],
   );
@@ -410,14 +464,17 @@ function KitchenScreen({
     const header = headerRef.current;
     const bottom = bottomRef.current;
     if (!header || !bottom) return;
+    const nav = bottom.querySelector<HTMLElement>(".dock-nav");
     const update = () => {
       root.style.setProperty("--topbar-height", `${header.offsetHeight}px`);
       root.style.setProperty("--dock-height", `${isDesktop ? 0 : bottom.offsetHeight}px`);
+      root.style.setProperty("--nav-height", `${isDesktop || !nav ? 0 : nav.offsetHeight}px`);
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(header);
     ro.observe(bottom);
+    if (nav) ro.observe(nav);
     return () => ro.disconnect();
   }, [dock, isDesktop]);
 
@@ -431,17 +488,32 @@ function KitchenScreen({
 
   /** Open the chat with text in the composer (Use my own recipe, Edit note in Settings). */
   const fillComposer = (text: string) => {
-    if (dockNow.current === "minimized") changeDock("peek");
+    if (dockNow.current === "minimized" || dockNow.current === "launch") changeDock("peek");
     composerRef.current?.fill(text);
   };
 
   const changeDock = (next: DockState, focus: "fab" | "composer" | null = null) => {
     focusAfterDock.current = focus;
     if (next !== "minimized") setNewReply(false);
+    // Peek <-> Full on a phone: the chat's top edge slides (a view transition, globals.css); where
+    // the browser has none, or it fails, it just changes.
+    const prev = dockNow.current;
+    const morph = !isDesktop && ((prev === "peek" && next === "full") || (prev === "full" && next === "peek"));
+    if (morph && motion && typeof document.startViewTransition === "function") {
+      try {
+        document.startViewTransition(() => flushSync(() => setDock(next)));
+        return;
+      } catch {
+        // Fall through: change without the motion.
+      }
+    }
     setDock(next);
   };
 
+  // One key per place (and per page outside the places: Settings, a Recipe), for the cross-fade.
+  const placeKey = current?.id ?? pathname ?? "";
   const phoneFull = !isDesktop && dock === "full";
+  const chatOpen = dock !== "minimized" && dock !== "launch";
   const cuePlace = cue ? places.find((p) => p.id === cue.placeId) : null;
   const cueText = cue && cuePlace ? (cue.kind === "ideas" ? t("cue.ideas") : t("cue.updated", { place: t(cuePlace.titleKey) })) : null;
 
@@ -481,8 +553,9 @@ function KitchenScreen({
     <PlaceRetryProvider value={() => void sync.refresh()}>
     <PlaceMemoryProvider>
     <ConfirmPromptProvider initial={initialPendingConfirm} fillComposer={fillComposer}>
+    <AppearScope>
       <TickQueueFlusher />
-      <div className="app-shell min-h-dvh" data-chat={dock === "minimized" ? "minimized" : "open"}>
+      <div className="app-shell min-h-dvh" data-chat={dock === "minimized" || dock === "launch" ? dock : "open"} data-motion={motion ? "" : undefined}>
         <a href="#workspace" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-surface-raised focus:p-2">
           {t("app.skipToWorkspace")}
         </a>
@@ -499,10 +572,18 @@ function KitchenScreen({
           sync={snapshot.status}
           online={online}
           settingsOpen={settingsOpen}
+          standInAI={standInAI}
         />
 
         <main id="workspace" tabIndex={-1} aria-label={t("workspace.label")} inert={phoneFull} className="stage px-4 pt-4 outline-none desk:px-7 desk:pt-6">
-          {children}
+          {/*
+            Switching places cross-fades (0059 PF16): navigations are transitions, so React runs a
+            view transition where the browser has one (globals.css .place-in / .place-out); the
+            content also rises in (.place-enter). Elsewhere it just changes.
+          */}
+          <ViewTransition key={placeKey} enter="place-in" exit="place-out" default="none">
+            {children}
+          </ViewTransition>
         </main>
         <UpdateKitchenSheet />
 
@@ -512,6 +593,8 @@ function KitchenScreen({
             tabIndex={-1}
             aria-label={t("chat.label")}
             data-dock={dock}
+            // Hidden (and, while it drops away, not tappable or focusable): 0059 PF16.
+            inert={dock === "minimized"}
             className="chat-dock flex flex-col rounded-t-sheet bg-surface-default shadow-dock desk:rounded-none desk:border-l-2 desk:border-border-default desk:shadow-none"
           >
             <h2 className="sr-only">{t("chat.heading")}</h2>
@@ -533,13 +616,14 @@ function KitchenScreen({
               <p aria-hidden="true" className="hidden font-heading text-title font-medium desk:block">
                 {t("chat.heading")}
               </p>
+              {standInAI && <StandInBadge className="min-w-0 truncate desk:ml-2" />}
               <button type="button" aria-label={t("chat.minimize")} onClick={() => changeDock("minimized", "fab")} className="btn-icon ml-auto">
                 <MinusIcon aria-hidden="true" className="size-icon" />
               </button>
             </div>
 
             {cueText && cuePlace && (
-              <p data-cue={cuePlace.id} className="mx-4 mb-1 flex items-center gap-2 rounded-md bg-highlight-bg py-1 pl-3 text-small font-strong text-highlight-text">
+              <CueLine key={cuePlace.id} placeId={cuePlace.id}>
                 <span className="flex-1">{cueText}</span>
                 <Link
                   href={cuePlace.href}
@@ -553,7 +637,7 @@ function KitchenScreen({
                   {t("cue.show")}
                   <GoIcon aria-hidden="true" className="size-icon-sm" />
                 </Link>
-              </p>
+              </CueLine>
             )}
 
             <div id="chat-log" ref={logRef} className="chat-log relative min-h-0 flex-1 overflow-y-auto px-4 pt-1 pb-2 desk:pt-3">
@@ -569,7 +653,11 @@ function KitchenScreen({
             </div>
 
             <div className="composer-area px-4 pt-2">
-              {!online && <p className="mb-2 text-small text-text-muted">{t("chat.offline")}</p>}
+              {!online && (
+                <Appear as="p" kind="fade" className="mb-2 text-small text-text-muted">
+                  {t("chat.offline")}
+                </Appear>
+              )}
               <Composer ref={composerRef} busy={chat.state.busy || !online} onSend={send} />
             </div>
           </section>
@@ -580,21 +668,25 @@ function KitchenScreen({
           }} />
         </div>
 
-        {dock === "minimized" && (
-          <button
-            ref={fabRef}
-            type="button"
-            onClick={() => changeDock("peek", "composer")}
-            aria-label={newReply ? t("chat.openChatNewReply") : t("chat.openChat")}
-            className="chat-fab btn btn-primary fixed right-4 z-30 size-fab p-0 shadow-fab"
-          >
-            <ChatIcon aria-hidden="true" className="size-icon-lg" />
-            {newReply && (
-              <span aria-hidden="true" className="absolute top-1 right-1 size-dot rounded-full bg-accent-text ring-2 ring-surface-raised" />
-            )}
-          </button>
-        )}
+        {/* Always mounted, so it can pop in and shrink away (0059 PF16); hidden = display: none + inert. */}
+        <button
+          ref={fabRef}
+          data-launch={dock === "launch" ? "" : undefined}
+          data-hidden={chatOpen ? "" : undefined}
+          inert={chatOpen}
+          aria-hidden={chatOpen || undefined}
+          type="button"
+          onClick={() => changeDock("peek", "composer")}
+          aria-label={newReply ? t("chat.openChatNewReply") : t("chat.openChat")}
+          className="chat-fab btn btn-primary fixed right-4 z-30 size-fab p-0 shadow-fab"
+        >
+          <ChatIcon aria-hidden="true" className="size-icon-lg" />
+          {newReply && (
+            <span aria-hidden="true" className="absolute top-1 right-1 size-dot rounded-full bg-accent-text ring-2 ring-surface-raised" />
+          )}
+        </button>
       </div>
+    </AppearScope>
     </ConfirmPromptProvider>
     </PlaceMemoryProvider>
     </PlaceRetryProvider>
@@ -603,5 +695,15 @@ function KitchenScreen({
     </MealsProvider>
     </KitchenDataProvider>
     </KitchenActionsProvider>
+  );
+}
+
+/** "Kitchen updated · Show": eases in under the chat's top row (0059 PF16). */
+function CueLine({ placeId, children }: { placeId: string; children: ReactNode }) {
+  const appear = useAppear("rise");
+  return (
+    <p data-cue={placeId} className="mx-4 mb-1 flex items-center gap-2 rounded-md bg-highlight-bg py-1 pl-3 text-small font-strong text-highlight-text" {...appear}>
+      {children}
+    </p>
   );
 }

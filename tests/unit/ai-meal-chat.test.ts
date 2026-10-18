@@ -11,7 +11,9 @@ import { createRealInterpreter, type MessagesApi } from "@/ai/real";
 import { toWire, type ModelOp, type ModelOutput } from "@/ai/real/model-output";
 import { WHICH_MEAL, WHICH_RECIPE } from "@/ai/real/meal-ops";
 import { PROMPT_VERSION } from "@/ai/real/prompt";
-import { createFakeMealAI } from "@/ai/fake/meals";
+import { fakeInterpreter, STAND_IN_DECLINE_REPLY } from "@/ai/fake";
+import { createScriptedMealAI } from "../support/scripted-ai/meals";
+import { scriptedInterpreter } from "../support/scripted-ai/interpreter";
 import type { InterpretRequest, TurnFollowUp } from "@/ai/interpreter";
 import { kitchen, mealContext, NOW, SHRIMP_KITCHEN } from "@/ai/eval/fixtures";
 import { MemoryKitchen } from "../support/memory-kitchen";
@@ -83,7 +85,7 @@ describe("what the model sees", () => {
     const user = body.messages[0].content as string;
     expect(user).toContain("<meal_ideas>\nd1: Spinach omelette\nd2: Shrimp fried rice\nd3: Lime rice\n</meal_ideas>");
     expect(user).toContain("m1: Lime rice · cooking · has recipe");
-    expect(PROMPT_VERSION).toBe("interpret-2026-10-15.2");
+    expect(PROMPT_VERSION).toBe("interpret-2026-10-17.2");
     const system = body.system as Anthropic.Beta.Messages.BetaTextBlockParam[];
     expect(system[0].text).toContain("# Meals (ideas, choosing, plan, cooking)");
     expect(system[0].text).not.toContain("Shrimp fried rice"); // nothing per-request in the cached prefix
@@ -181,7 +183,7 @@ describe("the journey through the real kitchen validator (0005: ideas → recipe
       { type: "item.add", fields: { name: { value: "spinach", basis: "said", confidence: "high" } } },
       { type: "item.add", fields: { name: { value: "limes", basis: "said", confidence: "high" } } },
     ]);
-    const meals = createFakeMealAI(() => NOW);
+    const meals = createScriptedMealAI(() => NOW);
     const ctx = () => ({ ...mealContext([]), kitchenId: k.kitchenId, userId: "vero", state: k.state() });
 
     // 1. ideas → stored so they can be chosen
@@ -222,16 +224,28 @@ describe("the journey through the real kitchen validator (0005: ideas → recipe
   });
 });
 
-describe("the fake interpreter routes meals with the same code (for repeatable e2e)", () => {
+describe("the scripted test double routes meals with the same code as the real one", () => {
   it("'what can I make?' → ideas follow-up; 'the second one' → meal.choose + recipe; nothing chosen → 'Which one?'", async () => {
-    const { fakeInterpreter } = await import("@/ai/fake");
-    const ideas = await fakeInterpreter.interpret(req("What can I make tonight?"));
+    const ideas = await scriptedInterpreter.interpret(req("What can I make tonight?"));
     expect(ideas.followUps).toEqual([{ kind: "ideas", request: "What can I make tonight?" }]);
 
-    const chose = await fakeInterpreter.interpret(req("the second one"));
+    const chose = await scriptedInterpreter.interpret(req("the second one"));
     expect(chose.proposal?.operations).toEqual([{ opId: "msg-1:meal1", type: "meal.choose", target: { ideaId: "idea-b" }, evidence: "the second one" }]);
     expect(chose.followUps).toEqual([{ kind: "recipe", meal: { chooseOpId: "msg-1:meal1" } }]);
 
+    const which = await scriptedInterpreter.interpret(req("add that to my meal plan"));
+    expect(which).toMatchObject({ kind: "clarify", reply: WHICH_MEAL, proposal: { operations: [] } });
+  });
+});
+
+describe("the stand-in AI (0059 PF10)", () => {
+  it("meal ideas and picking an idea card need the real AI: the decline line, no follow-up", async () => {
+    for (const text of ["What can I make tonight?", "any other ideas?", "the second one"]) {
+      expect(await fakeInterpreter.interpret(req(text)), text).toEqual({ kind: "answer", proposal: null, reply: STAND_IN_DECLINE_REPLY });
+    }
+  });
+
+  it("'add that to my meal plan' still works on the last chosen meal (or asks which)", async () => {
     const which = await fakeInterpreter.interpret(req("add that to my meal plan"));
     expect(which).toMatchObject({ kind: "clarify", reply: WHICH_MEAL, proposal: { operations: [] } });
   });

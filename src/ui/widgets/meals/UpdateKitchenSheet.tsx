@@ -13,7 +13,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { useAnnounce } from "@/ui/a11y/Announcer";
 import { sentenceCase } from "@/ui/fallbacks";
-import { Dialog } from "@/ui/primitives/Dialog";
+import { Dialog, SheetBackdrop, SheetPopup } from "@/ui/primitives/Dialog";
 import { KITCHEN_WIDGET_ID } from "@/ui/widgets/kitchen";
 import { ChoiceRadio } from "@/ui/primitives/RadioGroup";
 import { useKitchenData } from "@/ui/sync/KitchenDataContext";
@@ -43,7 +43,7 @@ export function UpdateKitchenSheet() {
   return (
     <Dialog.Root open={Boolean(request)} onOpenChange={(open) => !open && dismissRef.current()}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-40 bg-scrim" />
+        <SheetBackdrop />
         {shown && <SheetBody key={`${shown.mealId}:${shown.reviewId ?? ""}`} request={shown} dismissRef={dismissRef} finalFocus={finalFocus} />}
       </Dialog.Portal>
     </Dialog.Root>
@@ -163,10 +163,10 @@ function SheetBody({
   ];
 
   return (
-    <Dialog.Popup
+    <SheetPopup
       finalFocus={finalFocus}
       aria-describedby={failed ? errorId : undefined}
-      className="sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-pop desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
+      className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col gap-3 rounded-t-sheet bg-surface-raised px-5 pt-5 pb-[max(1rem,env(safe-area-inset-bottom))] desk:inset-x-auto desk:top-1/2 desk:bottom-auto desk:left-1/2 desk:w-[30rem] desk:-translate-x-1/2 desk:-translate-y-1/2 desk:rounded-sheet"
     >
       <div>
         <Dialog.Title className="font-heading text-title font-medium">{t("title")}</Dialog.Title>
@@ -219,6 +219,6 @@ function SheetBody({
           {t("skip")}
         </button>
       </div>
-    </Dialog.Popup>
+    </SheetPopup>
   );
 }

@@ -38,6 +38,7 @@
       "fridge": "Fridge",
       "freezer": "Freezer",
       "pantry": "Pantry",
+      "counter": "Counter",
       "unknown": "Not sure where"
     },
     "empty": "Your kitchen is empty. Tell me what you've got.",
@@ -47,17 +48,61 @@
     "stale": "Offline · showing your kitchen as of {time}",
     "addedDaysAgo": "{days, plural, =0 {added today} =1 {added yesterday} other {added # days ago}}",
     "low": "Running low",
+    "level": {
+      "plenty": "Plenty",
+      "some": "Some left",
+      "low": "Running low",
+      "out": "Out"
+    },
+    "edit": {
+      "open": "Edit {name}",
+      "title": "Edit {name}",
+      "saving": "Saving…",
+      "nameLabel": "Name",
+      "amountLabel": "Amount (optional)",
+      "amountLabelOldest": "Amount of the oldest batch (optional)",
+      "amountHint": "Leave it empty if you're not sure.",
+      "nameRequired": "Give it a name.",
+      "nameTooLong": "That name's a bit long. Keep it under {max} characters.",
+      "amountTooLong": "Keep the amount under {max} characters.",
+      "levelLabel": "How much is left?",
+      "levelHint": "Saved as soon as you pick it.",
+      "levelSaved": "Saved",
+      "placeLabel": "Where is it?",
+      "now": "now",
+      "typeLabel": "What kind of thing is it?",
+      "stapleLabel": "Staple",
+      "stapleHint": "Staples show up in Restock staples on your list.",
+      "batchLabel": "Which batch?",
+      "batchAll": "All {count} batches",
+      "batchHint": "How much is left, the amount and the place change the batch you pick.",
+      "batchAddedBy": "added by {name}",
+      "batchAddedByYou": "added by you",
+      "remove": "Remove (added by mistake)",
+      "removeTitle": "Remove {name}?",
+      "removeBody": "It'll stay in history.",
+      "removeConfirm": "Remove",
+      "cancel": "Cancel",
+      "close": "Close",
+      "done": "Done",
+      "save": "Save",
+      "failed": "I couldn't save that, so nothing changed.",
+      "offline": "You're offline. Changes need a connection.",
+      "conflict": "{who} just changed {name}, so nothing changed. Here's the latest.",
+      "gone": "{name} isn't in the kitchen any more.",
+      "announce": "Done. {changes}",
+      "you": "You",
+      "removed": "Removed"
+    },
     "opened": "Opened",
     "frozen": "Frozen",
     "defrosted": "Defrosted",
     "batches": {
       "summary": "{count} batches · oldest {days, plural, =0 {added today} =1 {1 day} other {# days}}",
-      "listLabel": "{name}: batches, oldest first",
       "added": "Added {date}",
       "defrostedOn": "Defrosted {date}",
       "addedBy": "Added by {name}",
-      "addedByYou": "Added by you",
-      "viewOnly": "To change these, tell me in chat."
+      "addedByYou": "Added by you"
     },
     "new": "New",
     "updated": "Updated",
@@ -78,6 +123,7 @@
         "ITEM_RECORDED": "added {name}",
         "ITEM_BATCH_ADDED": "added more {name}",
         "ITEM_UPDATED": "updated the {name}",
+        "ITEM_RENAMED": "renamed {from} to {name}",
         "ITEM_MOVED": "moved the {name} to the {location}",
         "ITEM_CATEGORY": "put the {name} under {categoryName}",
         "CATEGORY_REMEMBERED": "filed {name} under {categoryName} for next time",
@@ -86,6 +132,8 @@
         "ITEM_USED_RECORDED": "used {name}",
         "ITEM_LOW": "marked the {name} running low",
         "ITEM_OUT": "used up the {name}",
+        "ITEM_PLENTY": "marked plenty of {name}",
+        "ITEM_SOME": "marked some {name} left",
         "ITEM_REMOVED": "removed the {name}",
         "ITEM_BATCH_USED_UP": "finished a batch of {name}",
         "ITEM_BATCH_GONE": "cleared out older {name}",
@@ -97,10 +145,19 @@
         "SHOPPING_TICKED": "got {name}",
         "SHOPPING_REMOVED": "took {name} off the shopping list",
         "SHOPPING_DONE": "put away {count, plural, one {# thing} other {# things}} from the shopping list",
+        "STAPLE_ADDED": "made {name} a staple",
+        "STAPLE_ADDED_STORE": "made {name} a staple",
+        "STAPLE_STORE": "changed where {name} usually comes from",
+        "STAPLE_STORE_CLEARED": "changed where {name} usually comes from",
+        "STAPLE_REMOVED": "took {name} off the staples",
         "MEAL_CHOSEN": "chose {title}",
         "MEAL_PLANNED": "added {title} to the meal plan",
+        "MEAL_PLANNED_FOR": "planned {title} for {day}",
+        "MEAL_DATE_SET": "moved {title} to {day}",
+        "MEAL_DATE_CLEARED": "took the day off {title}",
         "MEAL_STATUS": "{status, select, cooking {started cooking {title}} done {made {title}} cancelled {cancelled {title}} other {updated {title}}}",
         "RECIPE_SAVED": "saved a recipe for {title}",
+        "RECIPE_UPDATED": "updated the {title} recipe",
         "MEAL_MADE_AGAIN": "chose {title} to make again",
         "other": "made a change"
       }
@@ -126,7 +183,7 @@
       "viewLabel": "Group items",
       "byPlace": "By place",
       "byType": "By type",
-      "sortedHint": "Lumi sorted these herself. To move one, tell me in chat, like “fish sauce goes under sauces”.",
+      "sortedHint": "Lumi sorted these herself. Tap one to change its type.",
       "matches": "{count, plural, one {# match} other {# matches}}",
       "noMatches": "No matches for “{query}”",
       "noMatchesHint": "Try another word, or ask Lumi in chat."
@@ -154,6 +211,8 @@
     "minimize": "Minimize chat",
     "openChat": "Open chat",
     "openChatNewReply": "Open chat, new reply",
+    "standIn": "Stand-in AI · not Claude",
+    "standInDetail": "Replies are canned, for testing.",
     "kitchenUpdated": "Kitchen updated",
     "messagesLabel": "Conversation",
     "you": "You",
@@ -182,7 +241,12 @@
     "earlierError": "Couldn't load earlier messages. Try again.",
     "earlierShown": "{count, plural, one {# earlier message shown.} other {# earlier messages shown.}}",
     "startOfChat": "That's the start of your chat.",
-    "offline": "You're offline. Chat comes back when you are; ticks and buttons still work."
+    "offline": "You're offline. Chat comes back when you are; ticks and buttons still work.",
+    "confirm": {
+      "label": "Remove {count} things?",
+      "yes": "Yes, remove them",
+      "no": "No, keep them"
+    }
   },
   "receipt": {
     "title": "What changed",
@@ -205,6 +269,15 @@
       "goneLabel": "Those are gone: {which}",
       "saving": "Saving…",
       "failed": "I couldn't save that, so nothing changed. Try again."
+    },
+    "list": {
+      "addLabel": "Add {name} to my list",
+      "addShort": "Add to my list",
+      "staple": "{name} is one of your staples ·",
+      "adding": "Adding…",
+      "onList": "{name} is on your list.",
+      "failed": "I couldn't add that to your list. Try again.",
+      "announce": "You can add {name} to your list from What changed."
     }
   },
   "fallback": {
@@ -216,12 +289,14 @@
   "location": {
     "fridge": "fridge",
     "freezer": "freezer",
-    "pantry": "pantry"
+    "pantry": "pantry",
+    "counter": "counter"
   },
   "msg": {
     "ITEM_ADDED": "Added {name}",
     "ITEM_RESTOCKED": "Added {name} (back in stock)",
     "ITEM_UPDATED": "Updated {name}",
+    "ITEM_RENAMED": "Renamed {from} → {name}",
     "ITEM_MOVED": "{name} → {location}",
     "ITEM_CATEGORY": "{name} → {categoryName}",
     "CATEGORY_REMEMBERED": "I'll put {name} under {categoryName} from now on",
@@ -229,6 +304,8 @@
     "ITEM_USED": "Used {name}",
     "ITEM_LOW": "{name}: running low",
     "ITEM_OUT": "{name}: out",
+    "ITEM_PLENTY": "{name}: plenty",
+    "ITEM_SOME": "{name}: some left",
     "ITEM_RECORDED": "{name} wasn't in your kitchen, so I added it",
     "ITEM_USED_RECORDED": "{name} wasn't in your kitchen; noted it as used",
     "ITEM_REMOVED": "Removed {name}",
@@ -265,13 +342,26 @@
     "SHOPPING_NOT_FOUND": "{name} isn't on the shopping list",
     "SHOPPING_DONE": "Put {count} things from the shopping list in your kitchen: {names}",
     "SHOPPING_REVIEW_QUEUED": "Saved for later in To review: {names}",
+    "STAPLE_ADDED": "{name} is one of your staples now",
+    "STAPLE_ADDED_STORE": "{name} is one of your staples now ({store})",
+    "STAPLE_ALREADY": "{name} is already one of your staples",
+    "STAPLE_STORE": "{name}: usually from {store}",
+    "STAPLE_STORE_CLEARED": "{name}: from anywhere",
+    "STAPLE_REMOVED": "{name} isn't a staple any more",
+    "STAPLE_NOT_FOUND": "{name} isn't one of your staples",
     "NOT_ON_LIST": "{name} isn't on the shopping list any more",
     "NOT_TICKED": "{name} isn't ticked yet",
     "MEAL_CHOSEN": "Chose {title}",
     "MEAL_PLANNED": "Added {title} to the meal plan",
+    "MEAL_PLANNED_FOR": "Planned {title} for {day}",
+    "MEAL_DATE_SET": "Moved {title} to {day}",
+    "MEAL_DATE_CLEARED": "{title}: no day set",
+    "DATE_OUT_OF_WINDOW": "{day} is outside the plan. Pick a day from yesterday to 3 weeks ahead.",
+    "WEEK_NEEDS_NONE": "Nothing to add: you have what those meals need",
     "MEAL_STATUS": "{title}: {status}",
     "MEAL_NOTE_SAVED": "Saved a note on {title}",
     "RECIPE_SAVED": "Saved the recipe for {title}",
+    "RECIPE_UPDATED": "Updated the {title} recipe",
     "MEAL_MADE_AGAIN": "Making {title} again",
     "ALREADY_MAKING": "{title} is already in your plan",
     "RECIPE_LOCKED": "{title} is finished, so its recipe stays as it was. Make it again to change it.",
@@ -286,6 +376,7 @@
     "FORMER_MEMBER_PROFILE": "Changed a former member's profile"
   },
   "msgPlain": {
+    "ITEM_RENAMED": "Renamed {from} to {name}",
     "ITEM_MOVED": "{name} moved to the {location}",
     "SHOPPING_STORE": "{name} moved to {store} on your list",
     "ITEM_CATEGORY": "{name} now under {categoryName}"
@@ -293,7 +384,8 @@
   "msgIcu": {
     "ITEM_BATCH_USED_UP": "{name}: finished a batch ({left, plural, one {# batch left} other {# batches left}})",
     "ITEM_BATCH_GONE": "{name}: those are gone ({left, plural, one {# batch left} other {# batches left}})",
-    "ITEM_BATCH_ADDED": "Added {name} ({batches} batches){closedOldest, select, true {; the oldest batch is closed} other {}}{fromList, select, true { and took it off the shopping list} other {}}"
+    "ITEM_BATCH_ADDED": "Added {name} ({batches} batches){closedOldest, select, true {; the oldest batch is closed} other {}}{fromList, select, true { and took it off the shopping list} other {}}",
+    "RECIPE_UPDATED": "Updated the {title} recipe{what, select, removed {: removed {removed}} added {: added {added}} both {: removed {removed}, added {added}} other {}}"
   },
   "unlock": {
     "pageTitle": "Unlock · Kitchen",
@@ -424,6 +516,67 @@
       "skip": "Skip"
     }
   },
+  "staples": {
+    "restock": "Restock staples",
+    "offline": "Back online to restock",
+    "title": "Restock staples",
+    "description": "Pick what to add to your list",
+    "close": "Close",
+    "need": "Need",
+    "have": "You have some",
+    "onList": "On your list",
+    "status": {
+      "out": "Out",
+      "low": "Running low",
+      "missing": "Not in yet",
+      "some": "Some left",
+      "plenty": "Plenty",
+      "have": "In your kitchen",
+      "onList": "On your list"
+    },
+    "checkLabel": "{name}, {status}, add to list",
+    "allStocked": "All your staples are stocked.",
+    "add": "{count, plural, =0 {Add to my list} other {Add # to my list}}",
+    "adding": "Adding…",
+    "addFailed": "Couldn't add those, so nothing changed.",
+    "tryAgain": "Try again",
+    "edit": "Edit staples",
+    "editTitle": "Edit staples",
+    "editDescription": "Your kitchen's usual things, shared by everyone in it.",
+    "backToRestock": "Back to restock",
+    "listLabel": "Your staples",
+    "empty": "No staples yet. Tell me “fish sauce is a staple”, or add one here.",
+    "loading": "Loading your staples…",
+    "error": "Couldn't load your staples.",
+    "retry": "Retry",
+    "anywhere": "Anywhere",
+    "addedBy": "added by",
+    "more": "More for {name}",
+    "store": "Store…",
+    "remove": "Remove",
+    "storeLabel": "Usual store for {name}",
+    "storePlaceholder": "e.g. MD Oriental",
+    "storeSave": "Save",
+    "storeClear": "Anywhere",
+    "storeCancel": "Cancel",
+    "addLabel": "Add a staple",
+    "addPlaceholder": "e.g. fish sauce",
+    "addButton": "Add",
+    "editFailed": "I couldn't save that, so nothing changed. Try again.",
+    "offer": {
+      "text": "You told me these before: {names}.",
+      "accept": "Add them",
+      "adding": "Adding…",
+      "dismiss": "Not now",
+      "failed": "I couldn't save that, so nothing changed. Try again."
+    },
+    "answer": {
+      "add": "Add these to my list",
+      "addLabel": "Add these to my list: {names}",
+      "adding": "Adding…",
+      "failed": "Couldn't add those, so nothing changed. Try again."
+    }
+  },
   "meals": {
     "allergy": {
       "badge": "Allergy",
@@ -495,7 +648,9 @@
       "doneCooking": "Done cooking",
       "planned": "Added {title} to your plan.",
       "started": "Cooking {title}.",
-      "failed": "Couldn't save that, so nothing changed. Try again."
+      "failed": "Couldn't save that, so nothing changed. Try again.",
+      "planForDay": "Plan for a day",
+      "planForDayLabel": "Plan {title} for a day"
     },
     "plan": {
       "title": "Meal plan",
@@ -518,7 +673,26 @@
       "started": "Cooking {title}.",
       "doneNothingToUpdate": "{title} is done.",
       "failed": "Couldn't save that, so nothing changed. Try again.",
-      "emptyHint": "Choose a meal in Meals, then add it to your plan."
+      "emptyHint": "Choose a meal in Meals, then add it to your plan.",
+      "weekLabel": "The next 7 days",
+      "today": "Today",
+      "tomorrow": "Tomorrow",
+      "yesterday": "Yesterday",
+      "dayName": "{name}, {date}",
+      "dayCount": "{count, plural, =0 {nothing planned} one {# meal} other {# meals}}",
+      "nothingPlanned": "Nothing planned",
+      "earlier": "Earlier",
+      "later": "Later",
+      "undated": "No day yet",
+      "undatedHint": "Pick a day on a meal to put it in the week.",
+      "dayPick": "Pick a day",
+      "dayPickLabel": "Pick a day for {title}",
+      "dayChangeLabel": "Day for {title}: {day}. Change it",
+      "whichDay": "Which day?",
+      "noDay": "No day",
+      "dayOption": "{name} · {date}",
+      "dayFailed": "Couldn't change the day, so nothing changed. Try again.",
+      "offline": "Back online to change days"
     },
     "update": {
       "title": "Update your kitchen",
@@ -566,6 +740,33 @@
       "openRecipe": "Open recipe",
       "openRecipeLabel": "Open recipe: {title}",
       "failed": "Couldn't save that, so nothing changed. Try again."
+    },
+    "weekNeeds": {
+      "open": "Add this week's missing ingredients",
+      "offline": "Back online to add ingredients",
+      "title": "This week's missing ingredients",
+      "descriptionAll": "From meals planned for the next 7 days, and ones with no day yet.",
+      "descriptionDated": "From meals planned for the next 7 days.",
+      "close": "Close",
+      "datedOnly": "Dated only",
+      "datedOnlyHint": "Leave out meals with no day yet.",
+      "need": "Missing",
+      "onList": "On your list",
+      "forMeals": "For {meals}",
+      "checkLabel": "{name}, for {meals}, add to list",
+      "noRecipe": "{titles} {count, plural, one {has} other {have}} no recipe yet, so {count, plural, one {its} other {their}} ingredients aren't here.",
+      "noMeals": "No meals planned for the next 7 days.",
+      "noDatedMeals": "No meals have a day in the next 7 days.",
+      "allHave": "You have what these meals need.",
+      "allOnList": "Everything missing is already on your list.",
+      "noneLeft": "Nothing left to add: it's all on your list or in your kitchen.",
+      "add": "{count, plural, =0 {Add to my list} other {Add # to my list}}",
+      "adding": "Adding…",
+      "addFailed": "Couldn't add those, so nothing changed.",
+      "tryAgain": "Try again",
+      "loading": "Checking your recipes…",
+      "error": "Couldn't check what's missing.",
+      "retry": "Retry"
     }
   },
   "settings": {

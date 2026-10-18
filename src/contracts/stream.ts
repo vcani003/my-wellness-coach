@@ -5,7 +5,39 @@
 import { z } from "zod";
 import { AllergenFlag, Id, Msg } from "./common";
 import { ApplyResult } from "./apply-result";
+import { StapleNeed } from "./kitchen-state";
 import { Clarification } from "./proposed-change";
+
+/**
+ * "What staples do I need?" answered from the saved staples (0054 SS6): the staples that answer
+ * named as needed (Out, Running low, Not in yet), computed by code. Under the reply the UI shows
+ * **Add these to my list**, which calls `restockStaples {stapleIds}` with these IDs.
+ */
+export const StaplesAnswer = z.object({
+  items: z.array(
+    z.object({
+      stapleId: Id,
+      name: z.string(),
+      store: z.string().optional(),
+      need: StapleNeed.exclude(["have", "on-list"]),
+    }),
+  ),
+});
+export type StaplesAnswer = z.infer<typeof StaplesAnswer>;
+
+/**
+ * "That would remove 7 things: … Remove them all?" (0045 KOS16). One chat message that would
+ * remove, use up or mark Out **more than 5** things (kitchen items, list entries, staples) is held,
+ * not saved. `names` is every thing it would remove, as shown to the user. Under the reply the UI
+ * shows **Yes, remove them** / **No, keep them**, which send those words as a chat message. The
+ * held change is server-side only (never sent to the client); a yes applies exactly it.
+ */
+export const BulkConfirm = z.object({
+  kind: z.literal("bulk-remove"),
+  count: z.number().int().positive(),
+  names: z.array(z.string()),
+});
+export type BulkConfirm = z.infer<typeof BulkConfirm>;
 
 export const StreamPhase = z.enum(["interpreting", "saving", "writing", "ideas", "recipe"]);
 
@@ -44,6 +76,12 @@ export const StreamEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("idea"), setId: Id, basedOnVersion: z.number().int().nonnegative(), idea: MealIdea }),
   /** The idea set failed part-way (e.g. a refusal): remove its cards; they can't be chosen. */
   z.object({ type: z.literal("ideas.dropped"), setId: Id }),
+  /**
+   * An idea card shown earlier changed (ai.md §5 "Refining an idea"): a chat edit to an idea with no
+   * recipe yet, or its meal's recipe was written or changed (the card follows the latest recipe).
+   * The whole card again; the UI replaces it in place and highlights the lines that differ.
+   */
+  z.object({ type: z.literal("idea.updated"), idea: MealIdea }),
   z.object({
     type: z.literal("recipe"),
     mealId: Id,
@@ -62,6 +100,10 @@ export const StreamEvent = z.discriminatedUnion("type", [
     version: z.number().int(),
     newVersion: z.number().int().nonnegative(),
   }),
+  /** A staples answer from the saved staples (0054 SS6), after its `text`. Only when some are needed. */
+  z.object({ type: z.literal("staples"), ...StaplesAnswer.shape }),
+  /** A held bulk removal (0045 KOS16), after its `text`; nothing was saved. */
+  z.object({ type: z.literal("confirm"), ...BulkConfirm.shape }),
   /** Open "Update your kitchen" for a meal just marked done (0013). */
   z.object({ type: z.literal("update-kitchen"), ...UpdateKitchenPrompt.shape }),
   z.object({ type: z.literal("done"), turnId: Id, assistantMessageId: Id }),

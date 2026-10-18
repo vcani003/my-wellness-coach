@@ -1,234 +1,83 @@
 /**
- * ⚠️ FAKE MEAL AI (a stand-in, NOT the real AI): deterministic ideas and recipes so local dev and
- * the end-to-end tests run with no accounts (backend-data.md §8). It builds model-shaped answers
- * from the kitchen and sends them through the SAME code guards as the real one (uses/missing,
- * basics, allergen flags and the leave-out rule, the In-your-kitchen/Need split, recipe.save).
+ * ⚠️ FAKE MEAL AI (the stand-in, NOT the real AI). It never suggests ideas, writes a recipe for a
+ * dish someone asks for, changes a recipe or an idea, or answers a question about one: each of
+ * those replies STAND_IN_DECLINE_REPLY and changes nothing (0059 PF10, "only the real model can").
+ *
+ * The one exception is "make me a sample recipe [for <dish>]": a template recipe titled
+ * "Sample recipe (stand-in)…", so the recipe and week screens can be clicked through. It goes
+ * through the SAME code guards as the real one (In your kitchen / Need, basics, allergen flags,
+ * recipe.save).
  */
-import { askedAllergies } from "../meals/allergen-guard";
-import { applyRecipeEdits } from "../meals/apply-edits";
 import { basicsNote } from "../meals/basics";
 import { labelMaps } from "../meals/context";
 import { matchKitchenItem } from "../meals/match";
-import type { IdeaOut, RecipeEditOut, RecipeOutput } from "../meals/model-output";
-import { toIdea } from "../meals/to-ideas";
+import type { RecipeOutput } from "../meals/model-output";
 import { toRecipeResult } from "../meals/to-recipe";
-import type {
-  GeneratedIdea,
-  IdeasEvent,
-  MealAI,
-  MealIdeasInput,
-  PastedRecipeInput,
-  RecipeEvent,
-  RecipeInput,
-  RecipeResult,
-} from "../meals/types";
-import { allergenExcusedIds, rankUseItUp } from "../meals/use-it-up";
+import type { IdeasEvent, MealAI, PastedRecipeInput, RecipeEvent, RecipeInput, RecipeResult } from "../meals/types";
 import { collectIdeas, collectRecipe } from "../real/meals";
+import { sampleDish, STAND_IN_DECLINE_REPLY } from "./decline";
+import { fakeAmount, fakeSteps, sampleIngredients } from "./recipes";
+
+const declined = { ok: false as const, reason: "not-configured" as const, reply: STAND_IN_DECLINE_REPLY };
 
 /**
- * A named dish's ingredients (MI1), the fake way: kitchen items a word of the title names
- * ("chicken" → chicken thighs), then everything listed in the notes ("with X, Y and Z", "I have
- * X"), as said. Code then sorts them into In your kitchen / Need, as for the real model.
+ * A sample recipe's ingredients: kitchen items a word of the dish names ("salmon tacos" → your
+ * salmon), then the template's everyday ones for that kind of dish. Each has an amount for 2;
+ * whatever is in the kitchen is linked, so code sorts it into In your kitchen, the rest into Need.
  */
-function dishIngredients(input: RecipeInput, toLabel: Map<string, string>): RecipeOutput["ingredients"] {
-  const fromTitle = input.meal.title
-    .split(/\s+/)
-    .map((word) => matchKitchenItem(input.state, word))
-    .filter((i): i is NonNullable<typeof i> => Boolean(i));
-  const named = (input.meal.notes ?? "")
-    .split(/[.!?;]+/)
-    .map((s) => s.trim().replace(/^(?:and\s+)?(?:with|(?:i|we)\s+(?:also\s+)?(?:have|'ve got|got)|use)\s+(?:also\s+)?/i, ""))
-    .flatMap((s) => s.split(/\s*,\s*(?:and\s+)?|\s+and\s+/i))
-    .map((s) => s.trim().replace(/^(?:a|an|some|the)\s+/i, ""))
-    .filter(Boolean);
+function sampleRecipeIngredients(input: RecipeInput, dish: string, toLabel: Map<string, string>): RecipeOutput["ingredients"] {
   const out: RecipeOutput["ingredients"] = [];
   const seen = new Set<string>();
-  for (const item of fromTitle) {
-    if (seen.has(item.id)) continue;
-    seen.add(item.id);
-    out.push({ name: item.name.value, amount: null, item: toLabel.get(item.id) ?? null, basic: false });
-  }
-  for (const name of named) {
+  const add = (name: string) => {
     const item = matchKitchenItem(input.state, name);
-    if (item && seen.has(item.id)) continue;
+    if (item ? seen.has(item.id) : out.some((o) => o.name.toLowerCase() === name.toLowerCase())) return;
     if (item) seen.add(item.id);
-    out.push({ name, amount: null, item: item ? (toLabel.get(item.id) ?? null) : null, basic: false });
+    const shown = item?.name.value ?? name;
+    out.push({ name: shown, amount: fakeAmount(shown), item: item ? (toLabel.get(item.id) ?? null) : null, basic: false });
+  };
+  for (const word of dish.split(/\s+/).filter((w) => w.length >= 3)) {
+    if (matchKitchenItem(input.state, word)) add(word);
   }
+  for (const name of sampleIngredients(dish)) add(name);
   return out;
 }
 
-type Current = NonNullable<RecipeInput["refine"]>["current"];
-
-/**
- * The fake's edit mode, for e2e tests and testers: a few fixed phrasings become edits; anything
- * else is a rewrite (as before). Generic on purpose: no dish-specific words.
- * - "I'm using baby carrots too" / "add baby carrots" → a new ingredient at the end, worked into the last step
- * - "no garlic" / "I don't have garlic" / "without garlic" → that ingredient removed
- * - "use 3 eggs instead of 2" → that ingredient's amount changed
- * - "skip step 2" → that step removed
- */
-export function fakeEdits(text: string, current: Current): { edits: RecipeEditOut[]; reply: string } | null {
-  const t = text.trim().replace(/[.!?]+$/, "");
-  const blank = { name: "", amount: "", item: "", text: "" };
-  const find = (words: string) => {
-    const w = words.trim().toLowerCase();
-    return current.ingredients.findIndex((i) => i.name.toLowerCase() === w || i.name.toLowerCase().includes(w) || w.includes(i.name.toLowerCase()));
-  };
-  let m = /^skip step (\d+)$/i.exec(t);
-  if (m) return { edits: [{ ...blank, op: "remove_step", at: Number(m[1]) }], reply: `Skipped step ${m[1]}.` };
-  m = /^use (\d+) (.+?) instead of (\d+)$/i.exec(t);
-  if (m) {
-    const at = find(m[2]);
-    if (at < 0) return null;
-    return { edits: [{ ...blank, op: "change_ingredient", at: at + 1, name: current.ingredients[at].name, amount: m[1] }], reply: `Changed it to ${m[1]} ${m[2]}.` };
-  }
-  m = /^(?:no|without|i don'?t have(?: any)?|i'?m out of) (.+)$/i.exec(t);
-  if (m) {
-    const at = find(m[1]);
-    if (at < 0) return null;
-    return { edits: [{ ...blank, op: "remove_ingredient", at: at + 1 }], reply: `Took out the ${current.ingredients[at].name}.` };
-  }
-  m = /^(?:i'?m (?:also )?using (.+?) too|add (?:some )?(.+))$/i.exec(t);
-  if (m) {
-    const name = (m[1] ?? m[2]).trim();
-    const last = current.steps.length;
-    if (!name || last === 0) return null;
-    return {
-      edits: [
-        { ...blank, op: "add_ingredient", at: current.ingredients.length, name },
-        { ...blank, op: "change_step", at: last, text: `${current.steps[last - 1]} Add the ${name} too.` },
-      ],
-      reply: `Added ${name} and worked it into step ${last}.`,
-    };
-  }
-  return null;
-}
-
-const title = (s: string) => s.replace(/\s*\(.*?\)\s*/g, " ").trim().replace(/^\w/, (c) => c.toUpperCase());
-
-export function createFakeMealAI(now: () => Date = () => new Date()): MealAI {
-  async function* streamMealIdeas(input: MealIdeasInput): AsyncGenerator<IdeasEvent> {
-    const at = now();
-    const count = input.count ?? 3;
-    const { toId, toLabel } = labelMaps(input);
-    const ranked = rankUseItUp(input.state, at);
-    const rankedIds = new Set(ranked.map((r) => r.itemId));
-    const order = [...ranked.map((r) => r.itemId), ...input.state.items.map((i) => i.id).filter((id) => !rankedIds.has(id))];
-    const raw: IdeaOut[] = [];
-    const asked = input.request?.text.trim();
-    if (asked && /\b(taco|soup|salad|curry|stir.?fry|omelette|pasta|noodle|rice|pho)/i.test(asked)) {
-      raw.push({ name: title(asked.replace(/[?!.]+$/, "")), why: "You asked for it", uses: [], missing: [asked.replace(/[?!.]+$/, "")], basics: ["salt"] });
-    }
-    for (const id of order) {
-      const item = input.state.items.find((i) => i.id === id)!;
-      const reason = ranked.find((r) => r.itemId === id)?.reasons[0];
-      raw.push({
-        name: `${title(item.name.value)} rice bowl`,
-        why: reason ? `Uses the ${item.name.value} (${reason})` : `Uses your ${item.name.value}`,
-        uses: [toLabel.get(id)!],
-        missing: [],
-        basics: ["salt", "cooking oil"],
-      });
-    }
-    const guard = {
-      ctx: input,
-      labels: toId,
-      useItUp: rankedIds,
-      allergenExcused: allergenExcusedIds(ranked),
-      asked: askedAllergies(input.request?.text, input.restrictions),
-    };
-    const kept: GeneratedIdea[] = [];
-    let dropped = 0;
-    for (const r of raw) {
-      if (kept.length >= count) break;
-      const v = toIdea(r, guard);
-      if (!v) continue;
-      if (!v.keep) {
-        dropped++;
-        continue;
-      }
-      kept.push(v.idea);
-      yield { type: "idea", idea: v.idea };
-    }
-    const droppedForAllergens = Math.min(dropped, Math.max(0, count - kept.length));
-    const note = basicsNote([...new Set(kept.flatMap((k) => k.basics))]);
-    const reply = kept.length ? "Here are some ideas from your kitchen." : "Nothing in your kitchen fits that right now.";
-    yield { type: "done", result: { ok: true, ideas: kept, reply, notes: note ? [note] : [], droppedForAllergens } };
+export function createFakeMealAI(): MealAI {
+  async function* streamMealIdeas(): AsyncGenerator<IdeasEvent> {
+    yield { type: "done", result: declined };
   }
 
   async function* streamRecipe(input: RecipeInput): AsyncGenerator<RecipeEvent> {
-    const { toId, toLabel } = labelMaps(input);
-    const idea = input.meal.idea;
-    const current = input.refine?.current;
-    // A small refinement goes through edit mode and the SAME apply code as the real one.
-    const edit = current ? fakeEdits(input.refine!.text, current) : null;
-    if (edit) {
-      const applied = applyRecipeEdits(current!, edit.edits, edit.reply, {
-        ctx: input,
-        labels: toId,
-        mealId: input.meal.mealId,
-        fallbackTitle: input.meal.title,
-        source: "ai",
-        opId: `${input.refine!.messageId}:recipe`,
-        evidence: input.refine!.text,
-      });
-      if (applied.ok) {
-        const r = applied.result;
-        const g = r.recipe;
-        yield {
-          type: "part",
-          part: "edit",
-          data: {
-            title: g.title,
-            summary: g.summary,
-            servings: g.servings,
-            source: g.source,
-            allergenFlags: g.allergenFlags,
-            ingredients: g.ingredients,
-            steps: g.steps,
-            basics: g.basicsAssumed,
-            note: basicsNote(g.basicsAssumed),
-            changed: { ingredients: r.change.ingredients, steps: r.change.steps },
-          },
-        };
-        yield { type: "done", result: r };
-        return;
-      }
+    const dish = sampleDish(input.meal.title);
+    // A recipe change or a question about it, or any recipe that isn't a sample: the real AI's job.
+    if (input.refine || dish === null) {
+      yield { type: "done", result: declined };
+      return;
     }
-    const out: RecipeOutput = current
-      ? {
-          title: current.title,
-          summary: `Adjusted: ${input.refine!.text}`,
-          servings: current.servings ?? "2",
-          ingredients: current.ingredients.map((i) => ({ name: i.name, amount: i.amount, item: i.itemId ? (toLabel.get(i.itemId) ?? null) : null, basic: i.group === "basic" })),
-          steps: [...current.steps, `Adjusted for: ${input.refine!.text}`],
-          reply: "Here's the updated recipe.",
-        }
-      : {
-          title: input.meal.title,
-          summary: "A quick suggestion from your kitchen.",
-          servings: "2",
-          ingredients: [
-            ...(!idea ? dishIngredients(input, toLabel) : []),
-            ...(idea?.uses ?? []).map((id) => ({ name: input.state.items.find((i) => i.id === id)?.name.value ?? "", amount: null, item: toLabel.get(id) ?? null, basic: false })),
-            ...(idea?.missing ?? []).map((name) => ({ name, amount: null, item: null, basic: false })),
-            { name: "salt", amount: "a pinch", item: null, basic: true },
-            { name: "cooking oil", amount: "1 tbsp", item: null, basic: true },
-          ],
-          steps: ["Prepare the ingredients.", "Cook everything in a hot pan with the oil.", "Season with salt and serve."],
-          reply: `Here's a recipe for ${input.meal.title}.`,
-        };
+    const { toId, toLabel } = labelMaps(input);
+    const ingredients = [
+      ...sampleRecipeIngredients(input, dish, toLabel),
+      { name: "salt", amount: "a pinch", item: null, basic: true },
+      { name: "cooking oil", amount: "1 tbsp", item: null, basic: true },
+    ];
+    const out: RecipeOutput = {
+      title: input.meal.title,
+      summary: "A template from the stand-in AI, for trying the recipe screens. Not a real recipe: ask the real AI (Claude) for one.",
+      servings: "2",
+      ingredients,
+      steps: fakeSteps(dish || input.meal.title, ingredients, { salt: true }),
+      reply: "Here's the sample recipe.",
+    };
     const result = toRecipeResult(out, {
       ctx: input,
       labels: toId,
       mealId: input.meal.mealId,
       fallbackTitle: input.meal.title,
       source: "ai",
-      opId: input.refine ? `${input.refine.messageId}:recipe` : `recipe:${input.meal.mealId}`,
-      ...(input.refine ? { evidence: input.refine.text } : {}),
+      opId: `recipe:${input.meal.mealId}`,
     });
     if (!result.ok) {
-      yield { type: "done", result: { ok: false, reason: "failed", reply: "Sorry, I couldn't write the recipe just now. Please try again." } };
+      yield { type: "done", result: { ok: false, reason: "failed", reply: "Sorry, I couldn't write the sample recipe just now. Please try again." } };
       return;
     }
     const r = result.recipe;
@@ -239,6 +88,7 @@ export function createFakeMealAI(now: () => Date = () => new Date()): MealAI {
     yield { type: "done", result };
   }
 
+  /** Your own pasted recipe, saved as typed (bullets → ingredients, numbered lines → steps). Not the AI writing one. */
   async function readPastedRecipe(input: PastedRecipeInput): Promise<RecipeResult> {
     const lines = input.text.split("\n").map((l) => l.trim()).filter(Boolean);
     const ingredients = lines.filter((l) => /^[-•*]\s*/.test(l)).map((l) => ({ name: l.replace(/^[-•*]\s*/, ""), amount: null, item: null, basic: false }));
@@ -261,9 +111,12 @@ export function createFakeMealAI(now: () => Date = () => new Date()): MealAI {
 
   return {
     streamMealIdeas,
-    generateMealIdeas: (input) => collectIdeas(streamMealIdeas(input)),
+    generateMealIdeas: () => collectIdeas(streamMealIdeas()),
     streamRecipe,
     generateRecipe: (input) => collectRecipe(streamRecipe(input)),
     readPastedRecipe,
+    async refineIdea() {
+      return declined;
+    },
   };
 }
