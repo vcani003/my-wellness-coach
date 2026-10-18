@@ -11,6 +11,54 @@
 
 ## Outstanding
 
+### Onboarding and preferences (2026-10-18)
+Background: the app has never had onboarding. A first visit only gets Lumi's welcome bubble, three suggestion buttons and "Your kitchen is empty". A per-user preference list already exists in SQL (`profile_preferences`), but:
+- it is free text only;
+- it can only be saved from chat;
+- only meal ideas and recipes read it; the chat never sees it.
+
+Allergies and diets have their own table (`profile_restrictions`). **Bug found:** neither AI can save an allergy from chat, even though Settings tells people to "Tell Lumi in chat, for example 'I'm allergic to peanuts'". This is on the live app too.
+
+**ON1 🟡 What "something similar" means.** Nothing in this repo matches; the recipe-cat app isn't on this Mac.
+- **Rec:** name the app or send a screenshot. Without one, I'll use the plan below.
+> Answer:
+
+**ON2 🟡 Form or chat.**
+- **Rec:** 3–4 short, skippable screens after joining or first sign-in. Each answer gets a receipt and Undo, and can be changed later in Settings or chat.
+> Answer:
+
+**ON3 🟡 What to ask.**
+- **Rec:** allergies (with an optional note), diet, likes (cuisines), dislikes, household size, usual cooking time, and favourite stores (these feed staples).
+- No health or calorie goals (spec §10).
+> Answer:
+
+**ON4 ⚪ Where answers live.**
+- **Rec:** personal answers per person: allergies, diet, likes and dislikes, cooking time. Household size and stores are shared by the kitchen.
+- Extend the existing list additively with a category (cuisine like, dislike, time, skill, equipment, household, other) and a source (chat, onboarding, settings).
+- Keep one list with one history, so Undo works as everywhere else.
+> Answer:
+
+**ON5 🟡 Who uses the list.**
+- **Rec:** every AI call. The chat gets a short `<preferences>` block too, capped in size.
+- Dislikes are soft: left out unless asked for. Allergies keep the code lock.
+> Answer:
+
+**ON6 ⚪ Privacy.**
+- **Rec:** as today. Your preferences are private to you, and allergies and diets are visible to household members (0019). Kitchen-level answers are visible to everyone in the kitchen.
+> Answer:
+
+**ON7 ⚪ Existing people and new members.**
+- **Rec:** show it once, with "Not now". After that, a "Finish setting up" card stays on Today until it's done or dismissed. Done or skipped is saved per person. Vero and Levi get it too.
+> Answer:
+
+**ON8 ⚪ Editing in Settings.**
+- **Rec:** yes. Settings shows the same list, and each entry can be edited and removed. Today it's read-only and changes go through chat.
+> Answer:
+
+**ON9 ⛔ The chat can't save allergies.**
+- **Rec:** fix it first. Saying "I'm allergic to peanuts" saves the allergy after one confirmation, the same way as preferences. It ships with or before onboarding.
+> Answer:
+
 ### Stand-in follow-ups (2026-10-17)
 **PF14 ⚪ No button on a declined reply.** When the stand-in says "That needs the real AI (Claude)…", no button or link goes with it. The "Stand-in AI" badge already explains why.
 - **Rec:** leave it as is.
