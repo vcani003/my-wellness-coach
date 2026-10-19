@@ -2,7 +2,7 @@
  * What the model's answer means, after decoding (structured outputs, ai.md §1). Deliberately
  * flatter than the contract: every key is present (null = unknown), items are referenced by short
  * labels (`i3`), and code turns this into a `ProposedChange` (to-proposal.ts). The API is asked
- * for the `WireOutput` shape below (fewer union types) and `fromWire` maps it to this one. No length or number
+ * for the `WireOutput` shape below (no union types) and `fromWire` maps it to this one. No length or number
  * limits here: structured outputs don't support them, and the contract checks them afterwards.
  */
 import { z } from "zod";
@@ -138,50 +138,59 @@ export type ModelOutput = z.infer<typeof ModelOutput>;
  * ---------------------------------------------------------------------------------------------
  * The wire shape: what the API is actually asked for (structured outputs, ai.md §1).
  *
- * The API allows at most 16 parameters with union types (`anyOf` or a type array, which is what
- * `.nullable()` produces) per request, because each one makes the schema's compilation cost grow
- * exponentially. `ModelOutput` above had 21, so every interpret call was rejected (2026-10-14).
- * The wire shape keeps `null` only for the kitchen facts (a fact object, or a number nobody said)
- * and uses plain sentinels everywhere else:
- *  - text labels and notes (item, meal, unit, generate.meal, dish.notes): "" = none
- *  - batch "unspecified", listOfferAccepted "none", generate.what "none", category.value "none"
+ * No unions at all: no `anyOf`, no type arrays, no nullable fields. The API compiles the schema
+ * into a grammar, and each union multiplies its size (the docs call their cost exponential).
+ * 2026-10-14 we passed the explicit limit (16 parameters with union types). 2026-10-19 the
+ * Kitchen OS fields (stock levels, staples, the dated week) pushed the compiled grammar past the
+ * API's internal size limit with 9 unions left ("The compiled grammar is too large"), and every
+ * chat message failed. So every fact is always present, and "empty" is a sentinel, not null:
+ *  - text facts (name, store): value ""
+ *  - quantities (quantity, amountUsed): asSaid ""; in a used quantity, amount 0 = not obvious
+ *    and unit "" = none
+ *  - enum facts (location, frozen, stock, category): value "none"; frozen is "true" / "false"
+ *  - text labels and notes (item, meal, when, generate.meal, dish.notes): ""
+ *  - batch "unspecified", listOfferAccepted "none", generate.what "none"
  *  - clarification / rememberPreference / dish: always present; an empty question, statement or
  *    title means "none"
- * `fromWire` maps it back to `ModelOutput`, so everything after it (to-proposal.ts, meal-ops.ts,
- * the fake interpreter) is unchanged. tests/unit/ai-schema-limits.test.ts counts the unions.
+ * An empty fact's basis and confidence are placeholders and ignored. `fromWire` maps it back to
+ * `ModelOutput`, so everything after it (to-proposal.ts, meal-ops.ts, the fake interpreter) is
+ * unchanged. tests/unit/ai-schema-limits.test.ts keeps unions at 0 and caps the schema's size.
  * ---------------------------------------------------------------------------------------------
  */
 
+const WireText = z.object({ value: z.string(), ...meta });
 const WireQuantity = z.object({
+  /** "" when there is no quantity. */
   asSaid: z.string(),
-  amount: z.number().nullable(),
+  /** 0 when it isn't obvious. */
+  amount: z.number(),
   /** "" when there is no unit. */
   unit: z.string(),
   ...meta,
 });
+const wireEnumFact = <const T extends string>(values: readonly T[]) =>
+  z.object({ value: z.enum(["none", ...values] as ["none", ...T[]]), ...meta });
 
 export const WireOp = z.object({
   action: ModelAction,
   evidence: z.string(),
   /** "" when nothing matches. */
   item: z.string(),
-  name: TextFact.nullable(),
-  quantity: WireQuantity.nullable(),
-  location: z.object({ value: Location, ...meta }).nullable(),
-  frozen: z.object({ value: z.boolean(), ...meta }).nullable(),
-  stock: z.object({ value: StockLevel, ...meta }).nullable(),
-  amountUsed: WireQuantity.nullable(),
+  name: WireText,
+  quantity: WireQuantity,
+  location: wireEnumFact(Location.options),
+  /** "true" / "false" as text: a boolean can't also carry "none" without a union. */
+  frozen: wireEnumFact(["true", "false"]),
+  stock: wireEnumFact(StockLevel.options),
+  amountUsed: WireQuantity,
   /** "unspecified" when the user didn't name a batch. */
   batch: z.enum([...BatchWhich.options, "unspecified"]),
-  store: TextFact.nullable(),
+  store: WireText,
   /** "" for every non-meal action. */
   meal: z.string(),
-  /**
-   * CAT1. Always an object, never null (a nullable here would be one more union type): value
-   * "none" means no category. The basis and confidence are then ignored.
-   */
-  category: z.object({ value: z.enum([...ItemCategory.options, "none"]), ...meta }),
-  /** KOS1: the day as said, "" when none (a plain string: no union). */
+  /** CAT1. */
+  category: wireEnumFact(ItemCategory.options),
+  /** KOS1: the day as said, "" when none. */
   when: z.string(),
 });
 export type WireOp = z.infer<typeof WireOp>;
@@ -205,18 +214,34 @@ export const WireOutput = z.object({
 });
 export type WireOutput = z.infer<typeof WireOutput>;
 
-/** The category sentinel: "none" (basis and confidence are placeholders). */
-export const NO_CATEGORY = { value: "none", basis: "inferred", confidence: "low" } as const;
+/** Empty-fact placeholders: an empty fact's basis and confidence are ignored. */
+const EMPTY_META = { basis: "inferred", confidence: "low" } as const;
+/** The category sentinel: "none". */
+export const NO_CATEGORY = { value: "none", ...EMPTY_META } as const;
+const EMPTY_TEXT = { value: "", ...EMPTY_META } as const;
+const EMPTY_QUANTITY = { asSaid: "", amount: 0, unit: "", ...EMPTY_META } as const;
+const EMPTY_ENUM = { value: "none", ...EMPTY_META } as const;
 
+type Meta = { basis: Basis; confidence: Confidence };
 const orNull = (s: string): string | null => (s === "" ? null : s);
 const orEmpty = (s: string | null): string => s ?? "";
+const metaOf = (f: Meta): Meta => ({ basis: f.basis, confidence: f.confidence });
 
-function quantityFromWire(q: z.infer<typeof WireQuantity> | null): ModelOp["quantity"] {
-  return q && { ...q, unit: orNull(q.unit) };
+function textFromWire(f: z.infer<typeof WireText>): ModelOp["name"] {
+  return f.value.trim() === "" ? null : { value: f.value, ...metaOf(f) };
 }
 
-function quantityToWire(q: ModelOp["quantity"]): z.infer<typeof WireQuantity> | null {
-  return q && { ...q, unit: orEmpty(q.unit) };
+function quantityFromWire(q: z.infer<typeof WireQuantity>): ModelOp["quantity"] {
+  if (q.asSaid.trim() === "") return null;
+  return { asSaid: q.asSaid, amount: q.amount === 0 ? null : q.amount, unit: orNull(q.unit), ...metaOf(q) };
+}
+
+function quantityToWire(q: ModelOp["quantity"]): z.infer<typeof WireQuantity> {
+  return q ? { asSaid: q.asSaid, amount: q.amount ?? 0, unit: orEmpty(q.unit), ...metaOf(q) } : EMPTY_QUANTITY;
+}
+
+function enumFromWire<T extends string>(f: { value: T | "none" } & Meta): ({ value: Exclude<T, "none"> } & Meta) | null {
+  return f.value === "none" ? null : { value: f.value as Exclude<T, "none">, ...metaOf(f) };
 }
 
 /** Wire → the internal shape (sentinels back to null). */
@@ -224,22 +249,26 @@ export function fromWire(w: WireOutput): ModelOutput {
   return {
     kind: w.kind,
     reply: w.reply,
-    operations: w.operations.map((op) => ({
-      action: op.action,
-      evidence: op.evidence,
-      item: orNull(op.item),
-      name: op.name,
-      quantity: quantityFromWire(op.quantity),
-      location: op.location,
-      frozen: op.frozen,
-      stock: op.stock,
-      amountUsed: quantityFromWire(op.amountUsed),
-      batch: op.batch === "unspecified" ? null : op.batch,
-      store: op.store,
-      meal: orNull(op.meal),
-      ...(op.category.value === "none" ? {} : { category: { ...op.category, value: op.category.value } }),
-      ...(op.when.trim() ? { when: op.when } : {}),
-    })),
+    operations: w.operations.map((op) => {
+      const category = enumFromWire(op.category);
+      const frozen = enumFromWire(op.frozen);
+      return {
+        action: op.action,
+        evidence: op.evidence,
+        item: orNull(op.item),
+        name: textFromWire(op.name),
+        quantity: quantityFromWire(op.quantity),
+        location: enumFromWire(op.location),
+        frozen: frozen && { ...frozen, value: frozen.value === "true" },
+        stock: enumFromWire(op.stock),
+        amountUsed: quantityFromWire(op.amountUsed),
+        batch: op.batch === "unspecified" ? null : op.batch,
+        store: textFromWire(op.store),
+        meal: orNull(op.meal),
+        ...(category ? { category } : {}),
+        ...(op.when.trim() ? { when: op.when } : {}),
+      };
+    }),
     clarification: w.clarification.question === "" ? null : w.clarification,
     rememberPreference: w.rememberPreference.statement === "" ? null : w.rememberPreference,
     listOfferAccepted: w.listOfferAccepted === "none" ? null : w.listOfferAccepted,
@@ -257,14 +286,14 @@ export function toWire(o: ModelOutput): WireOutput {
       action: op.action,
       evidence: op.evidence,
       item: orEmpty(op.item),
-      name: op.name,
+      name: op.name ?? EMPTY_TEXT,
       quantity: quantityToWire(op.quantity),
-      location: op.location,
-      frozen: op.frozen,
-      stock: op.stock,
+      location: op.location ?? EMPTY_ENUM,
+      frozen: op.frozen ? { ...metaOf(op.frozen), value: op.frozen.value ? "true" : "false" } : EMPTY_ENUM,
+      stock: op.stock ?? EMPTY_ENUM,
       amountUsed: quantityToWire(op.amountUsed),
       batch: op.batch ?? "unspecified",
-      store: op.store,
+      store: op.store ?? EMPTY_TEXT,
       meal: orEmpty(op.meal),
       category: op.category ?? NO_CATEGORY,
       when: op.when ?? "",

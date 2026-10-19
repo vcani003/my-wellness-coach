@@ -8,6 +8,19 @@
  *    such as ["string", "null"]. Limit 16 across all strict schemas in one request.
  *  - optional parameters: any property not listed in its object's `required`. Limit 24.
  * We fail earlier than the API (unions > 14, optionals > 20) to keep headroom for growth.
+ *
+ * Second regression, 2026-10-19: with only 9 unions (inside the explicit limits) the interpret
+ * schema still failed in production with "The compiled grammar is too large" after the Kitchen OS
+ * fields were added. That limit is internal and not published (the docs say only that optional
+ * parameters, unions, nesting and tools interact). We can't compile the grammar locally, so the
+ * interpret budget below is a PROXY, not the API's real rule:
+ *  - unions: 0. The docs call their cost exponential, and removing all 9 was the fix.
+ *  - JSON size and enum values: the failing schema was 4,701 bytes with 105 enum values and 9
+ *    unions; the fixed one is about 4,500 bytes with 110 enum values and 0 unions. We don't know
+ *    where the real limit is, so the caps sit about 10% above today's size: a tripwire that makes
+ *    growth a deliberate decision (and a real-API check) rather than a production surprise.
+ * Chat also survives a rejected schema (the retry without `format` in src/ai/real/index.ts), but
+ * that path loses the API's shape guarantee, so it's a safety net, not a plan.
  */
 import { describe, expect, it, vi } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
@@ -22,6 +35,19 @@ type Body = Record<string, unknown>;
 
 const UNION_HEADROOM = 14;
 const OPTIONAL_HEADROOM = 20;
+/** Interpret proxy budget (see the header): no unions, size and enum values capped. */
+const INTERPRET_MAX_UNIONS = 0;
+const INTERPRET_MAX_BYTES = 5_000;
+const INTERPRET_MAX_ENUM_VALUES = 120;
+
+/** Counts every value of every `enum` in the schema. */
+export function countEnumValues(node: unknown): number {
+  if (Array.isArray(node)) return node.reduce((n: number, x) => n + countEnumValues(x), 0);
+  if (!node || typeof node !== "object") return 0;
+  const o = node as Record<string, unknown>;
+  const self = Array.isArray(o.enum) ? o.enum.length : 0;
+  return self + Object.values(o).reduce((n: number, v) => n + countEnumValues(v), 0);
+}
 
 const blank = { content: [{ type: "text", text: "{}", citations: null }], stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 } };
 const msg = blank as unknown as Message;
@@ -124,6 +150,16 @@ describe("structured-output schema limits (every task, the exact body sent)", ()
     expect(optionals, `${task}: ${optionals} optional parameters (API limit 24)`).toBeLessThanOrEqual(OPTIONAL_HEADROOM);
   });
 
+  it("interpret stays inside the grammar-size proxy budget (no unions, size and enum values capped)", async () => {
+    const [schema] = strictSchemas((await bodiesByTask()).interpret);
+    const unions = countUnions(schema);
+    const bytes = JSON.stringify(schema).length;
+    const enumValues = countEnumValues(schema);
+    expect(unions, `interpret: ${unions} unions; any union risks "compiled grammar is too large"`).toBeLessThanOrEqual(INTERPRET_MAX_UNIONS);
+    expect(bytes, `interpret: schema is ${bytes} bytes; growth past the cap needs a real-API check first`).toBeLessThanOrEqual(INTERPRET_MAX_BYTES);
+    expect(enumValues, `interpret: ${enumValues} enum values`).toBeLessThanOrEqual(INTERPRET_MAX_ENUM_VALUES);
+  });
+
   it("interpret sends a strict output format (the schema the guard counts is really used)", async () => {
     expect(strictSchemas((await bodiesByTask()).interpret)).toHaveLength(1);
   });
@@ -144,13 +180,13 @@ describe("wire shape ↔ ModelOutput (the mapping keeps behaviour unchanged)", (
           evidence: "a bunch of rau răm",
           item: "",
           name: fact("rau răm"),
-          quantity: { asSaid: "a bunch", amount: null, unit: "", basis: "said", confidence: "high" },
-          location: null,
-          frozen: null,
-          stock: null,
-          amountUsed: null,
+          quantity: { asSaid: "a bunch", amount: 0, unit: "", basis: "said", confidence: "high" },
+          location: { value: "none", basis: "inferred", confidence: "low" },
+          frozen: { value: "none", basis: "inferred", confidence: "low" },
+          stock: { value: "none", basis: "inferred", confidence: "low" },
+          amountUsed: { asSaid: "", amount: 0, unit: "", basis: "inferred", confidence: "low" },
           batch: "unspecified",
-          store: null,
+          store: { value: "", basis: "inferred", confidence: "low" },
           meal: "",
           category: { value: "none", basis: "inferred", confidence: "low" },
           when: "",
@@ -181,6 +217,36 @@ describe("wire shape ↔ ModelOutput (the mapping keeps behaviour unchanged)", (
 
   it("rejects the old nullable shape (the API now always sends every sentinel)", () => {
     expect(parseModelOutput({ kind: "answer", reply: "x", operations: [], ...empty }).success).toBe(false);
+  });
+
+  it("rejects a null fact on the wire (e.g. a reply written without the format), so nothing changes", () => {
+    const wire = JSON.parse(JSON.stringify(toWire({ kind: "change", reply: "Done.", ...empty, operations: [{ ...op, action: "add", evidence: "limes", name: fact("limes") }] })));
+    wire.operations[0].location = null;
+    expect(parseModelOutput(wire).success).toBe(false);
+  });
+
+  it("decodes a used frozen fact and a known amount", () => {
+    const out: ModelOutput = {
+      kind: "change",
+      reply: "Done.",
+      ...empty,
+      operations: [
+        {
+          ...op,
+          action: "update",
+          evidence: "I froze the beef",
+          item: "i5",
+          frozen: fact(true),
+          quantity: { asSaid: "2 lbs", amount: 2, unit: "lb", basis: "said", confidence: "high" },
+        },
+        { ...op, action: "update", evidence: "defrosted", item: "i6", frozen: fact(false) },
+      ],
+    };
+    const wire = toWire(out);
+    expect(wire.operations[0].frozen.value).toBe("true");
+    expect(wire.operations[1].frozen.value).toBe("false");
+    expect(wire.operations[1].quantity).toMatchObject({ asSaid: "", amount: 0 });
+    expect(fromWire(wire)).toEqual(out);
   });
 
   it.each<[string, ModelOutput]>([

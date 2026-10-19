@@ -23,7 +23,7 @@ The model **proposes**, code checks, the backend **applies**, then we **reply**.
 | Name a meal, or refine a recipe | 2 | Yes |
 | Buttons (Undo, plan, sheets) | 0 | n/a |
 
-**Structured outputs, not tool use.** Each call must return exactly one known shape. Structured outputs guarantee that in a single response. Opus 5.5 can't be *forced* to call a tool. Each shape is defined once in Zod and shared by the model call, guards and tests. Schemas must stay under the API's complexity limits (at most 16 union-typed and 24 optional parameters per request). A unit test counts both for every task, using the exact request body each one sends (see the build note "Schema complexity limits").
+**Structured outputs, not tool use.** Each call must return exactly one known shape. Structured outputs guarantee that in a single response. Opus 5.5 can't be *forced* to call a tool. Each shape is defined once in Zod and shared by the model call, guards and tests. Schemas must stay under the API's complexity limits (at most 16 union-typed and 24 optional parameters per request). A unit test counts both for every task, using the exact request body each one sends (see the build notes "Schema complexity limits" and "The interpret grammar was too large"). Since 2026-10-19 the interpret wire schema has **no unions at all**, because the API also has an unpublished limit on compiled grammar size. A proxy budget guards it. If the API still rejects the schema, interpret retries once without the format, and Zod remains the gate.
 
 ## 2. What the model sees
 
@@ -475,4 +475,22 @@ Vero: "stand in ai shouldnt be able to answer. only the real model can." The pre
 - **Real model untouched.** The only shared change is `recentChangesFor` exported from `src/ai/index.ts` (the same undo lookup, now reusable). The PF2 question guard still runs for both interpreters.
 - **Tests and the test-only double.** The pipeline tests (chat turn → follow-ups → apply → Postgres: ideas, choose, H2, retries, edit mode, idea refine, recipe questions) still need a deterministic stand-in for the model. The old behaviour moved, unchanged, to `tests/support/scripted-ai/` (`createScriptedInterpreter` wraps the stand-in with the old meal phrasings, `createScriptedMealAI` is the old fake meal AI). It's never imported by app code. Stand-in tests: `tests/unit/fake-interpreter.test.ts` (declines, sample intents, the amount and no-food regressions, the help text), `tests/unit/recipe-questions.test.ts` (sample templates, declines with a recipe open), `ai-meals`, `ai-named-dish`, `ai-meal-chat`, `ai-idea-refine` (stand-in blocks), `tests/integration/chat-turn.test.ts` (declines through the turn, nothing saved). E2e: `meals.spec.ts`, `week-plan.spec.ts`, `places.spec.ts` and `journey.spec.ts` run on the sample recipe and assert the decline line; `idea-refine.spec.ts` was removed.
 - **Can no longer be clicked through on the stand-in:** meal idea cards (and Choose on a card, the "Meal ideas are ready" cue, idea refine), a recipe for a dish you name, recipe edits in chat (and the edit highlight), recipe questions, and Choose on a meal that has no saved recipe. These need the real AI (PF5: previews use the staging key when its budget allows).
+
+## Build notes: the interpret grammar was too large (2026-10-19 hotfix, prompt `interpret-2026-10-19.1`)
+- **What broke:** every chat message failed in production with a 400: "The compiled grammar is too large, which would cause performance issues." The schema was inside the published limits (9 unions, 0 optional parameters). The Kitchen OS fields (stock levels, staples and the dated week, which brought more actions, more enum values and `when`) pushed the compiled grammar past the API's internal limit. That limit isn't published. The docs only say that unions, optional parameters, nesting and tools interact, and that unions cost the most.
+- **Fix 1: no unions on the wire.** Every fact is always present, with an "empty" sentinel instead of null:
+  - text facts: `value ""`;
+  - quantities: `asSaid ""`, with `amount 0` meaning "not obvious";
+  - enum facts: `value "none"`;
+  - `frozen`: `"true"` / `"false"` / `"none"`.
+
+  Interpret went from 9 unions and 4,701 bytes to **0 unions** and about 4,500 bytes. `fromWire` maps the answer back to `ModelOutput`, so nothing after it changes: to-proposal, the safety guards (allergies, the question guard, the staple and list-offer checks) and the fake interpreter. The prompt's Empty values section and examples say "empty" instead of null. The cost: each unused fact now takes about 16 more output tokens than `null` did. That's roughly 60–90 more tokens per operation, or about $0.001–0.002 at $20 per million output tokens.
+- **Fix 2: a safety net.** `isSchemaTooComplex` (`src/ai/real/schema-error.ts`) recognises a 400 about grammar size or schema limits. When it sees one, interpret logs `ai.schema_fallback` and retries once **without** `output_config.format`.
+  - The retry adds `JSON_FALLBACK_INSTRUCTIONS`, which includes the exact JSON schema, after the cached system block.
+  - The answer goes through the same `parseModelOutput` gate, so a wrong shape still changes nothing.
+  - After one rejection, the instance skips the format for later messages.
+  - Other 400s, budget errors and a failed retry all get the normal fallback reply (0018).
+- **Fix 3: a regrowth guard.** `tests/unit/ai-schema-limits.test.ts` fails if interpret has any union, or goes over 5,000 bytes or 120 enum values. This is a **proxy**: we can't compile the grammar locally. The caps sit about 10% above today's size, so that growth past them forces a real-API check first.
+- **Meals:** ideas has 0 unions (467 bytes), recipe 3 (569), recipe refine 4 (1,157) and idea refine 0 (351). All are far smaller than interpret, so they're low risk and weren't changed.
+- **To verify with the real API** (the staging key is blocked until 2026-11-01): one interpret call is accepted with the format, and the log has no `ai.schema_fallback`.
 

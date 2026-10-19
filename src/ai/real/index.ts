@@ -9,6 +9,7 @@ import type { InterpretRequest, InterpretResult, Interpreter } from "../interpre
 import { BUDGET_EXHAUSTED_REPLY, budgetExhaustedReason, type BudgetReason } from "./budget";
 import { modelOutputFormat, parseModelOutput } from "./model-output";
 import { PROMPT_VERSION, SYSTEM_PROMPT, renderTurn } from "./prompt";
+import { isSchemaTooComplex, jsonText } from "./schema-error";
 import { estimateCostUsd, taskSettings, type TaskSettings } from "./settings";
 import { toInterpretResult } from "./to-proposal";
 
@@ -43,12 +44,22 @@ export interface BudgetLog {
   requestId: string | null;
 }
 
+/**
+ * One event when the API refuses to compile the interpret output schema and the call is retried
+ * without it (ai.md §1). Means the wire schema has grown too complex: fix it, but chat keeps working.
+ */
+export interface SchemaFallbackLog {
+  event: "ai.schema_fallback";
+  task: "interpret";
+  reason: string;
+}
+
 export { BUDGET_EXHAUSTED_REPLY };
 
 export interface RealInterpreterOptions {
   messages?: MessagesApi;
   now?: () => Date;
-  log?: (entry: UsageLog | BudgetLog | { event: "ai.error"; task: string; reason: string }) => void;
+  log?: (entry: UsageLog | BudgetLog | SchemaFallbackLog | { event: "ai.error"; task: string; reason: string }) => void;
   env?: Record<string, string | undefined>;
 }
 
@@ -58,6 +69,11 @@ export const REFUSAL_REPLY = "I can't help with that one, so nothing changed.";
 /** Fallback to another Claude model on a refusal, routed by category (claude-api skill). */
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 const OUTPUT_FORMAT = modelOutputFormat();
+/**
+ * Used only when the API won't compile OUTPUT_FORMAT: the same JSON is asked for in words, with
+ * the exact schema, and the answer still goes through the same Zod check (parseModelOutput).
+ */
+export const JSON_FALLBACK_INSTRUCTIONS = `# Answer format\nReply with only the JSON object described above: no other text and no code fences. It must match this JSON Schema exactly (every key present):\n${JSON.stringify(OUTPUT_FORMAT.schema)}`;
 const REWORD_INSTRUCTIONS =
   "# Rewording\nIgnore the JSON format above for this task. The app tried to save a change and some of it did not save. Rewrite the reply in Kitchen's voice so it only claims what was saved and briefly says what wasn't. Reply with the message text only.";
 
@@ -79,6 +95,8 @@ export function createRealInterpreter(options: RealInterpreterOptions = {}): Int
   const now = options.now ?? (() => new Date());
   const log = options.log ?? ((entry) => console.info(JSON.stringify(entry)));
   const env = options.env ?? process.env;
+  /** Set once the API refuses to compile OUTPUT_FORMAT; later calls go straight to the fallback. */
+  let formatRejected = false;
 
   async function call(
     task: "interpret" | "reword",
@@ -131,18 +149,35 @@ export function createRealInterpreter(options: RealInterpreterOptions = {}): Int
   return {
     async interpret(req: InterpretRequest): Promise<InterpretResult> {
       const settings = taskSettings("interpret", env);
-      try {
-        const message = await call("interpret", settings, {
-          system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-          messages: [{ role: "user", content: renderTurn(req, now()) }],
-          output_config: { effort: settings.effort, format: OUTPUT_FORMAT },
+      const system: Anthropic.Beta.Messages.BetaTextBlockParam[] = [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }];
+      const messages: CreateParams["messages"] = [{ role: "user", content: renderTurn(req, now()) }];
+      const withoutFormat = () =>
+        call("interpret", settings, {
+          system: [...system, { type: "text", text: JSON_FALLBACK_INSTRUCTIONS }],
+          messages,
+          output_config: { effort: settings.effort },
         });
+      try {
+        let message: Message;
+        if (formatRejected) {
+          message = await withoutFormat();
+        } else {
+          try {
+            message = await call("interpret", settings, { system, messages, output_config: { effort: settings.effort, format: OUTPUT_FORMAT } });
+          } catch (error) {
+            if (!isSchemaTooComplex(error)) throw error;
+            // The schema is deterministic, so skip it for the rest of this instance's life.
+            formatRejected = true;
+            log({ event: "ai.schema_fallback", task: "interpret", reason: error instanceof Error ? error.message : String(error) });
+            message = await withoutFormat();
+          }
+        }
         if (message.stop_reason === "refusal") return fail("interpret", "refusal", REFUSAL_REPLY);
         if (message.stop_reason === "max_tokens") return fail("interpret", "hit max_tokens");
 
         let json: unknown;
         try {
-          json = JSON.parse(textOf(message));
+          json = JSON.parse(jsonText(textOf(message)));
         } catch {
           return fail("interpret", "output was not JSON");
         }
